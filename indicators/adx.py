@@ -9,14 +9,12 @@ import pandas as pd
 
 from .indicator import Indicator
 
-
 @dataclass
 class ADXResult:
     """ADXの計算結果"""
     adx: np.ndarray    # ADX値
     plus_di: np.ndarray  # +DI値
     minus_di: np.ndarray  # -DI値
-
 
 class ADX(Indicator):
     """
@@ -51,66 +49,39 @@ class ADX(Indicator):
         low = df['low']
         close = df['close']
         
-        # True Range (TR)の計算
+        # True Range (TR)の計算 (Pine Scriptの ta.tr に相当)
         tr1 = high - low
         tr2 = abs(high - close.shift(1))
         tr3 = abs(low - close.shift(1))
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         
-        # +DM, -DMの計算
-        up_move = high - high.shift(1)
-        down_move = low.shift(1) - low
+        # +DM, -DMの計算 (Pine Scriptの dirmov(len) に相当)
+        up = high.diff()  # ta.change(high)
+        down = -low.diff() # -ta.change(low)
         
-        plus_dm = np.where(
-            (up_move > down_move) & (up_move > 0),
-            up_move,
-            0
-        )
-        minus_dm = np.where(
-            (down_move > up_move) & (down_move > 0),
-            down_move,
-            0
-        )
+        plusDM = pd.Series(np.where((up > down) & (up > 0), up, 0), index=df.index)
+        minusDM = pd.Series(np.where((down > up) & (down > 0), down, 0), index=df.index)
         
-        # 平滑化
-        tr_smooth = self._smooth(tr)
-        plus_dm_smooth = self._smooth(pd.Series(plus_dm))
-        minus_dm_smooth = self._smooth(pd.Series(minus_dm))
+        # TR, +DM, -DM の平滑化 (Pine Scriptの ta.rma に相当)
+        # ta.rma(source, length) は source.rolling(length).mean() ではなく、
+        # source.ewm(alpha=1/length, adjust=False).mean() と等価
+        truerange = tr.ewm(alpha=1/self.period, adjust=False).mean()
+        plus = (100 * plusDM.ewm(alpha=1/self.period, adjust=False).mean() / truerange).fillna(0)
+        minus = (100 * minusDM.ewm(alpha=1/self.period, adjust=False).mean() / truerange).fillna(0)
+
         
-        # +DI, -DIの計算
-        plus_di = 100 * plus_dm_smooth / tr_smooth
-        minus_di = 100 * minus_dm_smooth / tr_smooth
-        
-        # DXの計算
-        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+        # DXの計算 (Pine Scriptの adx(dilen, adxlen) に相当)
+        # sumが0の場合は1で割るように修正
+        sum_ = plus + minus
+        dx = 100 * (abs(plus - minus) / np.where(sum_ == 0, 1, sum_))
         
         # ADXの計算（DXの平滑化）
-        adx = dx.rolling(window=self.period).mean()
+        adx = dx.ewm(alpha=1/self.period, adjust=False).mean()
         
         self._values = adx  # 基底クラスの要件を満たすため
         
         return ADXResult(
             adx=adx.to_numpy(),
-            plus_di=plus_di.to_numpy(),
-            minus_di=minus_di.to_numpy()
+            plus_di=plus.to_numpy(),
+            minus_di=minus.to_numpy()
         )
-    
-    def _smooth(self, series: pd.Series) -> pd.Series:
-        """
-        Wilderの平滑化を適用
-        
-        Args:
-            series: 平滑化する系列
-        
-        Returns:
-            平滑化された系列
-        """
-        result = series.copy()
-        result.iloc[self.period-1] = series.iloc[:self.period].mean()
-        
-        for i in range(self.period, len(series)):
-            result.iloc[i] = (
-                result.iloc[i-1] * (self.period - 1) + series.iloc[i]
-            ) / self.period
-        
-        return result 

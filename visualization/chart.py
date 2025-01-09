@@ -9,8 +9,10 @@ from pathlib import Path
 from logger import get_logger
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
-from indicators.stochastic import Stochastic
-from indicators.stochastic_rsi import StochasticRSI
+from indicators.adx import ADX
+from indicators.roc import ROC
+from indicators.mfi import MFI
+from main import Config
 
 
 class Chart:
@@ -44,52 +46,63 @@ class Chart:
                 f"必要なカラムが不足しています: {', '.join(missing_columns)}"
             )
     
-    def add_stochastic(self, k_period: int = 14, d_period: int = 3) -> None:
+    def add_adx(self, period: int = 14) -> None:
         """
-        Stochasticインジケーターを追加する
+        ADXインジケーターを追加する
         
         Args:
-            k_period: %K期間
-            d_period: %D期間
+            period: 期間
         """
-        stoch = Stochastic(k_period, d_period)
-        result = stoch.calculate(self.data)
+        adx = ADX(period)
+        result = adx.calculate(self.data)
         
         self.indicators.append({
-            'name': stoch.name,
+            'name': adx.name,
             'panel': 2,
             'data': pd.DataFrame({
-                '%K': result.k,
-                '%D': result.d
+                'ADX': result.adx,
+                # '+DI': result.plus_di,
+                # '-DI': result.minus_di
             }, index=self.data.index),
-            'colors': ['blue', 'red']
+            'colors': ['blue']
         })
     
-    def add_stochastic_rsi(
-        self,
-        period: int = 14,
-        k_period: int = 3,
-        d_period: int = 3
-    ) -> None:
+    def add_roc(self, period: int = 12) -> None:
         """
-        Stochastic RSIインジケーターを追加する
+        ROCインジケーターを追加する
         
         Args:
-            period: RSI期間
-            k_period: %K期間
-            d_period: %D期間
+            period: 期間
         """
-        stoch_rsi = StochasticRSI(period, k_period, d_period)
-        result = stoch_rsi.calculate(self.data)
+        roc = ROC(period)
+        result = roc.calculate(self.data)
         
         self.indicators.append({
-            'name': stoch_rsi.name,
+            'name': roc.name,
             'panel': 3,
             'data': pd.DataFrame({
-                '%K': result.k,
-                '%D': result.d
+                'ROC': result
             }, index=self.data.index),
-            'colors': ['purple', 'orange']
+            'colors': ['purple']
+        })
+    
+    def add_mfi(self, period: int = 14) -> None:
+        """
+        MFIインジケーターを追加する
+        
+        Args:
+            period: 期間
+        """
+        mfi = MFI(period)
+        result = mfi.calculate(self.data)
+        
+        self.indicators.append({
+            'name': mfi.name,
+            'panel': 4,
+            'data': pd.DataFrame({
+                'MFI': result
+            }, index=self.data.index),
+            'colors': ['orange']
         })
     
     def show(
@@ -118,10 +131,10 @@ class Chart:
             'type': 'candle',
             'style': style,
             'volume': volume,
-            'panel_ratios': (6, 2, 2, 2),  # メイン:出来高:Stoch:StochRSI
+            'panel_ratios': (6, 2, 2,),  # メイン:出来高:ADX:ROC:MFI
             'title': title,
             'warn_too_much_data': 10000,
-            'figsize': (15, 10)
+            'figsize': (15, 12)
         }
         
         # インジケーターの追加
@@ -159,8 +172,8 @@ class Chart:
         
         Args:
             config: 設定辞書
-            start_date: 開始日 (YYYY-MM-DD)
-            end_date: 終了日 (YYYY-MM-DD)
+            start_date: 開始日 (YYYY-MM-DD) - 設定ファイルの値を上書きする場合に指定
+            end_date: 終了日 (YYYY-MM-DD) - 設定ファイルの値を上書きする場合に指定
         
         Returns:
             Chartインスタンス
@@ -170,17 +183,27 @@ class Chart:
         symbol = config.get('data', {}).get('symbol', 'BTCUSDT')
         timeframe = config.get('data', {}).get('timeframe', '1h')
         
+        # 期間の取得（引数で指定がない場合は設定ファイルの値を使用）
+        start = start_date or config.get('data', {}).get('start')
+        end = end_date or config.get('data', {}).get('end')
+        
+        # 日付文字列をdatetimeオブジェクトに変換
+        from datetime import datetime
+        start_dt = datetime.strptime(start, '%Y-%m-%d') if start else None
+        end_dt = datetime.strptime(end, '%Y-%m-%d') if end else None
+        
         loader = DataLoader(data_dir)
         processor = DataProcessor()
         
-        data = loader.load_data(symbol, timeframe)
+        data = loader.load_data(symbol, timeframe, start_dt, end_dt)
         data = processor.process(data)
         
         # チャートの作成
         chart = cls(data)
         
         # インジケーターの追加
-        chart.add_stochastic()
-        chart.add_stochastic_rsi()
+        chart.add_adx()
+        # chart.add_roc()
+        # chart.add_mfi()
         
         return chart 

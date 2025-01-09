@@ -5,6 +5,8 @@ data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
   symbol: "BTCUSDT"  # 取引対象の銘柄
   timeframe: "1h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
+  start: "2024-03-01"  # データ開始日 (YYYY-MM-DD)
+  end: "2024-11-01"    # データ終了日 (YYYY-MM-DD)
 
 # 戦略設定
 strategy:
