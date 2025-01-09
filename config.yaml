@@ -1,0 +1,55 @@
+# トレーディングシステムの設定
+
+# データ設定
+data:
+  data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
+  symbol: "BTCUSDT"  # 取引対象の銘柄
+  timeframe: "1h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
+
+# 戦略設定
+strategy:
+  name: "CrossoverStrategy"  # 使用する戦略
+  params:
+    short_ma: 10  # 短期移動平均の期間
+    long_ma: 20   # 長期移動平均の期間
+
+# ポジションサイズ設定
+position_sizing:
+  name: "FixedRatioPositionSizing"  # ポジションサイズ計算方法
+  params:
+    ratio: 0.02  # 資金に対する割合
+
+# バックテスト設定
+backtest:
+  initial_balance: 10000.0  # 初期資金
+  commission: 0.001        # 手数料率
+  max_positions: 1         # 同時保有可能な最大ポジション数
+
+# 最適化設定
+optimization:
+  enabled: false          # 最適化を行うかどうか
+  metric: "sortino_ratio" # 最適化する指標
+  n_trials: 100          # 試行回数
+  params:
+    short_ma:  # 短期移動平均の最適化範囲
+      min: 5
+      max: 50
+    long_ma:   # 長期移動平均の最適化範囲
+      min: 10
+      max: 200
+
+# ウォークフォワードテスト設定
+walkforward:
+  enabled: false          # ウォークフォワードテストを行うかどうか
+  training_period: "1y"   # 学習期間
+  testing_period: "3m"    # テスト期間
+
+# モンテカルロシミュレーション設定
+montecarlo:
+  enabled: false          # モンテカルロシミュレーションを行うかどうか
+  num_simulations: 1000   # シミュレーション回数
+
+# ログ設定
+logging:
+  level: "INFO"          # ログレベル (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  file: "ttf.log"        # ログファイル名
