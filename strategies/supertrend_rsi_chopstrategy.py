@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Union, Dict, Any
+from typing import Union, Dict, Any, Tuple
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ from signals.entry_signal import RSIEntrySignal
 from signals.filter_signal import ChopFilterSignal
 from signals.exit_signal import RSIExitSignal
 
-class TripleSignalStrategy(Strategy):
+class SupertrendRsiChopStrategy(Strategy):
     """
     3つのシグナルを組み合わせた戦略
     
@@ -22,7 +22,7 @@ class TripleSignalStrategy(Strategy):
     
     エグジット条件:
     - ロングポジション: スーパートレンドが-1に切り替わる or RSIエグジットが1になる
-    - ショートポジション: スーパートレンドが1に切り替わる
+    - ショートポジション: スーパートレンドが1に切り替わる or RSIエグジットが-1になる
     """
     
     def __init__(
@@ -94,6 +94,23 @@ class TripleSignalStrategy(Strategy):
             period=self.chop_params['period'],
             solid=self.chop_params['solid']
         )
+        
+        # シグナルのキャッシュ
+        self._supertrend_signals = None
+        self._rsi_exit_signals = None
+        self._rsi_entry_signals = None
+        self._chop_signals = None
+    
+    def _calculate_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> None:
+        """全てのシグナルを計算してキャッシュする"""
+        if self._supertrend_signals is None:
+            self._supertrend_signals = self.supertrend.generate(data)
+        if self._rsi_exit_signals is None:
+            self._rsi_exit_signals = self.rsi_exit.generate(data)
+        if self._rsi_entry_signals is None:
+            self._rsi_entry_signals = self.rsi_entry.generate(data)
+        if self._chop_signals is None:
+            self._chop_signals = self.chop.generate(data)
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -105,26 +122,24 @@ class TripleSignalStrategy(Strategy):
         Returns:
             シグナルの配列 (1: ロング, -1: ショート, 0: ニュートラル)
         """
-        # 各シグナルを生成
-        supertrend_signals = self.supertrend.generate(data)
-        rsi_signals = self.rsi_entry.generate(data)
-        chop_signals = self.chop.generate(data)
+        # シグナルの計算とキャッシュ
+        self._calculate_signals(data)
         
         # シグナルの初期化
-        signals = np.zeros(len(supertrend_signals))
+        signals = np.zeros(len(self._supertrend_signals))
         
         # ロングエントリー条件: 全てのシグナルが1
         long_condition = (
-            (supertrend_signals == 1) &
-            (rsi_signals == 1) &
-            (chop_signals == 1)
+            (self._supertrend_signals == 1) &
+            (self._rsi_entry_signals == 1) &
+            (self._chop_signals == 1)
         )
         
         # ショートエントリー条件: 全てのシグナルが-1
         short_condition = (
-            (supertrend_signals == -1) &
-            (rsi_signals == -1) &
-            (chop_signals == -1)
+            (self._supertrend_signals == -1) &
+            (self._rsi_entry_signals == -1) &
+            (self._chop_signals == -1)
         )
         
         # シグナルの生成
@@ -133,13 +148,14 @@ class TripleSignalStrategy(Strategy):
         
         return signals
     
-    def generate_exit(self, data: Union[pd.DataFrame, np.ndarray], position: int) -> bool:
+    def generate_exit(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> bool:
         """
         エグジットシグナルを生成する
         
         Args:
             data: 価格データ
             position: 現在のポジション (1: ロング, -1: ショート, 0: ニュートラル)
+            index: データのインデックス（デフォルトは最新のデータ）
         
         Returns:
             True: エグジット, False: ホールド
@@ -147,20 +163,21 @@ class TripleSignalStrategy(Strategy):
         if position == 0:
             return False
         
-        # 各シグナルを生成
-        supertrend_signals = self.supertrend.generate(data)
-        rsi_exit_signals = self.rsi_exit.generate(data)
+        # シグナルの計算とキャッシュ
+        self._calculate_signals(data)
         
-        # 最新のシグナルを取得
-        current_supertrend = supertrend_signals[-1]
-        current_rsi_exit = rsi_exit_signals[-1]
+        # 指定されたインデックスのシグナルを取得
+        current_supertrend = self._supertrend_signals[index]
+        current_rsi_exit = self._rsi_exit_signals[index]
         
         # ロングポジションのエグジット条件
         if position == 1:
+            # スーパートレンドが-1に切り替わる、またはRSIエグジットが1になる
             return (current_supertrend == -1) or (current_rsi_exit == 1)
         
         # ショートポジションのエグジット条件
         if position == -1:
-            return current_supertrend == 1 or (current_rsi_exit == -1)
+            # スーパートレンドが1に切り替わる、またはRSIエグジットが-1になる
+            return (current_supertrend == 1) or (current_rsi_exit == -1)
         
         return False 

@@ -16,7 +16,7 @@ class RSIExitSignal(Signal):
     - ショートエグジット: RSI(t-1) <= exit_solid かつ RSI(t) >= exit_solid
     """
     
-    def __init__(self, period: int = 14, params: Dict[str, Any] = None):
+    def __init__(self, period: int = 14, solid: Dict[str, Any] = None):
         """
         コンストラクタ
         
@@ -28,7 +28,7 @@ class RSIExitSignal(Signal):
         """
         super().__init__(f"RSIExit({period})")
         self.period = period
-        self.params = params or {
+        self.solid = solid or {
             'rsi_long_exit_solid': 70,
             'rsi_short_exit_solid': 30
         }
@@ -51,12 +51,12 @@ class RSIExitSignal(Signal):
         
         # エグジットシグナルの生成
         # ロングポジションのエグジット条件
-        long_exit = (rsi_values.shift(1) >= self.params['rsi_long_exit_solid']) & \
-                   (rsi_values <= self.params['rsi_long_exit_solid'])
+        long_exit = (rsi_values.shift(1) >= self.solid['rsi_long_exit_solid']) & \
+                   (rsi_values <= self.solid['rsi_long_exit_solid'])
         
         # ショートポジションのエグジット条件
-        short_exit = (rsi_values.shift(1) <= self.params['rsi_short_exit_solid']) & \
-                    (rsi_values >= self.params['rsi_short_exit_solid'])
+        short_exit = (rsi_values.shift(1) <= self.solid['rsi_short_exit_solid']) & \
+                    (rsi_values >= self.solid['rsi_short_exit_solid'])
         
         # シグナルの設定
         signals = np.where(long_exit, 1, signals)

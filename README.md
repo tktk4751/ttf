@@ -877,9 +877,9 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
         
     5. 基本的なインディケーター (移動平均、ボリンジャーバンド、RSI) の実装 (indicators/)✔
         
-    6. 基本的なシグナル (エントリー、エグジット、方向性、フィルター) の実装 (signals/)
+    6. 基本的なシグナル (エントリー、エグジット、方向性、フィルター) の実装 (signals/)✔
         
-    7. 基本的な戦略 (クロスオーバー、ブレイクアウト) の実装 (strategies/)
+    7. 基本的な戦略 (クロスオーバー、ブレイクアウト) の実装 (strategies/) ✔
         
     8. ポジションサイズ計算 (固定比率) の実装 (position_sizing/)
         
