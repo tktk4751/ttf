@@ -9,9 +9,7 @@ from pathlib import Path
 from logger import get_logger
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
-from indicators.adx import ADX
-from indicators.roc import ROC
-from indicators.mfi import MFI
+from indicators.supertrend import Supertrend
 from main import Config
 
 
@@ -46,63 +44,28 @@ class Chart:
                 f"必要なカラムが不足しています: {', '.join(missing_columns)}"
             )
     
-    def add_adx(self, period: int = 14) -> None:
+    def add_supertrend(self, period: int = 10, multiplier: float = 3.0) -> None:
         """
-        ADXインジケーターを追加する
+        スーパートレンドを追加する
         
         Args:
-            period: 期間
+            period: ATRの期間
+            multiplier: ATRの乗数
         """
-        adx = ADX(period)
-        result = adx.calculate(self.data)
+        supertrend = Supertrend(period, multiplier)
+        result = supertrend.calculate(self.data)
+        
+        # トレンドに基づいて色を変更
+        colors = ['g' if t == 1 else 'r' for t in result.trend]
         
         self.indicators.append({
-            'name': adx.name,
-            'panel': 2,
+            'name': supertrend.name,
+            'panel': 0,  # メインチャートに表示
             'data': pd.DataFrame({
-                'ADX': result.adx,
-                # '+DI': result.plus_di,
-                # '-DI': result.minus_di
+                'Upper': result.upper_band,
+                'Lower': result.lower_band
             }, index=self.data.index),
-            'colors': ['blue']
-        })
-    
-    def add_roc(self, period: int = 12) -> None:
-        """
-        ROCインジケーターを追加する
-        
-        Args:
-            period: 期間
-        """
-        roc = ROC(period)
-        result = roc.calculate(self.data)
-        
-        self.indicators.append({
-            'name': roc.name,
-            'panel': 3,
-            'data': pd.DataFrame({
-                'ROC': result
-            }, index=self.data.index),
-            'colors': ['purple']
-        })
-    
-    def add_mfi(self, period: int = 14) -> None:
-        """
-        MFIインジケーターを追加する
-        
-        Args:
-            period: 期間
-        """
-        mfi = MFI(period)
-        result = mfi.calculate(self.data)
-        
-        self.indicators.append({
-            'name': mfi.name,
-            'panel': 4,
-            'data': pd.DataFrame({
-                'MFI': result
-            }, index=self.data.index),
-            'colors': ['orange']
+            'colors': colors  # トレンドに基づいて色を変更
         })
     
     def show(
@@ -131,7 +94,7 @@ class Chart:
             'type': 'candle',
             'style': style,
             'volume': volume,
-            'panel_ratios': (6, 2, 2,),  # メイン:出来高:ADX:ROC:MFI
+            'panel_ratios': (6, 2),  # メイン:出来高
             'title': title,
             'warn_too_much_data': 10000,
             'figsize': (15, 12)
@@ -202,8 +165,6 @@ class Chart:
         chart = cls(data)
         
         # インジケーターの追加
-        chart.add_adx()
-        # chart.add_roc()
-        # chart.add_mfi()
+        chart.add_supertrend()
         
         return chart 

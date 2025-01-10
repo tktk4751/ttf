@@ -875,7 +875,7 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
         
     4. データ読み込み (CSV) と加工機能の実装 (data/data_loader.py, data/data_processor.py)✔
         
-    5. 基本的なインディケーター (移動平均、ボリンジャーバンド、RSI) の実装 (indicators/)
+    5. 基本的なインディケーター (移動平均、ボリンジャーバンド、RSI) の実装 (indicators/)✔
         
     6. 基本的なシグナル (エントリー、エグジット、方向性、フィルター) の実装 (signals/)
         

@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .indicator import Indicator
+from .atr import ATR
 
 
 @dataclass
@@ -50,14 +51,8 @@ class Supertrend(Indicator):
         high = df['high']
         low = df['low']
         close = df['close']
-        
-        # ATRの計算
-        tr1 = pd.DataFrame(high - low)
-        tr2 = pd.DataFrame(abs(high - close.shift(1)))
-        tr3 = pd.DataFrame(abs(low - close.shift(1)))
-        frames = [tr1, tr2, tr3]
-        tr = pd.concat(frames, axis=1, join='inner').max(axis=1)
-        atr = tr.ewm(span=self.period).mean()
+
+        atr = ATR(self.period).calculate(data)
         
         # 基準となるバンドの計算
         hl_avg = (high + low) / 2
