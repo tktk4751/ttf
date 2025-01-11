@@ -1,9 +1,10 @@
-from typing import List, Dict, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 import pandas as pd
 from datetime import datetime
-from position_sizing.position_sizing import PositionSizing
 from strategies.strategy import Strategy
+from position_sizing.position_sizing import PositionSizing
 from backtesting.trade import Trade
+
 
 class Backtester:
     """バックテストの実行クラス"""
@@ -12,7 +13,8 @@ class Backtester:
         self,
         strategy: Strategy,
         position_sizing: PositionSizing,
-        initial_capital: float = 10000,
+        initial_balance: float,
+        commission: float,
         max_positions: int = 1
     ):
         """
@@ -21,25 +23,50 @@ class Backtester:
         Args:
             strategy: バックテストする戦略
             position_sizing: ポジションサイズ計算ロジック
-            initial_capital: 初期資金
+            initial_balance: 初期資金
+            commission: 手数料率
             max_positions: 同時に保有できる最大ポジション数
         """
         self.strategy = strategy
         self.position_sizing = position_sizing
-        self.initial_capital = initial_capital
+        self.initial_balance = initial_balance
+        self.current_capital = initial_balance
+        self.commission = commission
         self.max_positions = max_positions
         self.trades: List[Trade] = []
-        self.current_capital = initial_capital
     
-    def run(self, data: pd.DataFrame) -> Dict[str, Any]:
+    def run(self, data: Dict[str, pd.DataFrame]) -> List[Trade]:
         """
         バックテストを実行する
         
         Args:
             data: バックテストに使用するデータ
+                  キー: シンボル名
+                  値: 価格データのDataFrame
         
         Returns:
-            Dict[str, Any]: バックテスト結果
+            List[Trade]: 全トレード結果のリスト
+        """
+        all_trades = []
+        
+        # 各シンボルに対してバックテストを実行
+        for symbol, df in data.items():
+            trades = self._run_single_symbol(df)
+            all_trades.extend(trades)
+        
+        # 日付でソート
+        all_trades.sort(key=lambda x: x.entry_date)
+        return all_trades
+    
+    def _run_single_symbol(self, data: pd.DataFrame) -> List[Trade]:
+        """
+        単一シンボルのバックテストを実行する
+        
+        Args:
+            data: 価格データのDataFrame
+        
+        Returns:
+            List[Trade]: トレード結果のリスト
         """
         # データの準備
         dates = data.index
@@ -48,6 +75,7 @@ class Backtester:
         current_position: Optional[Trade] = None
         pending_entry: Optional[tuple] = None  # (position_type, position_size)
         pending_exit: bool = False
+        trades: List[Trade] = []
         
         # エントリーシグナルの生成
         entry_signals = self.strategy.generate_entry(data)
@@ -60,9 +88,9 @@ class Backtester:
             
             # 保留中のエグジットの処理
             if pending_exit and current_position is not None:
-                current_position.close(date, open_price)
-                self.trades.append(current_position)
-                self.current_capital += current_position.profit_loss
+                current_position.close(date, open_price, self.current_capital)
+                trades.append(current_position)
+                self.current_capital = current_position.balance
                 current_position = None
                 pending_exit = False
             
@@ -71,7 +99,9 @@ class Backtester:
                 position_type, position_size = pending_entry
                 current_position = Trade(
                     position_type=position_type,
-                    position_size=position_size
+                    position_size=position_size,
+                    commission_rate=self.commission,
+                    slippage_rate=0.001  # 0.1%のスリッページ
                 )
                 current_position.entry(date, open_price)
                 pending_entry = None
@@ -84,9 +114,10 @@ class Backtester:
             
             # 現在のポジションがない場合、エントリーシグナルをチェック
             if current_position is None and not pending_entry:
+                # ポジションサイズの計算
                 position_size = self.position_sizing.calculate(
                     capital=self.current_capital,
-                    price=close
+                    price=open_price
                 )
                 
                 # LONGエントリー
@@ -99,45 +130,8 @@ class Backtester:
         
         # 最後のポジションがまだオープンの場合、最終価格でクローズ
         if current_position is not None:
-            current_position.close(dates[-1], closes[-1])
-            self.trades.append(current_position)
-            self.current_capital += current_position.profit_loss
+            current_position.close(dates[-1], closes[-1], self.current_capital)
+            trades.append(current_position)
+            self.current_capital = current_position.balance
         
-        # 結果の分析
-        results = self._analyze_results()
-        
-        return results
-    
-    def _analyze_results(self) -> Dict[str, Any]:
-        """
-        バックテスト結果を分析する
-        
-        Returns:
-            Dict[str, Any]: 分析結果
-        """
-        if not self.trades:
-            return {
-                'total_trades': 0,
-                'win_rate': 0.0,
-                'total_profit': 0.0,
-                'total_loss': 0.0,
-                'net_profit': 0.0,
-                'final_capital': self.current_capital
-            }
-        
-        # 勝率の計算
-        winning_trades = [t for t in self.trades if t.profit_loss > 0]
-        win_rate = len(winning_trades) / len(self.trades) * 100
-        
-        # 総利益と総損失の計算
-        total_profit = sum(t.profit_loss for t in self.trades if t.profit_loss > 0)
-        total_loss = sum(t.profit_loss for t in self.trades if t.profit_loss < 0)
-        
-        return {
-            'total_trades': len(self.trades),
-            'win_rate': win_rate,
-            'total_profit': total_profit,
-            'total_loss': total_loss,
-            'net_profit': total_profit + total_loss,
-            'final_capital': self.current_capital
-        }
+        return trades

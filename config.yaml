@@ -3,10 +3,10 @@
 # データ設定
 data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
-  symbol: "BTCUSDT"  # 取引対象の銘柄
+  symbol: "SOLUSDT"  # 取引対象の銘柄
   timeframe: "1h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
-  start: "2024-03-01"  # データ開始日 (YYYY-MM-DD)
-  end: "2024-11-01"    # データ終了日 (YYYY-MM-DD)
+  start: "2022-10-01"  # データ開始日 (YYYY-MM-DD)
+  end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 
 # 戦略設定
 strategy:
@@ -19,7 +19,7 @@ strategy:
 position_sizing:
   name: "FixedRatioPositionSizing"  # ポジションサイズ計算方法
   params:
-    ratio: 0.02  # 資金に対する割合
+    ratio: 0.99  # 資金に対する割合
 
 # バックテスト設定
 backtest:
@@ -30,7 +30,7 @@ backtest:
 # 最適化設定
 optimization:
   enabled: false          # 最適化を行うかどうか
-  metric: "sortino_ratio" # 最適化する指標
+  metric: "alpha_score" # 最適化する指標
   n_trials: 100          # 試行回数
   params:
     short_ma:  # 短期移動平均の最適化範囲

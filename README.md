@@ -536,6 +536,8 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
 
     - calculate_win_rate(self): 勝率を計算。
 
+    - calculate_cagr(self, position_type=None): CAGRを計算。
+
     - calculate_average_bars(self, trade_type=None): 平均バー数を計算 (trade_type: 'win', 'loss', None)。
 
     - calculate_total_profit_loss(self, position_type=None): 総利益または総損失を計算 (position_type: 'long', 'short', None)。
@@ -881,9 +883,9 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
         
     7. 基本的な戦略 (クロスオーバー、ブレイクアウト) の実装 (strategies/) ✔
         
-    8. ポジションサイズ計算 (固定比率) の実装 (position_sizing/)
+    8. ポジションサイズ計算 (固定比率) の実装 (position_sizing/)✔
         
-    9. バックテストの枠組みの実装 (backtesting/backtester.py, backtesting/trade.py)
+    9. バックテストの枠組みの実装 (backtesting/backtester.py, backtesting/trade.py)✔
         
     10. テストコードの作成 (tests/)
         

@@ -7,55 +7,56 @@ class Trade:
     """個々のトレード情報を保持するデータクラス"""
     
     position_type: str  # 'LONG' or 'SHORT'
-    position_size: float
-    commission_rate: float = 0.001  # 0.1%の手数料
-    slippage_rate: float = 0.001   # 0.1%のスリッページ
+    position_size: float  # 取引数量（USD）
+    commission_rate: float  # 手数料率
+    slippage_rate: float = 0.001  # 0.1%のスリッページ
     entry_date: Optional[datetime] = None
     entry_price: Optional[float] = None
     exit_date: Optional[datetime] = None
     exit_price: Optional[float] = None
     profit_loss: Optional[float] = None
     profit_loss_pct: Optional[float] = None
+    balance: float = 0.0  # 取引後の残高
     
-    def entry(self, entry_date: datetime, entry_price: float) -> None:
+    def entry(self, date: datetime, price: float) -> None:
         """トレードをエントリーする
         
         Args:
-            entry_date: エントリー日時
-            entry_price: エントリー価格
+            date: エントリー日時
+            price: エントリー価格
         """
-        self.entry_date = entry_date
+        self.entry_date = date
         
-        # エントリー価格にスリッページと手数料を適用
+        # 取引コストを考慮したエントリー価格を計算
         if self.position_type == 'LONG':
-            # 買い注文は高くなる
-            self.entry_price = entry_price * (1 + self.slippage_rate + self.commission_rate)
+            self.entry_price = price * (1 + self.slippage_rate + self.commission_rate)
         else:  # SHORT
-            # 売り注文は安くなる
-            self.entry_price = entry_price * (1 - self.slippage_rate - self.commission_rate)
+            self.entry_price = price * (1 - self.slippage_rate - self.commission_rate)
     
-    def close(self, exit_date: datetime, exit_price: float) -> None:
+    def close(self, date: datetime, price: float, current_balance: float) -> None:
         """トレードをクローズする
         
         Args:
-            exit_date: エグジット日時
-            exit_price: エグジット価格
+            date: エグジット日時
+            price: エグジット価格
+            current_balance: 現在の残高
         """
-        self.exit_date = exit_date
+        self.exit_date = date
         
-        # エグジット価格にスリッページと手数料を適用
+        # 取引コストを考慮したエグジット価格を計算
         if self.position_type == 'LONG':
-            # 売り注文は安くなる
-            self.exit_price = exit_price * (1 - self.slippage_rate - self.commission_rate)
+            self.exit_price = price * (1 - self.slippage_rate - self.commission_rate)
         else:  # SHORT
-            # 買い注文は高くなる
-            self.exit_price = exit_price * (1 + self.slippage_rate + self.commission_rate)
+            self.exit_price = price * (1 + self.slippage_rate + self.commission_rate)
         
         # 損益計算
         if self.position_type == 'LONG':
-            self.profit_loss = (self.exit_price - self.entry_price) * self.position_size
+            self.profit_loss = self.position_size * ((self.exit_price / self.entry_price) - 1)
         else:  # SHORT
-            self.profit_loss = (self.entry_price - self.exit_price) * self.position_size
+            self.profit_loss = self.position_size * ((self.entry_price / self.exit_price) - 1)
         
-        # 損益率計算
-        self.profit_loss_pct = (self.profit_loss / (self.entry_price * self.position_size)) * 100
+        # 損益率の計算
+        self.profit_loss_pct = (self.profit_loss / self.position_size) * 100
+        
+        # 取引後の残高を更新
+        self.balance = current_balance + self.profit_loss
