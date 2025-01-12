@@ -1,17 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import os
 import sys
 import yaml
-import optuna
-import joblib
+import logging
 import numpy as np
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple, Type, Callable
-from optuna.pruners import MedianPruner
-from optuna.samplers import TPESampler
-from joblib import Parallel, delayed
+from itertools import product
+from typing import Dict, Any, List, Tuple, Type
+from tqdm import tqdm
+import multiprocessing
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,49 +16,57 @@ sys.path.insert(0, project_root)
 from backtesting.backtester import Backtester
 from position_sizing.fixed_ratio import FixedRatioSizing
 from strategies.strategy import Strategy
-from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
 from analytics.analytics import Analytics
 
-
-class StrategyOptimizer:
-    """戦略パラメーターの最適化を行うクラス"""
+class GridOptimizer:
+    """グリッドサーチによる戦略パラメーターの最適化を行うクラス"""
     
     def __init__(
         self,
         config_path: str,
         strategy_class: Type[Strategy],
-        param_generator: Callable[[optuna.Trial], Dict[str, Any]],
-        n_trials: int = 100,
-        n_jobs: int = -1,
-        timeout: Optional[int] = None
+        param_ranges: Dict[str, np.ndarray],
+        n_jobs: int = -1
     ):
         """
         Args:
             config_path: 設定ファイルのパス
             strategy_class: 最適化対象の戦略クラス
-            param_generator: 戦略パラメーターを生成する関数
-            n_trials: 最適化の試行回数
+            param_ranges: パラメーターの範囲（キーはパラメーター名、値はnumpy配列）
             n_jobs: 並列処理数（-1で全CPU使用）
-            timeout: タイムアウト時間（秒）
         """
-        self.config_path = config_path
+        self.logger = logging.getLogger('ttf')
         self.strategy_class = strategy_class
-        self.param_generator = param_generator
-        self.n_trials = n_trials
-        self.n_jobs = n_jobs
-        self.timeout = timeout
-        self.best_params = None
-        self.best_score = None
-        self.best_trades = None
+        self.param_ranges = param_ranges
+        self.n_jobs = n_jobs if n_jobs != -1 else multiprocessing.cpu_count()
         
         # 設定ファイルの読み込み
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
-        # データの読み込みと処理
+        # データの読み込みと処理（初期化時に1回だけ実行）
         self._load_and_process_data()
+        
+        # バックテスターを事前に初期化
+        self.backtester = Backtester(
+            strategy=None,  # 後で設定
+            position_sizing=FixedRatioSizing({
+                'ratio': self.config['position_sizing']['params']['ratio'],
+                'min_position': None,
+                'max_position': None,
+                'leverage': 1
+            }),
+            initial_balance=self.config['backtest']['initial_balance'],
+            commission=self.config['backtest']['commission'],
+            max_positions=self.config['backtest']['max_positions']
+        )
+        
+        # 最適化結果の保存用
+        self.best_params = None
+        self.best_score = float('-inf')
+        self.best_trades = None
     
     def _load_and_process_data(self) -> None:
         """データの読み込みと前処理"""
@@ -90,100 +94,72 @@ class StrategyOptimizer:
         self.data = processor.process(data)
         self.data_dict = {symbol: self.data}
     
-    def _create_strategy(self, trial: optuna.Trial) -> Strategy:
-        """Optunaのtrialから戦略インスタンスを生成
+    def _evaluate_params(self, params_tuple: Tuple) -> Tuple[float, Dict[str, Any], Any]:
+        """パラメーターセットの評価
 
         Args:
-            trial: Optunaのtrial
+            params_tuple: 評価するパラメーターセットのタプル
 
         Returns:
-            Strategy: 戦略インスタンス
+            Tuple[float, Dict[str, Any], Any]: アルファスコア, パラメータ, トレード結果
         """
-        params = self.param_generator(trial)
-        return self.strategy_class(**params)
-    
-    def _objective(self, trial: optuna.Trial) -> float:
-        """最適化の目的関数
-
-        Args:
-            trial: Optunaのtrial
-
-        Returns:
-            float: アルファスコア
-        """
+        param_names = list(self.param_ranges.keys())
+        params = dict(zip(param_names, params_tuple))
+        
         # 戦略の生成
-        strategy = self._create_strategy(trial)
+        strategy = self.strategy_class(**params)
+        self.backtester.strategy = strategy
+
+        # バックテストの実行
+        trades = self.backtester.run(self.data_dict)
         
-        # ポジションサイジングの設定
-        position_sizing = FixedRatioSizing({
-            'ratio': self.config['position_sizing']['params']['ratio'],
-            'min_position': None,
-            'max_position': None,
-            'leverage': 1
-        })
-        
-        # バックテスターの作成と実行
-        backtester = Backtester(
-            strategy=strategy,
-            position_sizing=position_sizing,
-            initial_balance=self.config['backtest']['initial_balance'],
-            commission=self.config['backtest']['commission'],
-            max_positions=self.config['backtest']['max_positions']
-        )
-        
-        trades = backtester.run(self.data_dict)
-        
-        # トレード数が少なすぎる場合はPruning
-        if len(trades) < 30:  # 最小トレード数の閾値
-            raise optuna.TrialPruned()
-        
+        # トレード数が少なすぎる場合はスキップ
+        if len(trades) < 30:
+            return float('-inf'), params, None
+
         # アナリティクスの計算
         analytics = Analytics(trades, self.config['backtest']['initial_balance'])
         alpha_score = analytics.calculate_alpha_score()
         
-        # 現在のベストスコアを更新
-        if self.best_score is None or alpha_score > self.best_score:
-            self.best_score = alpha_score
-            self.best_params = trial.params
-            self.best_trades = trades
-        
-        return alpha_score
-    
+        return alpha_score, params, trades
+
     def optimize(self) -> Tuple[Dict[str, Any], float, List[Any]]:
         """最適化を実行
 
         Returns:
             Tuple[Dict[str, Any], float, List[Any]]: 最適パラメーター、最高スコア、最良トレード
         """
-        # Optunaの設定
-        study = optuna.create_study(
-            study_name='alpha_score_optimization',
-            direction='maximize',
-            sampler=TPESampler(n_startup_trials=10),
-            pruner=MedianPruner(
-                n_startup_trials=5,
-                n_warmup_steps=10,
-                interval_steps=1
-            )
-        )
+        self.logger.info("グリッドサーチによる最適化を開始します")
         
-        # 最適化の実行
-        study.optimize(
-            self._objective,
-            n_trials=self.n_trials,
-            timeout=self.timeout,
-            n_jobs=self.n_jobs,
-            show_progress_bar=True
-        )
+        # パラメーターの組み合わせを生成
+        param_names = list(self.param_ranges.keys())
+        param_values = list(self.param_ranges.values())
+        combinations = list(product(*param_values))
+        total_combinations = len(combinations)
         
-        # 最適化結果の表示
-        print("\n=== 最適化結果 ===")
-        print(f"最適パラメーター: {study.best_params}")
-        print(f"最高スコア: {study.best_value:.2f}")
+        self.logger.info(f"パラメーター組み合わせ総数: {total_combinations}")
+        
+        # 並列処理で最適化を実行
+        with multiprocessing.Pool(processes=self.n_jobs) as pool:
+            results = list(tqdm(pool.imap(self._evaluate_params, combinations), total=total_combinations, desc="最適化の進捗"))
+
+        # 結果を集約
+        for alpha_score, params, trades in results:
+            if alpha_score > self.best_score:
+                self.best_score = alpha_score
+                self.best_params = params
+                self.best_trades = trades
+                self.logger.info(f"新しいベストスコアを発見: {alpha_score:.2f} (パラメーター: {params})")
+        
+        self.logger.info(f"最適化が完了しました")
+        self.logger.info(f"最適パラメーター: {self.best_params}")
+        self.logger.info(f"最高スコア: {self.best_score:.2f}")
         
         # 最適パラメーターでのバックテスト結果を表示
         if self.best_trades:
             analytics = Analytics(self.best_trades, self.config['backtest']['initial_balance'])
+            # ... (以下、最適化結果表示部分は変更なし)
+            # 損益統計の出力
             print("\n=== 基本統計 ===")
             print(f"初期資金: {self.config['backtest']['initial_balance']:.2f} USD")
             print(f"最終残高: {self.best_trades.current_capital:.2f} USD")
@@ -271,49 +247,6 @@ class StrategyOptimizer:
             print(f"悲観的リターンレシオ: {analytics.calculate_pessimistic_return_ratio():.2f}")
             print(f"アルファスコア: {analytics.calculate_alpha_score():.2f}")
             print(f"SQNスコア: {analytics.calculate_sqn():.2f}")
-            
 
         
-        return study.best_params, study.best_value, self.best_trades
-
-
-if __name__ == '__main__':
-    # 設定ファイルのパス
-    config_path = os.path.join(project_root, 'config.yaml')
-    
-    # 最適化の実行
-    optimizer = StrategyOptimizer(
-        config_path=config_path,
-        strategy_class=SupertrendRsiChopStrategy,
-        param_generator=lambda trial: {
-            'supertrend_params': {
-                'period': trial.suggest_int('supertrend_period', 5, 100, step=1),
-                'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 5.0, step=0.5)
-            },
-            'rsi_entry_params': {
-                'period': trial.suggest_int('rsi_entry_period', 2),
-                'solid': {
-                    'rsi_long_entry': 20,
-                    'rsi_short_entry': 80
-                }
-            },
-            'rsi_exit_params': {
-                'period': trial.suggest_int('rsi_exit_period', 5, 34, step=1),
-                'solid': {
-                    'rsi_long_exit_solid': 85,
-                    'rsi_short_exit_solid': 15
-                }
-            },
-            'chop_params': {
-                'period': trial.suggest_int('chop_period', 3, 100, step=1),
-                'solid': {
-                    'chop_solid': 50
-                }
-            }
-        },
-        n_trials=100,  # 試行回数
-        n_jobs=-1,     # 全CPU使用
-        timeout=None   # タイムアウトなし
-    )
-    
-    best_params, best_score, best_trades = optimizer.optimize()
+        return self.best_params, self.best_score, self.best_trades 

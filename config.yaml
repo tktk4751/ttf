@@ -4,7 +4,7 @@
 data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
   symbol: "SOLUSDT"  # 取引対象の銘柄
-  timeframe: "1h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
+  timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
   start: "2022-10-01"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 

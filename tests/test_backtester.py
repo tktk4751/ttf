@@ -85,6 +85,8 @@ def test_backtester():
     
     # 基本統計の出力
     print("\n=== 基本統計 ===")
+    print(f"初期資金: {config['backtest']['initial_balance']:.2f} USD")
+    print(f"最終残高: {backtester.current_capital:.2f} USD")
     print(f"総リターン: {analytics.calculate_total_return():.2f}%")
     print(f"CAGR: {analytics.calculate_cagr():.2f}%")
     print(f"1トレードあたりの幾何平均リターン: {analytics.calculate_geometric_mean_return():.2f}%")

@@ -10,7 +10,7 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from optimization.optimizer import StrategyOptimizer
+from optimization.Bayesian_optimizer import StrategyOptimizer
 from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
 
 
