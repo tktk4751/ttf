@@ -10,7 +10,7 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from optimization.Bayesian_optimizer import StrategyOptimizer
+from optimization.Bayesian_optimizer import BayesianOptimizer
 from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
 
 
@@ -19,7 +19,7 @@ def create_supertrend_rsi_params(trial):
     return {
         'supertrend_params': {
             'period': trial.suggest_int('supertrend_period', 5, 100, step=1),
-            'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 5.0, step=0.5)
+            'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 8.0, step=0.5)
         },
         'rsi_entry_params': {
             'period': 2,
@@ -54,7 +54,7 @@ class TestStrategyOptimizer(unittest.TestCase):
     def test_supertrend_rsi_optimization(self):
         """SupertrendRsiChopStrategyの最適化テスト"""
         # 最適化の実行
-        optimizer = StrategyOptimizer(
+        optimizer = BayesianOptimizer(
             config_path=self.config_path,
             strategy_class=SupertrendRsiChopStrategy,
             param_generator=create_supertrend_rsi_params,

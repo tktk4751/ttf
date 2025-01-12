@@ -921,7 +921,7 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
     
 - **タスク:**
     
-    1. 最適化機能の実装 (optimization/optimizer.py)
+    1. 最適化機能の実装 (optimization/optimizer.py)✔
         
     2. ウォークフォワードテスト機能の実装 (walkforward/walkforward.py)
         

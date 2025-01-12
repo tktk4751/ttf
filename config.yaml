@@ -5,7 +5,7 @@ data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
   symbol: "SOLUSDT"  # 取引対象の銘柄
   timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
-  start: "2022-10-01"  # データ開始日 (YYYY-MM-DD)
+  start: "2023-12-30"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 
 # 戦略設定
@@ -43,8 +43,9 @@ optimization:
 # ウォークフォワードテスト設定
 walkforward:
   enabled: false          # ウォークフォワードテストを行うかどうか
-  training_period: "1y"   # 学習期間
-  testing_period: "3m"    # テスト期間
+  training_days: 360      # トレーニング期間（日数）
+  testing_days: 180       # テスト期間（日数）
+  min_trades: 15         # 最小トレード数
 
 # モンテカルロシミュレーション設定
 montecarlo:

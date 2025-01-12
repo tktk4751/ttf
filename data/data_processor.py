@@ -1,89 +1,76 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Optional
-from datetime import datetime
-
 import pandas as pd
-
-from logger import get_logger
+import numpy as np
+from typing import Optional
 
 
 class DataProcessor:
     """
     データの前処理を行うクラス
     - タイムスタンプの変換
-    - 不要なカラムの削除
-    - データの整形
+    - 必要なテクニカル指標の計算
+    - データの正規化
+    など
     """
-    
-    def __init__(self):
-        """コンストラクタ"""
-        self.logger = get_logger()
     
     def process(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        データを前処理する
+        データの前処理を実行
         
         Args:
-            df: 生データのDataFrame
-        
+            df: 処理対象のDataFrame
+            
         Returns:
             処理済みのDataFrame
         """
-        # 深いコピーを作成
-        processed = df.copy(deep=True)
+        if df.empty:
+            return df
+            
+        processed = df.copy()
         
-        # タイムスタンプを変換
-        processed = self._convert_timestamps(processed)
+        # タイムスタンプの処理（まだ処理されていない場合のみ）
+        if 'open_time' in processed.columns:
+            processed = self._convert_timestamps(processed)
         
-        # 不要なカラムを削除
-        processed = self._drop_unnecessary_columns(processed)
-        
-        # インデックスを設定
-        processed.set_index('datetime', inplace=True)
-        
-        self.logger.info(
-            f"データを処理しました: {len(processed)}行 "
-            f"({processed.index[0]} - {processed.index[-1]})"
-        )
+        # 必要なテクニカル指標の計算
+        processed = self._calculate_indicators(processed)
         
         return processed
     
     def _convert_timestamps(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        タイムスタンプを人間が読める形式に変換
+        タイムスタンプをdatetime形式に変換
         
         Args:
-            df: 変換前のDataFrame
-        
+            df: 処理対象のDataFrame
+            
         Returns:
-            変換後のDataFrame
+            タイムスタンプ変換済みのDataFrame
         """
-        # UNIXタイムスタンプ（ミリ秒）をdatetimeに変換
+        df = df.copy()
+        
+        # UNIXタイムスタンプ（ミリ秒）をdatetime形式に変換
         df['datetime'] = pd.to_datetime(df['open_time'] / 1000, unit='s')
+        df.set_index('datetime', inplace=True)
         
         return df
     
-    def _drop_unnecessary_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        不要なカラムを削除
+        テクニカル指標を計算
         
         Args:
-            df: 処理前のDataFrame
-        
+            df: 処理対象のDataFrame
+            
         Returns:
-            処理後のDataFrame
+            テクニカル指標計算済みのDataFrame
         """
-        # チャート表示に必要なカラムのみを残す
-        columns_to_keep = [
-            'datetime',
-            'open',
-            'high',
-            'low',
-            'close',
-            'volume'
-        ]
+        df = df.copy()
         
-        return df[columns_to_keep]
+        # ここに必要なテクニカル指標の計算を追加
+        # 例: RSI, MACD, ボリンジャーバンドなど
+        
+        return df
 

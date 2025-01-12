@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List, Tuple, Type, Callable
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
 from joblib import Parallel, delayed
+import pandas as pd
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,8 +22,9 @@ from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
 from analytics.analytics import Analytics
+from logger import get_logger
 
-class StrategyOptimizer:
+class BayesianOptimizer:
     """戦略パラメーターの最適化を行うクラス"""
     
     def __init__(
@@ -52,11 +54,31 @@ class StrategyOptimizer:
         self.best_params = None
         self.best_score = None
         self.best_trades = None
+        self.data = None
+        self.data_dict = None
         
         # 設定ファイルの読み込み
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-    
+            
+        # ロガーの初期化
+        self.logger = get_logger(__name__)
+
+    @property
+    def data(self) -> pd.DataFrame:
+        """データを取得"""
+        return self._data
+
+    @data.setter
+    def data(self, value: pd.DataFrame) -> None:
+        """データを設定し、data_dictも更新"""
+        self._data = value
+        if value is not None:
+            symbol = self.config['data']['symbol']
+            self.data_dict = {symbol: value}
+        else:
+            self.data_dict = None
+
     def _load_and_process_data(self) -> None:
         """データの読み込みと前処理"""
         data_config = self.config.get('data', {})
@@ -125,7 +147,7 @@ class StrategyOptimizer:
         strategy = self._create_strategy(trial)
         
         # バックテストの実行を _run_backtest として切り出し
-        trades = StrategyOptimizer._run_backtest_static(strategy, self.data_dict, self.config)
+        trades = BayesianOptimizer._run_backtest_static(strategy, self.data_dict, self.config)
 
         if len(trades) < 30:
             raise optuna.TrialPruned()
@@ -140,44 +162,28 @@ class StrategyOptimizer:
 
         return alpha_score
 
-    def optimize(self) -> Tuple[Dict[str, Any], float, List[Any]]:
-        """最適化を実行
-
-        Returns:
-            Tuple[Dict[str, Any], float, List[Any]]: 最適パラメーター、最高スコア、最良トレード
-        """
-        # データの読み込みと前処理を最初に一回だけ実行
-        self._load_and_process_data()
-
-        # Optunaの設定
+    def optimize(self):
+        """最適化を実行し、最適なパラメータを返す"""
+        if self.data is None:
+            self._load_and_process_data()
+            
         study = optuna.create_study(
             study_name='alpha_score_optimization',
-            direction='maximize',
-            sampler=TPESampler(n_startup_trials=10),
-            pruner=MedianPruner(
-                n_startup_trials=5,
-                n_warmup_steps=10,
-                interval_steps=1
-            )
+            direction='maximize'
         )
         
-        # 最適化の実行
         study.optimize(
             self._objective,
             n_trials=self.n_trials,
-            timeout=self.timeout,
-            n_jobs=1,  # _objective 内で joblib の並列化を使うため n_jobs は 1 に設定
+            n_jobs=self.n_jobs,
             show_progress_bar=True
         )
         
-        # 最適化結果の表示
-        print("\n=== 最適化結果 ===")
-        print(f"最適パラメーター: {study.best_params}")
-        print(f"最高スコア: {study.best_value:.2f}")
+        # 最適なパラメータと最高スコアを取得
+        best_params = study.best_params
+        best_value = study.best_value
         
-        # 最適パラメーターでのバックテスト結果を表示
-        if self.best_trades:
-            analytics = Analytics(self.best_trades, self.config['backtest']['initial_balance'])
-            analytics.print_backtest_results()
-
-        return study.best_params, study.best_value, self.best_trades
+        self.logger.info(f"最適化完了 - 最高スコア: {best_value:.2f}")
+        self.logger.info(f"最適パラメータ: {best_params}")
+        
+        return best_params, best_value  # タプルとして返す

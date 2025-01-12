@@ -9,8 +9,11 @@ from typing import Optional, List, Dict, Any
 
 import pandas as pd
 
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from logger import get_logger
 
+logger = get_logger(__name__)
 
 class DataLoader:
     """
@@ -34,89 +37,93 @@ class DataLoader:
         'ignore'             # 無視するフィールド
     ]
     
-    def __init__(self, data_dir: str = 'data/spot/monthly/klines'):
-        """
-        コンストラクタ
+    def __init__(self, data_dir: str):
+        """データローダーの初期化
         
         Args:
             data_dir: データディレクトリのパス
         """
-        self.logger = get_logger()
-        self.data_dir = Path(data_dir)
-        
-        if not self.data_dir.exists():
-            self.logger.warning(f"データディレクトリ '{self.data_dir}' が存在しません")
-            self.data_dir.mkdir(parents=True)
-    
+        self.data_dir = data_dir
+        self.logger = logger
+
     def load_data(
         self,
         symbol: str,
         timeframe: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
+        load_all: bool = False
     ) -> pd.DataFrame:
-        """
-        指定された銘柄と時間足のデータを読み込む
+        """指定された銘柄と時間足のデータを読み込む
         
         Args:
-            symbol: 銘柄名 (例: "BTCUSDT")
-            timeframe: 時間足 (例: "1h", "4h", "1d")
-            start_date: 開始日時
-            end_date: 終了日時
-        
+            symbol: 銘柄名
+            timeframe: 時間足
+            start_date: 開始日（load_all=Falseの場合に使用）
+            end_date: 終了日（load_all=Falseの場合に使用）
+            load_all: Trueの場合、全データを読み込む。Falseの場合、日付範囲でフィルタリング
+            
         Returns:
-            pandas DataFrame
+            pd.DataFrame: 読み込まれたデータ
         """
-        # 対象ディレクトリのパスを構築
-        symbol_dir = self.data_dir / symbol / timeframe
+        # データファイルのパスを構築
+        data_path = os.path.join(self.data_dir, symbol, timeframe)
         
-        if not symbol_dir.exists():
-            self.logger.error(f"指定された銘柄/時間足のディレクトリ '{symbol_dir}' が存在しません")
-            return pd.DataFrame(columns=self.COLUMNS)
-        
-        # CSVファイルのリストを取得
-        csv_files = sorted(glob.glob(str(symbol_dir / "*.csv")))
+        # ディレクトリ内の全CSVファイルを取得
+        csv_files = sorted([f for f in os.listdir(data_path) if f.endswith('.csv')])
         
         if not csv_files:
-            self.logger.warning(f"CSVファイルが見つかりません: {symbol_dir}")
-            return pd.DataFrame(columns=self.COLUMNS)
+            raise ValueError(f"データが見つかりません: {data_path}")
         
-        # 各CSVファイルを読み込んでリストに追加
-        dfs: List[pd.DataFrame] = []
-        for csv_file in csv_files:
-            df = self._load_csv(csv_file)
+        # 全てのCSVファイルを読み込んで結合
+        dfs = []
+        for file in csv_files:
+            file_path = os.path.join(data_path, file)
+            df = self._load_csv(file_path)
             if df is not None:
                 dfs.append(df)
         
         if not dfs:
-            self.logger.warning("有効なデータが読み込めませんでした")
             return pd.DataFrame(columns=self.COLUMNS)
         
-        # 全てのデータを結合
-        data = pd.concat(dfs, ignore_index=True)
+        # データを結合
+        combined_df = pd.concat(dfs, ignore_index=True)
         
-        # 日時でソート
-        data = data.sort_values('open_time')
+        # タイムスタンプをdatetimeに変換してインデックスに設定
+        combined_df['timestamp'] = pd.to_datetime(combined_df['open_time'], unit='ms')
+        combined_df.set_index('timestamp', inplace=True)
         
-        # 重複を削除
-        data = data.drop_duplicates(subset=['open_time'])
+        # 不要なカラムを削除
+        if 'open_time' in combined_df.columns:
+            combined_df.drop('open_time', axis=1, inplace=True)
+        if 'close_time' in combined_df.columns:
+            combined_df.drop('close_time', axis=1, inplace=True)
+        if 'ignore' in combined_df.columns:
+            combined_df.drop('ignore', axis=1, inplace=True)
         
-        # 日時でフィルタリング
-        if start_date:
-            start_ts = int(start_date.timestamp() * 1000)
-            data = data[data['open_time'] >= start_ts]
+        # 重複を削除し、時系列でソート
+        combined_df = combined_df[~combined_df.index.duplicated(keep='first')]
+        combined_df.sort_index(inplace=True)
         
-        if end_date:
-            end_ts = int(end_date.timestamp() * 1000)
-            data = data[data['open_time'] <= end_ts]
+        # データの日付範囲を取得
+        data_start = combined_df.index.min()
+        data_end = combined_df.index.max()
         
-        # インデックスをリセット
-        data = data.reset_index(drop=True)
+        # 日付範囲でフィルタリング（load_all=Falseの場合のみ）
+        if not load_all and (start_date is not None or end_date is not None):
+            # 指定された日付範囲がデータの範囲外の場合は空のDataFrameを返す
+            if (start_date is not None and end_date is not None and 
+                (start_date > data_end or end_date < data_start)):
+                return pd.DataFrame(columns=[col for col in combined_df.columns])
+            
+            if start_date is not None:
+                combined_df = combined_df[combined_df.index >= start_date]
+            if end_date is not None:
+                combined_df = combined_df[combined_df.index <= end_date]
         
-        self.logger.info(f"データを読み込みました: {symbol}/{timeframe} "
-                      f"(行数: {len(data)}, 期間: {data['open_time'].iloc[0]} - {data['open_time'].iloc[-1]})")
+        logger.info(f"データを読み込みました: {symbol}/{timeframe} (行数: {len(combined_df)}, 期間: {combined_df.index.min()} - {combined_df.index.max()})")
         
-        return data
+        return combined_df
     
     def _load_csv(self, file_path: str) -> Optional[pd.DataFrame]:
         """
@@ -161,7 +168,7 @@ class DataLoader:
             銘柄のリスト
         """
         symbols = []
-        for path in self.data_dir.iterdir():
+        for path in Path(self.data_dir).iterdir():
             if path.is_dir():
                 symbols.append(path.name)
         return sorted(symbols)
@@ -176,7 +183,7 @@ class DataLoader:
         Returns:
             時間足のリスト
         """
-        symbol_dir = self.data_dir / symbol
+        symbol_dir = Path(self.data_dir) / symbol
         timeframes = []
         
         if symbol_dir.exists():

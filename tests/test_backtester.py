@@ -55,10 +55,10 @@ def test_backtester():
     
     # 戦略の設定
     strategy = SupertrendRsiChopStrategy(
-        supertrend_params={'period': 13, 'multiplier': 3.0},
-        rsi_entry_params={'period': 3, 'solid': {'rsi_long_entry': 30, 'rsi_short_entry': 70}},
-        rsi_exit_params={'period': 14, 'solid': {'rsi_long_exit_solid': 85, 'rsi_short_exit_solid': 20}},
-        chop_params={'period': 13, 'solid': {'chop_solid': 50}}
+        supertrend_params={'period': 45, 'multiplier': 5.5},
+        rsi_entry_params={'period': 2, 'solid': {'rsi_long_entry': 20, 'rsi_short_entry': 80}},
+        rsi_exit_params={'period': 24, 'solid': {'rsi_long_exit_solid': 85, 'rsi_short_exit_solid': 15}},
+        chop_params={'period': 9, 'solid': {'chop_solid': 50}}
     )
     
     # ポジションサイジングの設定

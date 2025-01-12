@@ -198,7 +198,18 @@ class Analytics:
             return 0.0
         # CAGRをパーセンテージから小数点表記に変換
         return (self.calculate_cagr() / 100) / (max_dd / 100)
-
+    
+    def calculate_calmar_ratio_v2(self) -> float:
+        """調整済みリターンでカルマーレシオを計算"""
+        if not self.trades:
+            return 0.0
+        risk_free_rate = 0.02  # 年率2%と仮定
+        excess_returns = self.returns - (risk_free_rate / 365.25)  # 日次リターンに変換
+        max_dd, _, _ = self.calculate_max_drawdown()
+        if max_dd == 0:
+            return 0.0
+        return np.mean(excess_returns) / (max_dd / 100)
+    
     def calculate_drawdown_recovery_efficiency(self) -> float:
         """ドローダウン回復効率を計算
         
@@ -421,8 +432,8 @@ class Analytics:
         
         # 各指標の重要度に応じて指数を設定
         score = (
-            calmar ** 0.30 *         # カルマーレシオ (30%)
-            sortino ** 0.20 *        # ソルティノレシオ (20%)
+            calmar ** 0.20 *         # カルマーレシオ (30%)
+            sortino ** 0.30 *        # ソルティノレシオ (20%)
             prr ** 0.20 *            # 悲観的リターンレシオ (20%)
             win_rate ** 0.10 *       # 勝率 (10%)
             max_dd_score ** 0.10 *   # 最大ドローダウン (10%)
@@ -730,6 +741,7 @@ class Analytics:
         print(f"\nシャープレシオ: {self.calculate_sharpe_ratio():.2f}")
         print(f"ソルティノレシオ: {self.calculate_sortino_ratio():.2f}")
         print(f"カルマーレシオ: {self.calculate_calmar_ratio():.2f}")
+        print(f"カルマーレシオ（調整済み）: {self.calculate_calmar_ratio_v2():.2f}")
         print(f"VaR (95%): {self.calculate_value_at_risk():.2f}%")
         print(f"期待ショートフォール (95%): {self.calculate_expected_shortfall():.2f}%")
         print(f"ドローダウン回復効率: {self.calculate_drawdown_recovery_efficiency():.2f}")
