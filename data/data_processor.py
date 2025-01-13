@@ -60,4 +60,3 @@ class DataProcessor(IDataProcessor):
         df = df.sort_index()
         
         return df
-

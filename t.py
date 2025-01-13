@@ -25,12 +25,10 @@ def run_backtest(config: dict):
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
-    position_sizing = FixedRatioSizing({
-        'ratio': position_config.get('ratio', 0.99),
-        'min_position': position_config.get('min_position_size'),
-        'max_position': position_config.get('min_position_size'),
-        'leverage': position_config.get('leverage', 1)
-    })
+    position_sizing = FixedRatioSizing(
+        ratio=0.99,
+        leverage=1.0
+    )
     
     # バックテスターの作成
     initial_balance = config.get('position', {}).get('initial_balance', 10000)
@@ -102,12 +100,10 @@ def run_optimization(config: dict):
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
-    position_sizing = FixedRatioSizing({
-        'ratio': position_config.get('ratio', 0.99),
-        'min_position_size': position_config.get('min_position_size'),
-        'max_position_size': position_config.get('max_position_size'),
-        'leverage': position_config.get('leverage', 1)
-    })
+    position_sizing = FixedRatioSizing(
+        ratio=position_config.get('ratio', 0.99),
+        leverage=position_config.get('leverage', 1.0)
+    )
     
     # バックテスターの作成
     initial_balance = config.get('position', {}).get('initial_balance', 10000)

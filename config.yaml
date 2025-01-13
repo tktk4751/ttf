@@ -23,8 +23,6 @@ backtest:
 # ポジション設定
 position:
   ratio: 0.99
-  min_position_size: 0.1
-  max_position_size: 1.0
   leverage: 1
   initial_balance: 10000
   commission_rate: 0.001
@@ -40,7 +38,7 @@ optimization:
 
 # ウォークフォワードテスト設定
 walkforward:
-  enabled: false          # ウォークフォワードテストを行うかどうか
+  enabled: true          # ウォークフォワードテストを行うかどうか
   training_days: 360      # トレーニング期間（日数）
   testing_days: 180       # テスト期間（日数）
   min_trades: 15         # 最小トレード数

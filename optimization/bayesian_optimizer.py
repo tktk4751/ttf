@@ -73,25 +73,22 @@ class BayesianOptimizer(BaseOptimizer):
     
     def _run_backtest(self, strategy: Strategy) -> List[Any]:
         """バックテストを実行"""
-        # ポジション設定のデフォルト値を設定
+        # ポジションサイジングの作成
         position_config = self.config.get('position', {})
-        position_sizing = FixedRatioSizing({
-            'ratio': position_config.get('ratio', 0.99),
-            'min_position': position_config.get('min_position', 0.1),
-            'max_position': position_config.get('max_position', 1.0),
-            'leverage': position_config.get('leverage', 1)
-        })
+        position_sizing = FixedRatioSizing(
+            ratio=position_config.get('ratio', 0.99),
+            leverage=position_config.get('leverage', 1.0)
+        )
         
-        # バックテスターの初期化
-        initial_balance = position_config.get('initial_balance', 10000)
-        commission_rate = position_config.get('commission_rate', 0.001)
-        
+        # バックテスターの作成
+        initial_balance = self.config.get('position', {}).get('initial_balance', 10000)
+        commission_rate = self.config.get('position', {}).get('commission_rate', 0.001)
         backtester = Backtester(
             strategy=strategy,
             position_manager=position_sizing,
             initial_balance=initial_balance,
             commission=commission_rate,
-            max_positions=1
+            verbose=False
         )
         
         return backtester.run(self._data_dict)

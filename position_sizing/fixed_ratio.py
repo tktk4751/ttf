@@ -5,21 +5,16 @@ from backtesting.backtester import IPositionManager
 class FixedRatioSizing(IPositionManager):
     """固定比率のポジションサイジング"""
     
-    def __init__(self, params: Dict[str, Any]):
+    def __init__(self, ratio: float = 0.99, leverage: float = 1.0):
         """
         コンストラクタ
         
         Args:
-            params: パラメータ辞書
-                - ratio: 資金に対する割合（0.0-1.0）
-                - min_position_size: 最小ポジションサイズ（任意）
-                - max_position_size: 最大ポジションサイズ（任意）
-                - leverage: レバレッジ（デフォルト: 1）
+            ratio: 資金に対する割合（0.0-1.0）
+            leverage: レバレッジ（デフォルト: 1）
         """
-        self.ratio = params.get('ratio', 1.0)
-        self.min_position = params.get('min_position_size')
-        self.max_position = params.get('max_position_size')
-        self.leverage = params.get('leverage', 1)
+        self.ratio = ratio
+        self.leverage = leverage
     
     def can_enter(self) -> bool:
         """新規ポジションを取れるかどうか"""
@@ -34,20 +29,12 @@ class FixedRatioSizing(IPositionManager):
             capital: 現在の資金
         
         Returns:
-            ポジションサイズ
+            float: ポジションサイズ（USD建て）
         """
-        # 基本のポジションサイズを計算（資金に対する比率）
-        position_ratio = self.ratio
+        # 利用可能な資金を計算（資金の99%）
+        available_capital = capital * self.ratio
         
-        # 最小ポジションサイズの制限（資金に対する比率）
-        if self.min_position is not None:
-            position_ratio = max(position_ratio, self.min_position)
+        # レバレッジを適用してUSD建てのポジションサイズを計算
+        position_size_usd = available_capital * self.leverage
         
-        # 最大ポジションサイズの制限（資金に対する比率）
-        if self.max_position is not None:
-            position_ratio = min(position_ratio, self.max_position)
-        
-        # 最終的なポジションサイズを計算（レバレッジを適用）
-        size = (capital * position_ratio * self.leverage) / price
-        
-        return size
+        return position_size_usd  # USD建てのポジションサイズを返す
