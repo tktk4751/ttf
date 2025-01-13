@@ -8,13 +8,6 @@ data:
   start: "2020-12-30"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 
-# 戦略設定
-strategy:
-  name: "CrossoverStrategy"  # 使用する戦略
-  params:
-    short_ma: 10  # 短期移動平均の期間
-    long_ma: 20   # 長期移動平均の期間
-
 # ポジションサイズ設定
 position_sizing:
   name: "FixedRatioPositionSizing"  # ポジションサイズ計算方法
@@ -27,18 +20,23 @@ backtest:
   commission: 0.001        # 手数料率
   max_positions: 1         # 同時保有可能な最大ポジション数
 
+# ポジション設定
+position:
+  ratio: 0.99
+  min_position_size: 0.1
+  max_position_size: 1.0
+  leverage: 1
+  initial_balance: 10000
+  commission_rate: 0.001
+
 # 最適化設定
 optimization:
-  enabled: false          # 最適化を行うかどうか
-  metric: "alpha_score" # 最適化する指標
-  n_trials: 100          # 試行回数
-  params:
-    short_ma:  # 短期移動平均の最適化範囲
-      min: 5
-      max: 50
-    long_ma:   # 長期移動平均の最適化範囲
-      min: 10
-      max: 200
+  enabled: true
+  metric: "alpha_score"
+  n_trials: 100
+  n_jobs: -1
+  timeout: null
+  strategy_class: "SupertrendRsiChopStrategy"
 
 # ウォークフォワードテスト設定
 walkforward:

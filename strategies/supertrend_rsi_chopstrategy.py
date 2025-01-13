@@ -66,8 +66,8 @@ class SupertrendRsiChopStrategy(Strategy):
         self.rsi_exit_params = rsi_exit_params or {
             'period': 14,
             'solid': {
-                'rsi_long_exit_solid': 70,
-                'rsi_short_exit_solid': 30
+                'rsi_long_exit_solid': 86,
+                'rsi_short_exit_solid': 14
             }
         }
         self.chop_params = chop_params or {
@@ -112,9 +112,26 @@ class SupertrendRsiChopStrategy(Strategy):
             Dict[str, Any]: 戦略パラメータの辞書
         """
         return {
+            'supertrend_period': trial.suggest_int('supertrend_period', 3, 100, step=1),
+            'supertrend_multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 8.0, step=0.5),
+            'rsi_exit_period': trial.suggest_int('rsi_exit_period', 7, 34, step=1),
+            'chop_period': trial.suggest_int('chop_period', 3, 100, step=1)
+        }
+
+    @staticmethod
+    def convert_params_to_strategy_format(params: Dict[str, Any]) -> Dict[str, Any]:
+        """最適化パラメータを戦略クラスの形式に変換
+
+        Args:
+            params: 最適化パラメータ
+
+        Returns:
+            Dict[str, Any]: 戦略クラスのパラメータ形式
+        """
+        return {
             'supertrend_params': {
-                'period': trial.suggest_int('supertrend_period', 3, 100, step=1),
-                'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 8.0, step=0.5)
+                'period': params['supertrend_period'],
+                'multiplier': params['supertrend_multiplier']
             },
             'rsi_entry_params': {
                 'period': 2,
@@ -124,19 +141,21 @@ class SupertrendRsiChopStrategy(Strategy):
                 }
             },
             'rsi_exit_params': {
-                'period': trial.suggest_int('rsi_exit_period', 7, 34, step=1),
+                'period': params['rsi_exit_period'],
                 'solid': {
                     'rsi_long_exit_solid': 86,
                     'rsi_short_exit_solid': 14
                 }
             },
             'chop_params': {
-                'period': trial.suggest_int('chop_period', 3, 100, step=1),
+                'period': params['chop_period'],
                 'solid': {
                     'chop_solid': 50
                 }
             }
         }
+    
+    
 
     def get_parameters(self) -> Dict[str, Any]:
         """現在の戦略パラメータを取得する
@@ -185,11 +204,11 @@ class SupertrendRsiChopStrategy(Strategy):
             (self._chop_signals == 1)
         )
         
-        # ショートエントリー条件: 全てのシグナルが-1
+        # ショートエントリー条件: スーパートレンドが-1、RSIエントリーが-1、チョピネスが1
         short_condition = (
             (self._supertrend_signals == -1) &
             (self._rsi_entry_signals == -1) &
-            (self._chop_signals == -1)
+            (self._chop_signals == 1)
         )
         
         # シグナルの生成
@@ -231,3 +250,5 @@ class SupertrendRsiChopStrategy(Strategy):
             return (current_supertrend == 1) or (current_rsi_exit == -1)
         
         return False 
+
+        

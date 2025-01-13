@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import glob
-import os
+from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-
+from typing import Optional, List, Dict, Protocol, Any
 import pandas as pd
-
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from logger import get_logger
 
-logger = get_logger(__name__)
+class IDataSource(Protocol):
+    """データソースのインターフェース"""
+    def load_data(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> pd.DataFrame:
+        """データを読み込む"""
+        ...
 
-class DataLoader:
-    """
-    Klineデータを読み込むクラス
-    CSVファイルから時系列データを読み込み、pandas DataFrameとして提供
-    """
+    def get_available_symbols(self) -> List[str]:
+        """利用可能な銘柄のリストを取得"""
+        ...
+
+    def get_available_timeframes(self, symbol: str) -> List[str]:
+        """指定された銘柄で利用可能な時間足のリストを取得"""
+        ...
+
+class CSVDataSource(IDataSource):
+    """CSVファイルからデータを読み込むクラス"""
     
     # CSVファイルのカラム名
     COLUMNS = [
@@ -38,48 +48,38 @@ class DataLoader:
     ]
     
     def __init__(self, data_dir: str):
-        """データローダーの初期化
+        """CSVデータソースの初期化
         
         Args:
             data_dir: データディレクトリのパス
         """
         self.data_dir = data_dir
-        self.logger = logger
+        self.logger = get_logger(__name__)
 
     def load_data(
         self,
         symbol: str,
         timeframe: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        load_all: bool = False
+        end_date: Optional[datetime] = None
     ) -> pd.DataFrame:
-        """指定された銘柄と時間足のデータを読み込む
-        
-        Args:
-            symbol: 銘柄名
-            timeframe: 時間足
-            start_date: 開始日（load_all=Falseの場合に使用）
-            end_date: 終了日（load_all=Falseの場合に使用）
-            load_all: Trueの場合、全データを読み込む。Falseの場合、日付範囲でフィルタリング
-            
-        Returns:
-            pd.DataFrame: 読み込まれたデータ
-        """
+        """CSVファイルからデータを読み込む"""
         # データファイルのパスを構築
-        data_path = os.path.join(self.data_dir, symbol, timeframe)
+        data_path = Path(self.data_dir) / symbol / timeframe
+        
+        if not data_path.exists():
+            raise FileNotFoundError(f"データディレクトリが見つかりません: {data_path}")
         
         # ディレクトリ内の全CSVファイルを取得
-        csv_files = sorted([f for f in os.listdir(data_path) if f.endswith('.csv')])
+        csv_files = sorted([f for f in data_path.glob('*.csv')])
         
         if not csv_files:
-            raise ValueError(f"データが見つかりません: {data_path}")
+            raise FileNotFoundError(f"CSVファイルが見つかりません: {data_path}")
         
         # 全てのCSVファイルを読み込んで結合
         dfs = []
         for file in csv_files:
-            file_path = os.path.join(data_path, file)
-            df = self._load_csv(file_path)
+            df = self._load_csv(file)
             if df is not None:
                 dfs.append(df)
         
@@ -94,47 +94,28 @@ class DataLoader:
         combined_df.set_index('timestamp', inplace=True)
         
         # 不要なカラムを削除
-        if 'open_time' in combined_df.columns:
-            combined_df.drop('open_time', axis=1, inplace=True)
-        if 'close_time' in combined_df.columns:
-            combined_df.drop('close_time', axis=1, inplace=True)
-        if 'ignore' in combined_df.columns:
-            combined_df.drop('ignore', axis=1, inplace=True)
+        columns_to_drop = ['open_time', 'close_time', 'ignore']
+        combined_df.drop(columns=[col for col in columns_to_drop if col in combined_df.columns], inplace=True)
         
         # 重複を削除し、時系列でソート
         combined_df = combined_df[~combined_df.index.duplicated(keep='first')]
         combined_df.sort_index(inplace=True)
         
-        # データの日付範囲を取得
-        data_start = combined_df.index.min()
-        data_end = combined_df.index.max()
+        # 日付範囲でフィルタリング
+        if start_date is not None:
+            combined_df = combined_df[combined_df.index >= start_date]
+        if end_date is not None:
+            combined_df = combined_df[combined_df.index <= end_date]
         
-        # 日付範囲でフィルタリング（load_all=Falseの場合のみ）
-        if not load_all and (start_date is not None or end_date is not None):
-            # 指定された日付範囲がデータの範囲外の場合は空のDataFrameを返す
-            if (start_date is not None and end_date is not None and 
-                (start_date > data_end or end_date < data_start)):
-                return pd.DataFrame(columns=[col for col in combined_df.columns])
-            
-            if start_date is not None:
-                combined_df = combined_df[combined_df.index >= start_date]
-            if end_date is not None:
-                combined_df = combined_df[combined_df.index <= end_date]
-        
-        logger.info(f"データを読み込みました: {symbol}/{timeframe} (行数: {len(combined_df)}, 期間: {combined_df.index.min()} - {combined_df.index.max()})")
+        self.logger.info(
+            f"データを読み込みました: {symbol}/{timeframe} "
+            f"(行数: {len(combined_df)}, 期間: {combined_df.index.min()} - {combined_df.index.max()})"
+        )
         
         return combined_df
     
-    def _load_csv(self, file_path: str) -> Optional[pd.DataFrame]:
-        """
-        CSVファイルを読み込む
-        
-        Args:
-            file_path: CSVファイルのパス
-        
-        Returns:
-            pandas DataFrame、エラー時はNone
-        """
+    def _load_csv(self, file_path: Path) -> Optional[pd.DataFrame]:
+        """CSVファイルを読み込む"""
         try:
             df = pd.read_csv(
                 file_path,
@@ -161,12 +142,7 @@ class DataLoader:
             return None
     
     def get_available_symbols(self) -> List[str]:
-        """
-        利用可能な銘柄のリストを取得
-        
-        Returns:
-            銘柄のリスト
-        """
+        """利用可能な銘柄のリストを取得"""
         symbols = []
         for path in Path(self.data_dir).iterdir():
             if path.is_dir():
@@ -174,15 +150,7 @@ class DataLoader:
         return sorted(symbols)
     
     def get_available_timeframes(self, symbol: str) -> List[str]:
-        """
-        指定された銘柄で利用可能な時間足のリストを取得
-        
-        Args:
-            symbol: 銘柄名
-        
-        Returns:
-            時間足のリスト
-        """
+        """指定された銘柄で利用可能な時間足のリストを取得"""
         symbol_dir = Path(self.data_dir) / symbol
         timeframes = []
         
@@ -192,3 +160,115 @@ class DataLoader:
                     timeframes.append(path.name)
         
         return sorted(timeframes)
+
+class DataLoader:
+    """データ読み込みのファサードクラス"""
+    
+    def __init__(self, data_source: IDataSource):
+        """
+        Args:
+            data_source: データソース
+        """
+        self.data_source = data_source
+        self.logger = get_logger(__name__)
+        self._cache: Dict[str, pd.DataFrame] = {}
+
+    def load_market_data(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        use_cache: bool = True
+    ) -> pd.DataFrame:
+        """市場データを読み込む
+        
+        Args:
+            symbol: 銘柄名
+            timeframe: 時間足
+            start_date: 開始日
+            end_date: 終了日
+            use_cache: キャッシュを使用するかどうか
+        
+        Returns:
+            pd.DataFrame: 読み込まれたデータ
+        """
+        cache_key = f"{symbol}_{timeframe}"
+        
+        # キャッシュチェック
+        if use_cache and cache_key in self._cache:
+            df = self._cache[cache_key]
+            if start_date is not None:
+                df = df[df.index >= start_date]
+            if end_date is not None:
+                df = df[df.index <= end_date]
+            return df
+        
+        # データの読み込み
+        df = self.data_source.load_data(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # キャッシュの更新
+        if use_cache:
+            self._cache[cache_key] = df
+        
+        return df
+
+    def load_data_from_config(self, config: Dict[str, Any]) -> Dict[str, pd.DataFrame]:
+        """設定ファイルからデータを読み込む
+        
+        Args:
+            config: 設定データ
+                {
+                    'data': {
+                        'data_dir': 'data',
+                        'symbol': 'BTCUSDT',
+                        'timeframe': '1h',
+                        'start': '2024-01-01',  # オプション
+                        'end': '2024-12-31'     # オプション
+                    }
+                }
+        
+        Returns:
+            Dict[str, pd.DataFrame]: 銘柄をキーとするデータフレームの辞書
+        """
+        data_config = config.get('data', {})
+        symbol = data_config.get('symbol', 'BTCUSDT')
+        timeframe = data_config.get('timeframe', '1h')
+        start_date = data_config.get('start')
+        end_date = data_config.get('end')
+        
+        # 日付文字列をdatetimeオブジェクトに変換
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+        
+        # データの読み込み
+        data = self.load_market_data(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_date=start_dt,
+            end_date=end_dt
+        )
+        
+        self.logger.info(
+            f"設定ファイルからデータを読み込みました: {symbol}/{timeframe} "
+            f"(期間: {start_date or '全期間'} - {end_date or '全期間'})"
+        )
+        
+        return {symbol: data}
+
+    def get_available_symbols(self) -> List[str]:
+        """利用可能な銘柄のリストを取得"""
+        return self.data_source.get_available_symbols()
+
+    def get_available_timeframes(self, symbol: str) -> List[str]:
+        """指定された銘柄で利用可能な時間足のリストを取得"""
+        return self.data_source.get_available_timeframes(symbol)
+
+    def clear_cache(self) -> None:
+        """キャッシュをクリア"""
+        self._cache.clear()

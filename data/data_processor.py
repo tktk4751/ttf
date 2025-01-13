@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from typing import Protocol
 import pandas as pd
-import numpy as np
-from typing import Optional
+from logger import get_logger
 
-
-class DataProcessor:
-    """
-    データの前処理を行うクラス
-    - タイムスタンプの変換
-    - 必要なテクニカル指標の計算
-    - データの正規化
-    など
-    """
-    
+class IDataProcessor(Protocol):
+    """データ処理のインターフェース"""
     def process(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        データの前処理を実行
+        """データを処理する"""
+        ...
+
+class DataProcessor(IDataProcessor):
+    """データ処理クラス"""
+    def __init__(self):
+        self.logger = get_logger(__name__)
+
+    def process(self, df: pd.DataFrame) -> pd.DataFrame:
+        """データを処理する
         
         Args:
             df: 処理対象のDataFrame
@@ -30,47 +30,34 @@ class DataProcessor:
             
         processed = df.copy()
         
-        # タイムスタンプの処理（まだ処理されていない場合のみ）
-        if 'open_time' in processed.columns:
-            processed = self._convert_timestamps(processed)
-        
-        # 必要なテクニカル指標の計算
-        processed = self._calculate_indicators(processed)
+        # 基本的なデータクリーニング
+        processed = self._clean_data(processed)
         
         return processed
-    
-    def _convert_timestamps(self, df: pd.DataFrame) -> pd.DataFrame:
+
+    def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """データのクリーニング処理
+        
+        - 欠損値の処理
+        - 異常値の除去
+        - データ型の変換
+        など
         """
-        タイムスタンプをdatetime形式に変換
+        # 欠損値の処理
+        df = df.dropna()
         
-        Args:
-            df: 処理対象のDataFrame
-            
-        Returns:
-            タイムスタンプ変換済みのDataFrame
-        """
-        df = df.copy()
+        # 価格がゼロ以下の行を除外
+        price_columns = ['open', 'high', 'low', 'close']
+        for col in price_columns:
+            if col in df.columns:
+                df = df[df[col] > 0]
         
-        # UNIXタイムスタンプ（ミリ秒）をdatetime形式に変換
-        df['datetime'] = pd.to_datetime(df['open_time'] / 1000, unit='s')
-        df.set_index('datetime', inplace=True)
+        # 出来高がゼロ以下の行を除外
+        if 'volume' in df.columns:
+            df = df[df['volume'] > 0]
         
-        return df
-    
-    def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        テクニカル指標を計算
-        
-        Args:
-            df: 処理対象のDataFrame
-            
-        Returns:
-            テクニカル指標計算済みのDataFrame
-        """
-        df = df.copy()
-        
-        # ここに必要なテクニカル指標の計算を追加
-        # 例: RSI, MACD, ボリンジャーバンドなど
+        # インデックスの再設定
+        df = df.sort_index()
         
         return df
 

@@ -821,4 +821,3 @@ class Analytics:
             else:
                 current_streak = 0
         return max_streak
-
