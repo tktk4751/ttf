@@ -525,7 +525,6 @@ class Analytics:
                 'cagr': self.calculate_cagr('SHORT')
             }
         }
-
     def get_avg_bars_winning_trades(self):
         """勝ちトレードの平均バー数を取得"""
         winning_trades = [t for t in self.trades if t.profit_loss > 0]
@@ -754,3 +753,4 @@ class Analytics:
         print(f"悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
         print(f"アルファスコア: {self.calculate_alpha_score():.2f}")
         print(f"SQNスコア: {self.calculate_sqn():.2f}")
+

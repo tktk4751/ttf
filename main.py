@@ -10,6 +10,7 @@ from typing import Dict, Any
 import yaml
 
 
+
 class Config:
     """設定を管理するクラス"""
     
@@ -129,6 +130,8 @@ def parse_args() -> argparse.Namespace:
     )
     
     return parser.parse_args()
+
+
 
 
 def main() -> None:

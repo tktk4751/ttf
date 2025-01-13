@@ -1,5 +1,5 @@
 """
-Strategies package
+トレーディング戦略関連のモジュールを提供します。
 """
 
 from .strategy import Strategy

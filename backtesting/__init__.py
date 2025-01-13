@@ -1,5 +1,5 @@
 """
-Backtesting package
+バックテスト関連のモジュールを提供します。
 """
 
 from .backtester import Backtester

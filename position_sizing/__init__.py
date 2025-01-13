@@ -1,5 +1,5 @@
 """
-Position Sizing package
+ポジションサイジング関連のモジュールを提供します。
 """
 
 from .position_sizing import PositionSizing
