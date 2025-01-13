@@ -29,7 +29,6 @@ class BayesianOptimizer:
     
     def __init__(
         self,
-        config_path: str,
         strategy_class: Type[Strategy],
         param_generator: Callable[[optuna.Trial], Dict[str, Any]],
         n_trials: int = 100,
@@ -45,7 +44,7 @@ class BayesianOptimizer:
             n_jobs: 並列処理数（-1で全CPU使用）
             timeout: タイムアウト時間（秒）
         """
-        self.config_path = config_path
+        self.config_path = os.path.join(project_root, 'config.yaml')
         self.strategy_class = strategy_class
         self.param_generator = param_generator
         self.n_trials = n_trials
@@ -58,7 +57,7 @@ class BayesianOptimizer:
         self.data_dict = None
         
         # 設定ファイルの読み込み
-        with open(config_path, 'r') as f:
+        with open(self.config_path, 'r') as f:
             self.config = yaml.safe_load(f)
             
         # ロガーの初期化
@@ -153,14 +152,14 @@ class BayesianOptimizer:
             raise optuna.TrialPruned()
 
         analytics = Analytics(trades, self.config['backtest']['initial_balance'])
-        alpha_score = analytics.calculate_alpha_score()
+        x = analytics.calculate_alpha_score()
 
-        if self.best_score is None or alpha_score > self.best_score:
-            self.best_score = alpha_score
+        if self.best_score is None or x > self.best_score:
+            self.best_score = x
             self.best_params = trial.params
             self.best_trades = trades
 
-        return alpha_score
+        return x
 
     def optimize(self):
         """最適化を実行し、最適なパラメータを返す"""
@@ -168,7 +167,7 @@ class BayesianOptimizer:
             self._load_and_process_data()
             
         study = optuna.create_study(
-            study_name='alpha_score_optimization',
+            study_name='X_optimization',
             direction='maximize'
         )
         

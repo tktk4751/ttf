@@ -100,6 +100,56 @@ class SupertrendRsiChopStrategy(Strategy):
         self._rsi_exit_signals = None
         self._rsi_entry_signals = None
         self._chop_signals = None
+
+    @staticmethod
+    def create_optimization_params(trial) -> Dict[str, Any]:
+        """最適化用のパラメータを生成する
+
+        Args:
+            trial: Optunaのtrialオブジェクト
+
+        Returns:
+            Dict[str, Any]: 戦略パラメータの辞書
+        """
+        return {
+            'supertrend_params': {
+                'period': trial.suggest_int('supertrend_period', 3, 100, step=1),
+                'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 8.0, step=0.5)
+            },
+            'rsi_entry_params': {
+                'period': 2,
+                'solid': {
+                    'rsi_long_entry': 20,
+                    'rsi_short_entry': 80
+                }
+            },
+            'rsi_exit_params': {
+                'period': trial.suggest_int('rsi_exit_period', 7, 34, step=1),
+                'solid': {
+                    'rsi_long_exit_solid': 86,
+                    'rsi_short_exit_solid': 14
+                }
+            },
+            'chop_params': {
+                'period': trial.suggest_int('chop_period', 3, 100, step=1),
+                'solid': {
+                    'chop_solid': 50
+                }
+            }
+        }
+
+    def get_parameters(self) -> Dict[str, Any]:
+        """現在の戦略パラメータを取得する
+
+        Returns:
+            Dict[str, Any]: パラメータ名と値の辞書
+        """
+        return {
+            'supertrend_params': self.supertrend_params,
+            'rsi_entry_params': self.rsi_entry_params,
+            'rsi_exit_params': self.rsi_exit_params,
+            'chop_params': self.chop_params
+        }
     
     def _calculate_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> None:
         """全てのシグナルを計算してキャッシュする"""

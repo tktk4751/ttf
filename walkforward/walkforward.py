@@ -129,11 +129,11 @@ class WalkForward:
             try:
                 # パラメータの最適化
                 optimizer = BayesianOptimizer(
-                    config_path=self.config_path,
                     strategy_class=self.strategy_class,
                     param_generator=self.param_generator,
                     n_trials=100,
-                    n_jobs=1
+                    n_jobs=1,
+                    metric=self.config['optimization'].get('metric', 'alpha_score')  # 設定ファイルから評価指標を読み込む
                 )
                 optimizer.data = training_data
                 best_params, best_value = optimizer.optimize()
@@ -154,8 +154,8 @@ class WalkForward:
                     'rsi_exit_params': {
                         'period': best_params['rsi_exit_period'],
                         'solid': {
-                            'rsi_long_exit_solid': 85,
-                            'rsi_short_exit_solid': 15
+                            'rsi_long_exit_solid': 86,
+                            'rsi_short_exit_solid': 14
                         }
                     },
                     'chop_params': {

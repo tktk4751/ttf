@@ -14,7 +14,7 @@ class MonteCarlo:
         self,
         trades: List[Trade],
         initial_capital: float,
-        num_simulations: int = 1000,
+        num_simulations: int = 20000,
         confidence_level: float = 0.95
     ):
         """モンテカルロシミュレーションを初期化

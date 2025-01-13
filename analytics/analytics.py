@@ -404,43 +404,73 @@ class Analytics:
         return geometric_mean * 100
 
     def calculate_alpha_score(self) -> float:
-        """アルファスコアを計算
-        
+        """アルファスコアを計算 (ゼロ値置換)
+
         以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
-        
-        1. カルマーレシオ (30%): ドローダウンに対するリターンの効率性
-        2. ソルティノレシオ (20%): ダウンサイドリスクに対するリターン
+
+        1. カルマーレシオ (25%): ドローダウンに対するリターンの効率性
+        2. ソルティノレシオ (30%): ダウンサイドリスクに対するリターン
         3. 悲観的リターンレシオ (20%): 保守的な収益性評価
-        4. 勝率 (10%): 戦略の一貫性
-        5. 最大ドローダウン (10%): リスク管理の効率性
-        6. SQN (10%): システムの品質指標
-        
+        4. 最大ドローダウン (15%): リスク管理の効率性
+        5. CAGR (10%): 年間リターンの効率性
+
         Returns:
             float: 0-100のスケールでのスコア。高いほど良い。
         """
         if not self.trades:
             return 0.0
-            
+
         # 各指標を0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio(), 0), 7) / 7    # 0-1にスケール
+        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 3) / 3    # 0-1にスケール
         sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
         prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
-        win_rate = self.calculate_win_rate() / 100  # 0-1のスケール
         max_dd = self.calculate_max_drawdown()[0]
         max_dd_score = max(0, 1 - (max_dd / 100))  # ドローダウンが小さいほど高スコア
-        sqn = min(max(self.calculate_sqn() / 7, 0), 1)  # 0-1にスケール（7以上をHoly Grailとして1にスケール）
-        
+        cagr = min(max(self.calculate_cagr(), 0), 400) / 400  # 0-1にスケール（400%を超える場合は1に丸める）     
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        calmar = calmar if calmar > 0 else replacement_value
+        sortino = sortino if sortino > 0 else replacement_value
+        prr = prr if prr > 0 else replacement_value
+        max_dd_score = max_dd_score if max_dd_score > 0 else replacement_value
+        cagr = cagr if cagr > 0 else replacement_value
+
         # 各指標の重要度に応じて指数を設定
         score = (
-            calmar ** 0.20 *         # カルマーレシオ (30%)
-            sortino ** 0.30 *        # ソルティノレシオ (20%)
+            calmar ** 0.25 *         # カルマーレシオ (25%)
+            sortino ** 0.30 *        # ソルティノレシオ (30%)
             prr ** 0.20 *            # 悲観的リターンレシオ (20%)
-            win_rate ** 0.10 *       # 勝率 (10%)
-            max_dd_score ** 0.10 *   # 最大ドローダウン (10%)
-            sqn ** 0.10              # SQN (10%)
+            max_dd_score ** 0.15 *       # 最大ドローダウン (15%)
+            cagr ** 0.10   # cagr (10%)
         )
+
+        # 0-100のスケールに変換 (補正不要)
+        return score * 100
+    
+    def calculate_cagr_dd_score(self) -> float:
+       
+        if not self.trades:
+            return 0.0
+
+        # 各指標を0-1にスケール
         
-        # 0-100のスケールに変換
+        max_dd = self.calculate_max_drawdown()[0]
+        max_dd_score = max(0, 1 - (max_dd / 100))  # ドローダウンが小さいほど高スコア
+        cagr = min(max(self.calculate_cagr(), 0), 400) / 400  # 0-1にスケール（400%を超える場合は1に丸める）     
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        max_dd_score = max_dd_score if max_dd_score > 0 else replacement_value
+        cagr = cagr if cagr > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定
+        score = (
+            max_dd_score ** 0.60 *      
+            cagr ** 0.40 
+        )
+
+        # 0-100のスケールに変換 (補正不要)
         return score * 100
 
     def calculate_sqn(self) -> float:
@@ -676,6 +706,8 @@ class Analytics:
         print(f"総トレード数: {len(self.trades)}")
         print(f"勝ちトレード数: {self.get_winning_trades()}")
         print(f"負けトレード数: {self.get_losing_trades()}")
+        print(f"最大連勝数: {self.calculate_max_consecutive_wins()}")
+        print(f"最大連敗数: {self.calculate_max_consecutive_losses()}")
         print(f"平均保有期間（日）: {self.get_avg_bars_all_trades():.2f}")
         print(f"勝ちトレード平均保有期間（日）: {self.get_avg_bars_winning_trades():.2f}")
         print(f"負けトレード平均保有期間（日）: {self.get_avg_bars_losing_trades():.2f}")
@@ -753,4 +785,40 @@ class Analytics:
         print(f"悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
         print(f"アルファスコア: {self.calculate_alpha_score():.2f}")
         print(f"SQNスコア: {self.calculate_sqn():.2f}")
+
+    def calculate_max_consecutive_wins(self) -> int:
+        """最大連勝数を計算
+
+        Returns:
+            int: 最大連勝数
+        """
+        if not self.trades:
+            return 0
+
+        max_streak = current_streak = 0
+        for trade in self.trades:
+            if trade.profit_loss > 0:
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 0
+        return max_streak
+
+    def calculate_max_consecutive_losses(self) -> int:
+        """最大連敗数を計算
+
+        Returns:
+            int: 最大連敗数
+        """
+        if not self.trades:
+            return 0
+
+        max_streak = current_streak = 0
+        for trade in self.trades:
+            if trade.profit_loss < 0:
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 0
+        return max_streak
 

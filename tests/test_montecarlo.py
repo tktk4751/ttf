@@ -21,36 +21,6 @@ from optimization.Bayesian_optimizer import BayesianOptimizer
 from montecarlo.montecarlo import MonteCarlo
 
 
-def create_supertrend_rsi_params(trial):
-    """SupertrendRsiChopStrategyのパラメーター生成関数"""
-    return {
-        'supertrend_params': {
-            'period': trial.suggest_int('supertrend_period', 5, 100, step=1),
-            'multiplier': trial.suggest_float('supertrend_multiplier', 1.5, 8.0, step=0.5)
-        },
-        'rsi_entry_params': {
-            'period': 2,
-            'solid': {
-                'rsi_long_entry': 20,
-                'rsi_short_entry': 80
-            }
-        },
-        'rsi_exit_params': {
-            'period': trial.suggest_int('rsi_exit_period', 5, 34, step=1),
-            'solid': {
-                'rsi_long_exit_solid': 85,
-                'rsi_short_exit_solid': 15
-            }
-        },
-        'chop_params': {
-            'period': trial.suggest_int('chop_period', 5, 100, step=1),
-            'solid': {
-                'chop_solid': 50
-            }
-        }
-    }
-
-
 def load_config() -> Dict:
     """設定ファイルを読み込む"""
     with open('config.yaml', 'r') as file:
@@ -92,10 +62,9 @@ def run_optimization_and_montecarlo():
     # 最適化の実行
     print("\n=== パラメーター最適化の開始 ===")
     optimizer = BayesianOptimizer(
-        config_path=os.path.join(project_root, 'config.yaml'),
         strategy_class=SupertrendRsiChopStrategy,
-        param_generator=create_supertrend_rsi_params,
-        n_trials=100,
+        param_generator=SupertrendRsiChopStrategy.create_optimization_params,
+        n_trials=500,
         n_jobs=-1,
         timeout=None
     )
@@ -113,7 +82,7 @@ def run_optimization_and_montecarlo():
             'multiplier': best_params['supertrend_multiplier']
         },
         rsi_entry_params={
-            'period': 2,
+            'period':2,
             'solid': {
                 'rsi_long_entry': 20,
                 'rsi_short_entry': 80
@@ -122,8 +91,8 @@ def run_optimization_and_montecarlo():
         rsi_exit_params={
             'period': best_params['rsi_exit_period'],
             'solid': {
-                'rsi_long_exit_solid': 85,
-                'rsi_short_exit_solid': 15
+                'rsi_long_exit_solid': 86,
+                'rsi_short_exit_solid': 14
             }
         },
         chop_params={
@@ -136,7 +105,7 @@ def run_optimization_and_montecarlo():
     
     # ポジションサイジングの設定
     position_sizing = FixedRatioSizing({
-        'ratio': 1,  # 資金の99%を使用
+        'ratio': 0.3,  
         'min_position': None,  # 最小ポジションサイズの制限なし
         'max_position': None,  # 最大ポジションサイズの制限なし
         'leverage': 1  # レバレッジなし

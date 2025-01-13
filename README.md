@@ -925,7 +925,7 @@ Use code [with caution](https://support.google.com/legal/answer/13505487).
         
     2. ウォークフォワードテスト機能の実装 (walkforward/walkforward.py)✔
         
-    3. モンテカルロシミュレーション機能の実装 (montecarlo/montecarlo.py)
+    3. モンテカルロシミュレーション機能の実装 (montecarlo/montecarlo.py)✔
         
     4. 最適化、ウォークフォワード、モンテカルロ関連の設定項目を config.yaml に追加
         
