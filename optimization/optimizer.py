@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Tuple, Type, Callable
 import pandas as pd
-from strategies.strategy import Strategy
+from strategies.base.strategy import BaseStrategy
 
 class IOptimizer(ABC):
     """最適化のインターフェース"""
@@ -26,7 +26,7 @@ class BaseOptimizer(IOptimizer, ABC):
     
     def __init__(
         self,
-        strategy_class: Type[Strategy],
+        strategy_class: Type[BaseStrategy],
         param_generator: Callable,
         config: Dict[str, Any]
     ):

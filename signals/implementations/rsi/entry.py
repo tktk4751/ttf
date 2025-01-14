@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from typing import Union, Dict, Any
-
 import numpy as np
 import pandas as pd
 
-from .signal import Signal
+from ...base_signal import BaseSignal
+from ...interfaces.entry import IEntrySignal
 from indicators.rsi import RSI
 
-class RSIEntrySignal(Signal):
+class RSIEntrySignal(BaseSignal, IEntrySignal):
     """
     RSIを使用したエントリーシグナル
     - RSI <= rsi_long_entry: ロングエントリー (1)
@@ -22,16 +22,19 @@ class RSIEntrySignal(Signal):
         
         Args:
             period: RSIの期間
-            params: パラメータ辞書
+            solid: パラメータ辞書
                 - rsi_long_entry: ロングエントリーのRSIしきい値
                 - rsi_short_entry: ショートエントリーのRSIしきい値
         """
-        super().__init__(f"RSIEntry({period})")
-        self.period = period
-        self.solid = solid or {
-            'rsi_long_entry': 20,
-            'rsi_short_entry': 80
+        params = {
+            'period': period,
+            'solid': solid or {
+                'rsi_long_entry': 20,
+                'rsi_short_entry': 80
+            }
         }
+        super().__init__(f"RSIEntry({period})", params)
+        self._rsi = RSI(period)
     
     def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -43,14 +46,14 @@ class RSIEntrySignal(Signal):
         Returns:
             シグナルの配列 (1: ロング, -1: ショート, 0: シグナルなし)
         """
-        rsi = RSI(self.period)
-        rsi_values = rsi.calculate(data)
+        rsi_values = self._rsi.calculate(data)
         
         # シグナルの初期化
         signals = np.zeros(len(rsi_values))
         
         # エントリーシグナルの生成
-        signals = np.where(rsi_values <= self.solid['rsi_long_entry'], 1, signals)  # ロングエントリー
-        signals = np.where(rsi_values >= self.solid['rsi_short_entry'], -1, signals)  # ショートエントリー
+        solid = self._params['solid']
+        signals = np.where(rsi_values <= solid['rsi_long_entry'], 1, signals)  # ロングエントリー
+        signals = np.where(rsi_values >= solid['rsi_short_entry'], -1, signals)  # ショートエントリー
         
-        return signals
+        return signals 

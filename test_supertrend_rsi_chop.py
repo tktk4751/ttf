@@ -8,7 +8,7 @@ from datetime import datetime
 
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
-from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
+from strategies.supertrend_rsi_chop_strategy import SupertrendRsiChopStrategy
 
 def load_config(file_path: str = 'config.yaml') -> dict:
     """設定ファイルを読み込む"""

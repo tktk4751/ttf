@@ -15,7 +15,7 @@ sys.path.insert(0, project_root)
 
 from backtesting.backtester import Backtester
 from position_sizing.fixed_ratio import FixedRatioSizing
-from strategies.strategy import Strategy
+from strategies.base.strategy import BaseStrategy
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
 from analytics.analytics import Analytics
@@ -26,7 +26,7 @@ class GridOptimizer:
     def __init__(
         self,
         config_path: str,
-        strategy_class: Type[Strategy],
+        strategy_class: Type[BaseStrategy],
         param_ranges: Dict[str, np.ndarray],
         n_jobs: int = -1
     ):

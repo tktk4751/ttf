@@ -8,7 +8,7 @@ from pathlib import Path
 from backtesting.backtester import Backtester
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
-from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
+from strategies.implementations.supertrend_rsi_chop.strategy import SupertrendRsiChopStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
@@ -149,6 +149,7 @@ def run_optimization(config: dict):
         print(f"\n=== {symbol} の分析結果 ===")
         symbol_analytics.print_backtest_results()
 
+
 def run_walkforward_test(config: dict):
     """ウォークフォワードテストを実行する"""
     print("\nStarting walk-forward test...")
@@ -199,44 +200,42 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     """モンテカルロシミュレーションを実行する"""
     print("\nモンテカルロシミュレーションを開始します...")
     
-    # トレードが渡されていない場合は、バックテストを実行して取得
-    if trades is None:
-        # データの準備
-        data_dir = config['data']['data_dir']
-        data_loader = DataLoader(CSVDataSource(data_dir))
-        data_processor = DataProcessor()
-        
-        # 戦略の作成
-        strategy = SupertrendRsiChopStrategy()
-        
-        # ポジションサイジングの作成
-        position_config = config.get('position', {})
-        position_sizing = FixedRatioSizing(
-            ratio=position_config.get('ratio', 0.99),
-            leverage=position_config.get('leverage', 1.0)
-        )
-        
-        # バックテスターの作成
-        initial_balance = config.get('position', {}).get('initial_balance', 10000)
-        commission_rate = config.get('position', {}).get('commission_rate', 0.001)
-        backtester = Backtester(
-            strategy=strategy,
-            position_manager=position_sizing,
-            initial_balance=initial_balance,
-            commission=commission_rate,
-            verbose=False
-        )
-        
-        # データの読み込みと処理
-        print("データを読み込んでいます...")
-        raw_data = data_loader.load_data_from_config(config)
-        processed_data = {
-            symbol: data_processor.process(df)
-            for symbol, df in raw_data.items()
-        }
-        
-        print("バックテストを実行しています...")
-        trades = backtester.run(processed_data)
+    # データの準備
+    data_dir = config['data']['data_dir']
+    data_loader = DataLoader(CSVDataSource(data_dir))
+    data_processor = DataProcessor()
+    
+    # 戦略の作成
+    strategy = SupertrendRsiChopStrategy()
+    
+    # ポジションサイジングの作成
+    position_config = config.get('position', {})
+    position_sizing = FixedRatioSizing(
+        ratio=position_config.get('ratio', 0.99),
+        leverage=position_config.get('leverage', 1.0)
+    )
+    
+    # バックテスターの作成
+    initial_balance = config.get('position', {}).get('initial_balance', 10000)
+    commission_rate = config.get('position', {}).get('commission_rate', 0.001)
+    backtester = Backtester(
+        strategy=strategy,
+        position_manager=position_sizing,
+        initial_balance=initial_balance,
+        commission=commission_rate,
+        verbose=False
+    )
+    
+    # データの読み込みと処理
+    print("データを読み込んでいます...")
+    raw_data = data_loader.load_data_from_config(config)
+    processed_data = {
+        symbol: data_processor.process(df)
+        for symbol, df in raw_data.items()
+    }
+    
+    print("バックテストを実行しています...")
+    trades = backtester.run(processed_data)
     
     # モンテカルロシミュレーションの実行
     print("\n=== モンテカルロシミュレーションの実行 ===")

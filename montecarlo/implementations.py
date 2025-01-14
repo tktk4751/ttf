@@ -98,9 +98,7 @@ class MatplotlibVisualizer(IResultVisualizer):
     def visualize(self, equity_curves: List[List[float]], confidence_level: float, save_path: str = None) -> None:
         plt.figure(figsize=(15, 8))
         plt.style.use('seaborn-v0_8-darkgrid')
-        
-        # フォント設定
-        plt.rcParams['font.family'] = 'MS Gothic'
+    
         
         # 全シミュレーションのプロット
         for equity_curve in equity_curves:

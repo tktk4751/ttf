@@ -1,8 +1,10 @@
-"""
-トレーディング戦略関連のモジュールを提供します。
-"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-from .strategy import Strategy
-from .supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
+from .base.strategy import BaseStrategy
+from .implementations.supertrend_rsi_chop.strategy import SupertrendRsiChopStrategy
 
-__all__ = ['Strategy', 'SupertrendRsiChopStrategy']
+__all__ = [
+    'BaseStrategy',
+    'SupertrendRsiChopStrategy'
+]

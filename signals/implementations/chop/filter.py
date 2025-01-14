@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from typing import Union, Dict, Any
-
 import numpy as np
 import pandas as pd
 
-from .signal import Signal
+from ...base_signal import BaseSignal
+from ...interfaces.filter import IFilterSignal
 from indicators.choppiness import ChoppinessIndex
 
-class ChopFilterSignal(Signal):
+class ChopFilterSignal(BaseSignal, IFilterSignal):
     """
     チョピネスインデックスを使用したフィルターシグナル
     - CHOP >= solid: レンジ相場 (-1)
@@ -25,11 +25,14 @@ class ChopFilterSignal(Signal):
             solid: パラメータ辞書
                 - chop_solid: チョピネスインデックスのしきい値
         """
-        super().__init__(f"ChopFilter({period})")
-        self.period = period
-        self.solid = solid or {
-            'chop_solid': 50  # デフォルトのしきい値
+        params = {
+            'period': period,
+            'solid': solid or {
+                'chop_solid': 50  # デフォルトのしきい値
+            }
         }
+        super().__init__(f"ChopFilter({period})", params)
+        self._chop = ChoppinessIndex(period)
     
     def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -41,10 +44,10 @@ class ChopFilterSignal(Signal):
         Returns:
             シグナルの配列 (1: トレンド相場, -1: レンジ相場)
         """
-        chop = ChoppinessIndex(self.period)
-        chop_values = chop.calculate(data)
+        chop_values = self._chop.calculate(data)
         
         # シグナルの生成
-        signals = np.where(chop_values >= self.solid['chop_solid'], -1, 1)
+        solid = self._params['solid']
+        signals = np.where(chop_values >= solid['chop_solid'], -1, 1)
         
-        return signals
+        return signals 

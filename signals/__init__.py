@@ -1,10 +1,14 @@
-"""
-Signals package
-"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-from .signal import Signal
-from .entry_signal import RSIEntrySignal
-from .exit_signal import RSIExitSignal
-from .filter_signal import ChopFilterSignal
+from .implementations.supertrend.direction import SupertrendDirectionSignal
+from .implementations.rsi.entry import RSIEntrySignal
+from .implementations.rsi.exit import RSIExitSignal
+from .implementations.chop.filter import ChopFilterSignal
 
-__all__ = ['Signal', 'RSIEntrySignal', 'RSIExitSignal', 'ChopFilterSignal']
+__all__ = [
+    'SupertrendDirectionSignal',
+    'RSIEntrySignal',
+    'RSIExitSignal',
+    'ChopFilterSignal'
+]

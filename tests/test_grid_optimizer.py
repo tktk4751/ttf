@@ -12,7 +12,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from optimization.grid_optimizer import GridOptimizer
-from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
+from strategies.supertrend_rsi_chop_strategy import SupertrendRsiChopStrategy
 
 
 class TestGridOptimizer(unittest.TestCase):

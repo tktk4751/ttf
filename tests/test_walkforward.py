@@ -13,7 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 from walkforward.walkforward import WalkForward
-from strategies.supertrend_rsi_chopstrategy import SupertrendRsiChopStrategy
+from strategies.supertrend_rsi_chop_strategy import SupertrendRsiChopStrategy
 from logger import get_logger
 
 logger = get_logger(__name__)

@@ -8,7 +8,7 @@ from datetime import datetime
 from optimization.optimizer import BaseOptimizer
 from backtesting.backtester import Backtester
 from position_sizing.fixed_ratio import FixedRatioSizing
-from strategies.strategy import Strategy
+from strategies.base.strategy import BaseStrategy
 from analytics.analytics import Analytics
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
@@ -18,7 +18,7 @@ class BayesianOptimizer(BaseOptimizer):
     
     def __init__(
         self,
-        strategy_class: Type[Strategy],
+        strategy_class: Type[BaseStrategy],
         param_generator: Callable[[optuna.Trial], Dict[str, Any]],
         config: Dict[str, Any],
         n_trials: int = 100,
@@ -65,13 +65,13 @@ class BayesianOptimizer(BaseOptimizer):
         self.data = processed_data[symbol]
         self._data_dict = processed_data
     
-    def _create_strategy(self, trial: optuna.Trial) -> Strategy:
+    def _create_strategy(self, trial: optuna.Trial) -> BaseStrategy:
         """Optunaのtrialから戦略インスタンスを生成"""
         params = self.param_generator(trial)
         strategy_params = self.strategy_class.convert_params_to_strategy_format(params)
         return self.strategy_class(**strategy_params)
     
-    def _run_backtest(self, strategy: Strategy) -> List[Any]:
+    def _run_backtest(self, strategy: BaseStrategy) -> List[Any]:
         """バックテストを実行"""
         # ポジションサイジングの作成
         position_config = self.config.get('position', {})
