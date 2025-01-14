@@ -163,26 +163,62 @@ class Analytics:
         """シャープレシオを計算"""
         if not self.trades:
             return 0.0
-        risk_free_rate = 0.02  # 年率2%と仮定
-        excess_returns = self.returns - (risk_free_rate / 365.25)  # 日次リターンに変換
-        volatility = np.std(self.returns, ddof=1) * np.sqrt(365.25)
-        if volatility == 0:
-            return 0.0
-        return np.mean(excess_returns) * np.sqrt(365.25) / volatility
+        
+        # 年率2%のリスクフリーレート
+        risk_free_rate = 0.02
+        
+        # 日次の超過リターンを計算
+        excess_returns = self.returns - (risk_free_rate / 365.25)
+        
+        # 年率ベースのボラティリティを計算
+        volatility = np.std(self.returns, ddof=1)
+        if np.isclose(volatility, 0) or np.isnan(volatility):
+            # ボラティリティが0または無効な場合
+            if np.mean(excess_returns) > 0:
+                return float('inf')  # 正のリターンで無リスク
+            elif np.mean(excess_returns) < 0:
+                return float('-inf')  # 負のリターンで無リスク
+            else:
+                return 0.0  # リターンもリスクもゼロ
+        
+        # 年率ベースのシャープレシオを計算
+        annual_factor = np.sqrt(365.25)
+        return (np.mean(excess_returns) * annual_factor) / (volatility * annual_factor)
 
     def calculate_sortino_ratio(self) -> float:
         """ソルティノレシオを計算"""
         if not self.trades:
             return 0.0
+        
+        # 年率2%のリスクフリーレート
         risk_free_rate = 0.02
+        
+        # 日次の超過リターンを計算
         excess_returns = self.returns - (risk_free_rate / 365.25)
+        
+        # 下方リターンのみを抽出
         downside_returns = self.returns[self.returns < 0]
+        
+        # 下方リターンが存在しない場合
         if len(downside_returns) == 0:
-            return 0.0
-        downside_volatility = np.std(downside_returns, ddof=1) * np.sqrt(365.25)
-        if downside_volatility == 0:
-            return 0.0
-        return np.mean(excess_returns) * np.sqrt(365.25) / downside_volatility
+            if np.mean(excess_returns) > 0:
+                return float('inf')  # 正のリターンで下方リスクなし
+            else:
+                return 0.0  # リターンがゼロまたは負
+        
+        # 下方リスクを計算
+        downside_volatility = np.std(downside_returns, ddof=1)
+        if np.isclose(downside_volatility, 0) or np.isnan(downside_volatility):
+            if np.mean(excess_returns) > 0:
+                return float('inf')  # 正のリターンで下方リスクなし
+            elif np.mean(excess_returns) < 0:
+                return float('-inf')  # 負のリターンで下方リスクなし
+            else:
+                return 0.0  # リターンも下方リスクもゼロ
+        
+        # 年率ベースのソルティノレシオを計算
+        annual_factor = np.sqrt(365.25)
+        return (np.mean(excess_returns) * annual_factor) / (downside_volatility * annual_factor)
 
     def calculate_calmar_ratio(self) -> float:
         """カルマーレシオを計算
@@ -412,7 +448,7 @@ class Analytics:
         2. ソルティノレシオ (30%): ダウンサイドリスクに対するリターン
         3. 悲観的リターンレシオ (20%): 保守的な収益性評価
         4. 最大ドローダウン (15%): リスク管理の効率性
-        5. CAGR (10%): 年間リターンの効率性
+        5. GPR (10%): リターンの効率性
 
         Returns:
             float: 0-100のスケールでのスコア。高いほど良い。
@@ -426,7 +462,7 @@ class Analytics:
         prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
         max_dd = self.calculate_max_drawdown()[0]
         max_dd_score = max(0, 1 - (max_dd / 100))  # ドローダウンが小さいほど高スコア
-        cagr = min(max(self.calculate_cagr(), 0), 400) / 400  # 0-1にスケール（400%を超える場合は1に丸める）     
+        gpr = min(max(self.calculate_gpr(), 0), 3) / 3  # 0-1にスケール（3を超える場合は1に丸める）     
 
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
@@ -434,7 +470,7 @@ class Analytics:
         sortino = sortino if sortino > 0 else replacement_value
         prr = prr if prr > 0 else replacement_value
         max_dd_score = max_dd_score if max_dd_score > 0 else replacement_value
-        cagr = cagr if cagr > 0 else replacement_value
+        gpr = gpr if gpr > 0 else replacement_value
 
         # 各指標の重要度に応じて指数を設定
         score = (
@@ -442,7 +478,7 @@ class Analytics:
             sortino ** 0.30 *        # ソルティノレシオ (30%)
             prr ** 0.20 *            # 悲観的リターンレシオ (20%)
             max_dd_score ** 0.15 *       # 最大ドローダウン (15%)
-            cagr ** 0.10   # cagr (10%)
+            gpr ** 0.10   # gpr (10%)
         )
 
         # 0-100のスケールに変換 (補正不要)
@@ -513,48 +549,7 @@ class Analytics:
             return self.trades
         return [t for t in self.trades if t.position_type == position_type.upper()]
 
-    def get_full_analysis(self) -> Dict:
-        """すべての分析結果を取得"""
-        return {
-            'initial_capital': self.initial_capital,
-            'final_capital': self.final_capital,
-            'total_return': self.calculate_total_return(),
-            'total_trades': len(self.trades),
-            'winning_trades': len(self.profits),
-            'losing_trades': len(self.losses),
-            'win_rate': self.calculate_win_rate(),
-            'total_profit': self.calculate_total_profit(),
-            'total_loss': self.calculate_total_loss(),
-            'net_profit_loss': self.calculate_net_profit_loss(),
-            'max_drawdown': self.calculate_max_drawdown()[0],
-            'drawdown_recovery_efficiency': self.calculate_drawdown_recovery_efficiency(),
-            'sharpe_ratio': self.calculate_sharpe_ratio(),
-            'sortino_ratio': self.calculate_sortino_ratio(),
-            'calmar_ratio': self.calculate_calmar_ratio(),
-            'value_at_risk': self.calculate_value_at_risk(),
-            'expected_shortfall': self.calculate_expected_shortfall(),
-            'tail_risk_ratio': self.calculate_tail_risk_ratio(),
-            'payoff_ratio': self.calculate_payoff_ratio(),
-            'expected_value': self.calculate_expected_value(),
-            'common_sense_ratio': self.calculate_common_sense_ratio(),
-            'profit_factor': self.calculate_profit_factor(),
-            'pessimistic_return_ratio': self.calculate_pessimistic_return_ratio(),
-            'alpha_score': self.calculate_alpha_score(),
-            'sqn': self.calculate_sqn(),
-            'average_bars': self.calculate_average_bars(),
-            
-            # ポジションタイプ別の分析
-            'long': {
-                'trade_count': self.calculate_number_of_trades('LONG'),
-                'net_profit_loss': self.calculate_net_profit_loss('LONG'),
-                'cagr': self.calculate_cagr('LONG')
-            },
-            'short': {
-                'trade_count': self.calculate_number_of_trades('SHORT'),
-                'net_profit_loss': self.calculate_net_profit_loss('SHORT'),
-                'cagr': self.calculate_cagr('SHORT')
-            }
-        }
+
     def get_avg_bars_winning_trades(self):
         """勝ちトレードの平均バー数を取得"""
         winning_trades = [t for t in self.trades if t.profit_loss > 0]
@@ -693,99 +688,7 @@ class Analytics:
     def get_losing_trades(self) -> int:
         """負けトレード数を取得"""
         return len(self.losses)
-
-    def print_backtest_results(self) -> None:
-        """バックテスト結果の詳細を出力"""
-        print("\n=== 基本統計 ===")
-        print(f"初期資金: {self.initial_capital:.2f} USD")
-        print(f"最終残高: {self.final_capital:.2f} USD")
-        print(f"総リターン: {self.calculate_total_return():.2f}%")
-        print(f"CAGR: {self.calculate_cagr():.2f}%")
-        print(f"1トレードあたりの幾何平均リターン: {self.calculate_geometric_mean_return():.2f}%")
-        print(f"勝率: {self.calculate_win_rate():.2f}%")
-        print(f"総トレード数: {len(self.trades)}")
-        print(f"勝ちトレード数: {self.get_winning_trades()}")
-        print(f"負けトレード数: {self.get_losing_trades()}")
-        print(f"最大連勝数: {self.calculate_max_consecutive_wins()}")
-        print(f"最大連敗数: {self.calculate_max_consecutive_losses()}")
-        print(f"平均保有期間（日）: {self.get_avg_bars_all_trades():.2f}")
-        print(f"勝ちトレード平均保有期間（日）: {self.get_avg_bars_winning_trades():.2f}")
-        print(f"負けトレード平均保有期間（日）: {self.get_avg_bars_losing_trades():.2f}")
-        print(f"平均保有バー数: {self.get_avg_bars_all_trades() * 6:.2f}")  # 4時間足なので1日6バー
-        print(f"勝ちトレード平均保有バー数: {self.get_avg_bars_winning_trades() * 6:.2f}")
-        print(f"負けトレード平均保有バー数: {self.get_avg_bars_losing_trades() * 6:.2f}")
-
-        # 損益統計の出力
-        print("\n=== 損益統計 ===")
-        print(f"総利益: {self.calculate_total_profit():.2f}")
-        print(f"総損失: {self.calculate_total_loss():.2f}")
-        print(f"純損益: {self.calculate_net_profit_loss():.2f}")
-        max_profit, max_loss = self.calculate_max_win_loss()
-        print(f"最大利益: {max_profit:.2f}")
-        print(f"最大損失: {max_loss:.2f}")
-        avg_profit, avg_loss = self.calculate_average_profit_loss()
-        print(f"平均利益: {avg_profit:.2f}")
-        print(f"平均損失: {avg_loss:.2f}")
-
-        # ポジションタイプ別の分析
-        print("\n=== ポジションタイプ別の分析 ===")
-        print("LONG:")
-        print(f"トレード数: {self.get_long_trade_count()}")
-        print(f"勝率: {self.get_long_win_rate():.2f}%")
-        print(f"総利益: {self.get_long_total_profit():.2f}")
-        print(f"総損失: {self.get_long_total_loss():.2f}")
-        print(f"純損益: {self.get_long_net_profit():.2f}")
-        print(f"最大利益: {self.get_long_max_win():.2f}")
-        print(f"最大損失: {self.get_long_max_loss():.2f}")
-        print(f"総利益率: {self.get_long_total_profit_percentage():.2f}%")
-        print(f"総損失率: {self.get_long_total_loss_percentage():.2f}%")
-        print(f"純損益率: {self.get_long_net_profit_percentage():.2f}%")
-
-        print("\nSHORT:")
-        print(f"トレード数: {self.get_short_trade_count()}")
-        print(f"勝率: {self.get_short_win_rate():.2f}%")
-        print(f"総利益: {self.get_short_total_profit():.2f}")
-        print(f"総損失: {self.get_short_total_loss():.2f}")
-        print(f"純損益: {self.get_short_net_profit():.2f}")
-        print(f"最大利益: {self.get_short_max_win():.2f}")
-        print(f"最大損失: {self.get_short_max_loss():.2f}")
-        print(f"総利益率: {self.get_short_total_profit_percentage():.2f}%")
-        print(f"総損失率: {self.get_short_total_loss_percentage():.2f}%")
-        print(f"純損益率: {self.get_short_net_profit_percentage():.2f}%")
-        
-        # リスク指標
-        print("\n=== リスク指標 ===")
-        max_dd, max_dd_start, max_dd_end = self.calculate_max_drawdown()
-        print(f"最大ドローダウン: {max_dd:.2f}%")
-        if max_dd_start and max_dd_end:
-            print(f"最大ドローダウン期間: {max_dd_start.strftime('%Y-%m-%d %H:%M')} → {max_dd_end.strftime('%Y-%m-%d %H:%M')}")
-            print(f"最大ドローダウン期間（日数）: {(max_dd_end - max_dd_start).days}日")
-        
-        # 全ドローダウン期間の表示
-        print("\n=== ドローダウン期間 ===")
-        drawdown_periods = self.calculate_drawdown_periods()
-        for i, (dd_percent, dd_days, start_date, end_date) in enumerate(drawdown_periods[:5], 1):
-            print(f"\nドローダウン {i}:")
-            print(f"ドローダウン率: {dd_percent:.2f}%")
-            print(f"期間: {start_date.strftime('%Y-%m-%d %H:%M')} → {end_date.strftime('%Y-%m-%d %H:%M')} ({dd_days}日)")
-        
-        print(f"\nシャープレシオ: {self.calculate_sharpe_ratio():.2f}")
-        print(f"ソルティノレシオ: {self.calculate_sortino_ratio():.2f}")
-        print(f"カルマーレシオ: {self.calculate_calmar_ratio():.2f}")
-        print(f"カルマーレシオ（調整済み）: {self.calculate_calmar_ratio_v2():.2f}")
-        print(f"VaR (95%): {self.calculate_value_at_risk():.2f}%")
-        print(f"期待ショートフォール (95%): {self.calculate_expected_shortfall():.2f}%")
-        print(f"ドローダウン回復効率: {self.calculate_drawdown_recovery_efficiency():.2f}")
-        
-        # トレード効率指標
-        print("\n=== トレード効率指標 ===")
-        print(f"プロフィットファクター: {self.calculate_profit_factor():.2f}")
-        print(f"ペイオフレシオ: {self.calculate_payoff_ratio():.2f}")
-        print(f"期待値: {self.calculate_expected_value():.2f}")
-        print(f"悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
-        print(f"アルファスコア: {self.calculate_alpha_score():.2f}")
-        print(f"SQNスコア: {self.calculate_sqn():.2f}")
-
+    
     def calculate_max_consecutive_wins(self) -> int:
         """最大連勝数を計算
 
@@ -821,3 +724,200 @@ class Analytics:
             else:
                 current_streak = 0
         return max_streak
+
+    def calculate_gpr(self) -> float:
+        """Gain to Pain Ratio (GPR)を計算
+
+        Returns:
+            float: GPR値。損失がない場合はfloat('inf')を返す
+        """
+        if not self.trades:
+            return 0.0
+
+        total_gains = sum(max(0, trade.profit_loss) for trade in self.trades)
+        total_losses = sum(abs(min(0, trade.profit_loss)) for trade in self.trades)
+
+        if total_losses == 0:
+            return float('inf') if total_gains > 0 else 0.0
+
+        return total_gains / total_losses
+
+    def calculate_va_gpr(self) -> float:
+        """Volatility-Adjusted Gain to Pain Ratio (VA-GPR)を計算
+
+        Returns:
+            float: VA-GPR値。
+        """
+        if not self.trades:
+            return 0.0
+
+        # 日次リターンを計算
+        daily_returns = self.returns
+
+        # 平均リターンを計算
+        mean_return = np.mean(daily_returns)
+
+        # 各日のリターンから平均リターンを引いて二乗する
+        squared_deviations = [(r - mean_return) ** 2 for r in daily_returns]
+
+        # 二乗偏差の平均を計算
+        mean_of_squared_deviations = np.mean(squared_deviations)
+
+        # 標準偏差（ボラティリティ）を計算
+        standard_deviation = np.sqrt(mean_of_squared_deviations)
+
+        # 従来のGPRを計算
+        gpr = self.calculate_gpr()
+
+        # VA-GPRを計算（GPR * (1 / 標準偏差)）
+        if np.isclose(standard_deviation, 0) or np.isnan(standard_deviation):
+          return gpr
+        else:
+          va_gpr = gpr * (1 / standard_deviation)
+          return va_gpr
+        
+    def get_full_analysis(self) -> Dict:
+        """すべての分析結果を取得"""
+        return {
+            'initial_capital': self.initial_capital,
+            'final_capital': self.final_capital,
+            'total_return': self.calculate_total_return(),
+            'total_trades': len(self.trades),
+            'winning_trades': len(self.profits),
+            'losing_trades': len(self.losses),
+            'win_rate': self.calculate_win_rate(),
+            'total_profit': self.calculate_total_profit(),
+            'total_loss': self.calculate_total_loss(),
+            'net_profit_loss': self.calculate_net_profit_loss(),
+            'max_drawdown': self.calculate_max_drawdown()[0],
+            'drawdown_recovery_efficiency': self.calculate_drawdown_recovery_efficiency(),
+            'sharpe_ratio': self.calculate_sharpe_ratio(),
+            'sortino_ratio': self.calculate_sortino_ratio(),
+            'calmar_ratio': self.calculate_calmar_ratio(),
+            'calmar_ratio_v2': self.calculate_calmar_ratio_v2(),
+            'gpr': self.calculate_gpr(),
+            'va_gpr': self.calculate_va_gpr(),
+            'value_at_risk': self.calculate_value_at_risk(),
+            'expected_shortfall': self.calculate_expected_shortfall(),
+            'tail_risk_ratio': self.calculate_tail_risk_ratio(),
+            'payoff_ratio': self.calculate_payoff_ratio(),
+            'expected_value': self.calculate_expected_value(),
+            'profit_factor': self.calculate_profit_factor(),
+            'pessimistic_return_ratio': self.calculate_pessimistic_return_ratio(),
+            'alpha_score': self.calculate_alpha_score(),
+            'sqn': self.calculate_sqn(),
+            'average_bars': self.calculate_average_bars(),
+            
+            # ポジションタイプ別の分析
+            'long': {
+                'trade_count': self.calculate_number_of_trades('LONG'),
+                'net_profit_loss': self.calculate_net_profit_loss('LONG'),
+                'cagr': self.calculate_cagr('LONG')
+            },
+            'short': {
+                'trade_count': self.calculate_number_of_trades('SHORT'),
+                'net_profit_loss': self.calculate_net_profit_loss('SHORT'),
+                'cagr': self.calculate_cagr('SHORT')
+            }
+        }
+
+    def print_backtest_results(self) -> None:
+        """バックテスト結果の詳細を出力"""
+
+        if not self.trades:
+            print("⚠️ トレードデータがありません。")
+            return
+
+        # 基本統計
+        print("\n📊 === 基本統計 ===")
+        print(f"🔸 初期資金: {self.initial_capital:.2f} USD")
+        print(f"🔹 最終残高: {self.final_capital:.2f} USD")
+        print(f"💹 総リターン: {self.calculate_total_return():.2f}%")
+        print(f"📈 CAGR: {self.calculate_cagr():.2f}%")
+        print(f"🔄 1トレードあたりの幾何平均リターン: {self.calculate_geometric_mean_return():.2f}%")
+        print(f"🏆 勝率: {self.calculate_win_rate():.2f}%")
+        print(f"🧮 総トレード数: {len(self.trades)}")
+        print(f"✅ 勝ちトレード数: {self.get_winning_trades()}")
+        print(f"❌ 負けトレード数: {self.get_losing_trades()}")
+        print(f"🥇 最大連勝数: {self.calculate_max_consecutive_wins()}")
+        print(f"😭 最大連敗数: {self.calculate_max_consecutive_losses()}")
+        print(f"🗓 平均保有期間（日）: {self.get_avg_bars_all_trades():.2f}")
+        print(f"🟢 勝ちトレード平均保有期間（日）: {self.get_avg_bars_winning_trades():.2f}")
+        print(f"🔴 負けトレード平均保有期間（日）: {self.get_avg_bars_losing_trades():.2f}")
+        print(f"⏳ 平均保有バー数: {self.get_avg_bars_all_trades() * 6:.2f}")  # 4時間足なので1日6バー
+        print(f"🟩 勝ちトレード平均保有バー数: {self.get_avg_bars_winning_trades() * 6:.2f}")
+        print(f"🟥 負けトレード平均保有バー数: {self.get_avg_bars_losing_trades() * 6:.2f}")
+
+        # 損益統計
+        print("\n💰 === 損益統計 ===")
+        print(f"💹 総利益: {self.calculate_total_profit():.2f}")
+        print(f"📉 総損失: {self.calculate_total_loss():.2f}")
+        print(f"⚖️ 純損益: {self.calculate_net_profit_loss():.2f}")
+        max_profit, max_loss = self.calculate_max_win_loss()
+        print(f"🔝 最大利益: {max_profit:.2f}")
+        print(f"😱 最大損失: {max_loss:.2f}")
+        avg_profit, avg_loss = self.calculate_average_profit_loss()
+        print(f"📈 平均利益: {avg_profit:.2f}")
+        print(f"📉 平均損失: {avg_loss:.2f}")
+
+        # ポジションタイプ別の分析
+        print("\n🎯 === ポジションタイプ別の分析 ===")
+        print("🟢 LONG:")
+        print(f"  🧮 トレード数: {self.get_long_trade_count()}")
+        print(f"  🏆 勝率: {self.get_long_win_rate():.2f}%")
+        print(f"  💹 総利益: {self.get_long_total_profit():.2f}")
+        print(f"  📉 総損失: {self.get_long_total_loss():.2f}")
+        print(f"  ⚖️ 純損益: {self.get_long_net_profit():.2f}")
+        print(f"  🔝 最大利益: {self.get_long_max_win():.2f}")
+        print(f"  😱 最大損失: {self.get_long_max_loss():.2f}")
+        print(f"  💹 総利益率: {self.get_long_total_profit_percentage():.2f}%")
+        print(f"  📉 総損失率: {self.get_long_total_loss_percentage():.2f}%")
+        print(f"  ⚖️ 純損益率: {self.get_long_net_profit_percentage():.2f}%")
+
+        print("\n🔴 SHORT:")
+        print(f"  🧮 トレード数: {self.get_short_trade_count()}")
+        print(f"  🏆 勝率: {self.get_short_win_rate():.2f}%")
+        print(f"  💹 総利益: {self.get_short_total_profit():.2f}")
+        print(f"  📉 総損失: {self.get_short_total_loss():.2f}")
+        print(f"  ⚖️ 純損益: {self.get_short_net_profit():.2f}")
+        print(f"  🔝 最大利益: {self.get_short_max_win():.2f}")
+        print(f"  😱 最大損失: {self.get_short_max_loss():.2f}")
+        print(f"  💹 総利益率: {self.get_short_total_profit_percentage():.2f}%")
+        print(f"  📉 総損失率: {self.get_short_total_loss_percentage():.2f}%")
+        print(f"  ⚖️ 純損益率: {self.get_short_net_profit_percentage():.2f}%")
+
+        # リスク指標
+        print("\n🛡️ === リスク指標 ===")
+        max_dd, max_dd_start, max_dd_end = self.calculate_max_drawdown()
+        print(f"📉 最大ドローダウン: {max_dd:.2f}%")
+        if max_dd_start and max_dd_end:
+            print(f"📅 最大ドローダウン期間: {max_dd_start.strftime('%Y-%m-%d %H:%M')} → {max_dd_end.strftime('%Y-%m-%d %H:%M')}")
+            print(f"⏳ 最大ドローダウン期間（日数）: {(max_dd_end - max_dd_start).days}日")
+
+        # 全ドローダウン期間の表示
+        print("\n📉 === ドローダウン期間 ===")
+        drawdown_periods = self.calculate_drawdown_periods()
+        for i, (dd_percent, dd_days, start_date, end_date) in enumerate(drawdown_periods[:5], 1):
+            print(f"\n📉 ドローダウン {i}:")
+            print(f"    ドローダウン率: {dd_percent:.2f}%")
+            print(f"    期間: {start_date.strftime('%Y-%m-%d %H:%M')} → {end_date.strftime('%Y-%m-%d %H:%M')} ({dd_days}日)")
+
+        print(f"\n📊 シャープレシオ: {self.calculate_sharpe_ratio():.2f}")
+        print(f"📈 ソルティノレシオ: {self.calculate_sortino_ratio():.2f}")
+        print(f"📉 カルマーレシオ: {self.calculate_calmar_ratio():.2f}")
+        print(f"📈 カルマーレシオ（調整済み）: {self.calculate_calmar_ratio_v2():.2f}")
+        print(f"⚠️ VaR (95%): {self.calculate_value_at_risk():.2f}%")
+        print(f"🚨 期待ショートフォール (95%): {self.calculate_expected_shortfall():.2f}%")
+        print(f"🔄 GPR: {self.calculate_gpr():.2f}")
+        print(f"📈 VA-GPR: {self.calculate_va_gpr():.2f}")
+        print(f"💪 ドローダウン回復効率: {self.calculate_drawdown_recovery_efficiency():.2f}")
+
+        # トレード効率指標
+        print("\n🎯 === トレード効率指標 ===")
+        print(f"💹 プロフィットファクター: {self.calculate_profit_factor():.2f}")
+        print(f"💰 ペイオフレシオ: {self.calculate_payoff_ratio():.2f}")
+        print(f"📈 期待値: {self.calculate_expected_value():.2f}")
+        print(f"📉 悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
+        print(f"📈 アルファスコア: {self.calculate_alpha_score():.2f}")
+        print(f"📊 SQNスコア: {self.calculate_sqn():.2f}")
+

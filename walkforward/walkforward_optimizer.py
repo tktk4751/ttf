@@ -143,9 +143,9 @@ class WalkForwardOptimizer:
             df_start = df.index[0]
             df_end = df.index[-1]
             
-            if earliest_start is None or df_start > earliest_start:
+            if earliest_start is None or df_start < earliest_start:
                 earliest_start = df_start
-            if latest_end is None or df_end < latest_end:
+            if latest_end is None or df_end > latest_end:
                 latest_end = df_end
             
             if df_end < start_date:
@@ -167,7 +167,11 @@ class WalkForwardOptimizer:
         
         print(f"\nUsing data range: {start_date} to {end_date}")
         
+        # 期間ごとの結果を保存するリスト
+        period_summaries = []
+
         current_date = start_date
+        period_count = 0
         while current_date + timedelta(days=self.data_splitter.training_days) < end_date:
             try:
                 # データの分割
@@ -198,12 +202,10 @@ class WalkForwardOptimizer:
                 
                 # ポジションサイジングの設定
                 position_config = self.config.get('position', {})
-                position_sizing = FixedRatioSizing({
-                    'ratio': position_config.get('ratio', 0.99),
-                    'min_position': position_config.get('min_position_size'),
-                    'max_position': position_config.get('max_position_size'),
-                    'leverage': position_config.get('leverage', 1)
-                })
+                position_sizing = FixedRatioSizing(
+                    ratio=position_config.get('ratio', 0.99),
+                    leverage=position_config.get('leverage', 1.0)
+                )
                 
                 # バックテスターの作成と実行
                 initial_balance = self.config.get('position', {}).get('initial_balance', 10000)
@@ -220,6 +222,10 @@ class WalkForwardOptimizer:
                 
                 # 結果の保存
                 if len(trades) >= min_trades:
+                    period_count += 1
+                    period_analytics = Analytics(trades, initial_balance)
+                    period_wfe = period_analytics.calculate_alpha_score() / best_score if best_score != 0 else 0
+                    
                     self.result.add_trades(trades)
                     self.result.add_period_result({
                         'start_date': current_date,
@@ -228,7 +234,18 @@ class WalkForwardOptimizer:
                         'training_score': best_score,
                         'trades': trades
                     })
-                    print(f"Successfully processed period: {current_date} - {current_date + timedelta(days=self.data_splitter.testing_days)}")
+                    
+                    # 期間ごとの結果を保存
+                    period_summaries.append({
+                        'period': period_count,
+                        'start_date': current_date,
+                        'end_date': current_date + timedelta(days=self.data_splitter.testing_days),
+                        'training_score': best_score,
+                        'test_alpha_score': period_analytics.calculate_alpha_score(),
+                        'wfe': period_wfe,
+                        'trades': len(trades),
+                        'return': period_analytics.calculate_total_return()
+                    })
                 else:
                     print(f"Warning: Insufficient trades ({len(trades)}) for period starting {current_date}")
             
@@ -241,7 +258,17 @@ class WalkForwardOptimizer:
         if not self.result.period_results:
             print("Warning: No valid results were generated during the walk-forward test")
         else:
-            print(f"\nCompleted walk-forward test with {len(self.result.period_results)} valid periods")
+            print(f"\n=== Walk-Forward Test Summary ===")
+            print(f"Total number of walk-forward periods: {period_count}")
+            print("\n各期間の結果:")
+            print("-" * 100)
+            print(f"{'Period':^8} | {'Start Date':^12} | {'End Date':^12} | {'Training Score':^14} | {'Test Alpha':^10} | {'WFE':^8} | {'Trades':^8} | {'Return %':^8}")
+            print("-" * 100)
+            
+            for summary in period_summaries:
+                print(f"{summary['period']:^8} | {summary['start_date'].strftime('%Y-%m-%d'):^12} | {summary['end_date'].strftime('%Y-%m-%d'):^12} | {summary['training_score']:^14.4f} | {summary['test_alpha_score']:^10.4f} | {summary['wfe']:^8.4f} | {summary['trades']:^8} | {summary['return']:^8.2f}")
+            
+            print("-" * 100)
             
             # 全期間の結果を分析
             initial_balance = self.config.get('position', {}).get('initial_balance', 10000)
@@ -250,29 +277,26 @@ class WalkForwardOptimizer:
             # 各期間のWFEを計算
             wfe_values = []
             for period in self.result.period_results:
-                # インサンプル期間のスコア（最適化時のアルファスコア）
                 in_sample_score = period['training_score']
-                
-                # アウトオブサンプル期間のスコア計算
                 period_trades = period['trades']
                 if period_trades and in_sample_score != 0:
                     period_analytics = Analytics(period_trades, initial_balance)
-                    out_sample_score = period_analytics.get_summary()['alpha_score']
+                    out_sample_score = period_analytics.calculate_alpha_score()
                     wfe = out_sample_score / in_sample_score
                     wfe_values.append(wfe)
             
             # 平均WFEを計算
             avg_wfe = np.mean(wfe_values) if wfe_values else 0
             
-            # 結果の表示
-            print("\n=== Walk-Forward Test Results ===")
-            print(f"Number of periods: {len(self.result.period_results)}")
+            # 最終結果の表示
+            print("\n=== Walk-Forward Test Final Results ===")
+            print(f"Total number of periods: {period_count}")
             print(f"Total trades: {len(self.result.trades)}")
-            print(f"Walk-Forward Efficiency (WFE): {avg_wfe:.4f}")
-            print(f"Total Return: {analytics.total_return:.4f}")
-            print(f"Calmar Ratio (Adjusted): {analytics.calmar_ratio:.4f}")
-            print(f"Sortino Ratio: {analytics.sortino_ratio:.4f}")
-            print(f"CAGR: {analytics.cagr * 100:.2f}%")
-            print("================================")
+            print(f"Average Walk-Forward Efficiency (WFE): {avg_wfe:.4f}")
+            print(f"Total Return: {analytics.calculate_total_return():.2f}%")
+            print(f"Calmar Ratio (Adjusted): {analytics.calculate_calmar_ratio():.4f}")
+            print(f"Sortino Ratio: {analytics.calculate_sortino_ratio():.4f}")
+            print(f"CAGR: {analytics.calculate_cagr():.2f}%")
+            print("=" * 40)
         
         return self.result 

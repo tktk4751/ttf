@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
+import sys
 import yaml
 from pathlib import Path
 from backtesting.backtester import Backtester
@@ -11,6 +13,12 @@ from position_sizing.fixed_ratio import FixedRatioSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
 import optuna
+from walkforward.walkforward_optimizer import WalkForwardOptimizer
+from walkforward.walkforward_analyzer import WalkForwardAnalyzer
+from walkforward.walkforward_optimizer import TimeSeriesDataSplitter
+from typing import List
+from backtesting.trade import Trade
+from montecarlo.montecarlo import MonteCarlo
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -141,6 +149,107 @@ def run_optimization(config: dict):
         print(f"\n=== {symbol} の分析結果 ===")
         symbol_analytics.print_backtest_results()
 
+def run_walkforward_test(config: dict):
+    """ウォークフォワードテストを実行する"""
+    print("\nStarting walk-forward test...")
+    
+    walkforward_config = config.get('walkforward', {})
+    training_days = walkforward_config.get('training_days', 180)
+    testing_days = walkforward_config.get('testing_days', 90)
+    min_trades = walkforward_config.get('min_trades', 15)
+    initial_balance = config.get('position', {}).get('initial_balance', 10000)
+
+    # データの読み込みと前処理
+    data_dir = config['data']['data_dir']
+    data_loader = DataLoader(CSVDataSource(data_dir))
+    data_processor = DataProcessor()
+    
+    print("\nLoading and processing data...")
+    raw_data = data_loader.load_data_from_config(config)
+    processed_data = {
+        symbol: data_processor.process(df)
+        for symbol, df in raw_data.items()
+    }
+
+    # データ分割器の作成
+    data_splitter = TimeSeriesDataSplitter(training_days, testing_days)
+
+    # Bayesian最適化器の作成
+    bayesian_optimizer = BayesianOptimizer(
+        strategy_class=SupertrendRsiChopStrategy,
+        param_generator=SupertrendRsiChopStrategy.create_optimization_params,
+        config=config,
+        n_trials=100,
+        n_jobs=-1
+    )
+
+    # ウォークフォワード最適化器の作成と実行
+    optimizer = WalkForwardOptimizer(
+        optimizer=bayesian_optimizer,
+        data_splitter=data_splitter,
+        config=config
+    )
+    result = optimizer.run(processed_data)
+
+    # 結果の分析
+    analyzer = WalkForwardAnalyzer(initial_balance)
+    analyzer.analyze(result)
+
+def run_montecarlo(config: dict, trades: List[Trade] = None):
+    """モンテカルロシミュレーションを実行する"""
+    print("\nモンテカルロシミュレーションを開始します...")
+    
+    # トレードが渡されていない場合は、バックテストを実行して取得
+    if trades is None:
+        # データの準備
+        data_dir = config['data']['data_dir']
+        data_loader = DataLoader(CSVDataSource(data_dir))
+        data_processor = DataProcessor()
+        
+        # 戦略の作成
+        strategy = SupertrendRsiChopStrategy()
+        
+        # ポジションサイジングの作成
+        position_config = config.get('position', {})
+        position_sizing = FixedRatioSizing(
+            ratio=position_config.get('ratio', 0.99),
+            leverage=position_config.get('leverage', 1.0)
+        )
+        
+        # バックテスターの作成
+        initial_balance = config.get('position', {}).get('initial_balance', 10000)
+        commission_rate = config.get('position', {}).get('commission_rate', 0.001)
+        backtester = Backtester(
+            strategy=strategy,
+            position_manager=position_sizing,
+            initial_balance=initial_balance,
+            commission=commission_rate,
+            verbose=False
+        )
+        
+        # データの読み込みと処理
+        print("データを読み込んでいます...")
+        raw_data = data_loader.load_data_from_config(config)
+        processed_data = {
+            symbol: data_processor.process(df)
+            for symbol, df in raw_data.items()
+        }
+        
+        print("バックテストを実行しています...")
+        trades = backtester.run(processed_data)
+    
+    # モンテカルロシミュレーションの実行
+    print("\n=== モンテカルロシミュレーションの実行 ===")
+    monte_carlo = MonteCarlo(
+        trades=trades,
+        initial_capital=config['backtest']['initial_balance'],
+        num_simulations=config['montecarlo']['num_simulations'],
+        confidence_level=0.95
+    )
+    
+    monte_carlo.run()
+    monte_carlo.print_simulation_results()
+
 def main():
     """メイン関数"""
     # 設定ファイルの読み込み
@@ -148,8 +257,13 @@ def main():
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    # 最適化の実行
+
+    # run_walkforward_test(config)
+
     run_optimization(config)
+
+    # run_montecarlo(config)
+
     # run_backtest(config)
 
 if __name__ == '__main__':

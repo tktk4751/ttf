@@ -1,21 +1,27 @@
-import numpy as np
-from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from typing import List, Dict, Optional
 from backtesting.trade import Trade
 from analytics.analytics import Analytics
-import copy
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-
+from .interfaces import ITradeSimulator, IEquityCurveCalculator, IStatisticsCalculator, IResultVisualizer
+from .implementations import (
+    BootstrapTradeSimulator,
+    SimpleEquityCurveCalculator,
+    MonteCarloStatisticsCalculator,
+    MatplotlibVisualizer
+)
 
 class MonteCarlo:
+    """モンテカルロシミュレーションを実行するクラス"""
+    
     def __init__(
         self,
         trades: List[Trade],
         initial_capital: float,
-        num_simulations: int = 20000,
-        confidence_level: float = 0.95
+        num_simulations: int = 2000,
+        confidence_level: float = 0.95,
+        trade_simulator: Optional[ITradeSimulator] = None,
+        equity_calculator: Optional[IEquityCurveCalculator] = None,
+        statistics_calculator: Optional[IStatisticsCalculator] = None,
+        result_visualizer: Optional[IResultVisualizer] = None
     ):
         """モンテカルロシミュレーションを初期化
 
@@ -24,11 +30,23 @@ class MonteCarlo:
             initial_capital: 初期資金
             num_simulations: シミュレーション回数
             confidence_level: 信頼水準
+            trade_simulator: トレードシミュレータ
+            equity_calculator: エクイティカーブ計算機
+            statistics_calculator: 統計計算機
+            result_visualizer: 結果可視化器
         """
         self.trades = trades
         self.initial_capital = initial_capital
         self.num_simulations = num_simulations
         self.confidence_level = confidence_level
+        
+        # 依存性注入
+        self.trade_simulator = trade_simulator or BootstrapTradeSimulator()
+        self.equity_calculator = equity_calculator or SimpleEquityCurveCalculator()
+        self.statistics_calculator = statistics_calculator or MonteCarloStatisticsCalculator()
+        self.result_visualizer = result_visualizer or MatplotlibVisualizer()
+        
+        # 結果の保存用
         self.simulation_results: List[Dict] = []
         self.equity_curves: List[List[float]] = []
 
@@ -39,8 +57,11 @@ class MonteCarlo:
             Dict: シミュレーション結果の統計
         """
         for _ in range(self.num_simulations):
-            # トレードリストをコピーしてランダム性を加える
-            simulated_trades = self._generate_random_trades()
+            # トレードをシミュレート
+            simulated_trades = self.trade_simulator.simulate_trades(
+                self.trades,
+                self.initial_capital
+            )
             
             # 分析を実行
             analytics = Analytics(simulated_trades, self.initial_capital)
@@ -57,204 +78,44 @@ class MonteCarlo:
             self.simulation_results.append(result)
             
             # エクイティカーブを計算
-            equity_curve = self._calculate_equity_curve(simulated_trades)
+            equity_curve = self.equity_calculator.calculate(
+                simulated_trades,
+                self.initial_capital
+            )
             self.equity_curves.append(equity_curve)
 
-        return self._calculate_statistics()
-
-    def _generate_random_trades(self) -> List[Trade]:
-        """ランダム性を加えたトレードリストを生成
-
-        ブートストラップ法を使用して、実際のトレードデータから
-        ランダムにトレードを選択し、新しいトレードシーケンスを生成します。
-        
-        Returns:
-            List[Trade]: ランダムに生成された新しいトレードのリスト
-        """
-        simulated_trades = []
-        current_balance = self.initial_capital
-        
-        # 元のトレード数と同じ数のトレードをランダムに選択
-        n_trades = len(self.trades)
-        selected_indices = np.random.choice(n_trades, size=n_trades, replace=True)
-        
-        for idx in selected_indices:
-            original_trade = self.trades[idx]
-            
-            # トレードをコピー
-            new_trade = copy.deepcopy(original_trade)
-            
-            # 損益にさらなるランダム性を加える
-            # 実際のトレードの損益分布から標準偏差を計算
-            returns = [t.profit_loss / t.position_size for t in self.trades]
-            volatility = np.std(returns)
-            
-            # 元のリターンに対して、より大きなランダム変動を加える
-            original_return = original_trade.profit_loss / original_trade.position_size
-            random_return = np.random.normal(original_return, volatility * 0.5)  # ボラティリティの50%をランダム性として使用
-            
-            # 新しい損益を計算
-            new_trade.profit_loss = random_return * original_trade.position_size
-            new_trade.balance = current_balance + new_trade.profit_loss
-            current_balance = new_trade.balance
-            
-            # エントリー日とイグジット日もランダムにシフト
-            time_shift = np.random.randint(-5, 6)  # -5日から+5日のランダムなシフト
-            new_trade.entry_date += pd.Timedelta(days=time_shift)
-            new_trade.exit_date += pd.Timedelta(days=time_shift)
-            
-            simulated_trades.append(new_trade)
-        
-        # 日付順にソート
-        simulated_trades.sort(key=lambda x: x.entry_date)
-        
-        return simulated_trades
-
-    def _calculate_equity_curve(self, trades: List[Trade]) -> List[float]:
-        """トレードのエクイティカーブを計算
-
-        Args:
-            trades: トレードリスト
-
-        Returns:
-            List[float]: エクイティカーブ（各時点での資金残高）
-        """
-        equity = [self.initial_capital]
-        current_balance = self.initial_capital
-        
-        for trade in trades:
-            current_balance += trade.profit_loss
-            equity.append(current_balance)
-        
-        return equity
-
-    def _calculate_statistics(self) -> Dict:
-        """シミュレーション結果の統計を計算
-
-        Returns:
-            Dict: 統計結果
-        """
-        results = np.array([(r['final_capital'] - self.initial_capital) / self.initial_capital * 100 
-                           for r in self.simulation_results])
-        
-        # 信頼区間の計算
-        confidence_lower = np.percentile(results, (1 - self.confidence_level) * 100)
-        confidence_upper = np.percentile(results, self.confidence_level * 100)
-        
-        # 各指標の統計量を計算
-        stats = {
-            'mean_return': np.mean(results),
-            'median_return': np.median(results),
-            'std_return': np.std(results),
-            'min_return': np.min(results),
-            'max_return': np.max(results),
-            f'confidence_interval_{int(self.confidence_level*100)}': {
-                'lower': confidence_lower,
-                'upper': confidence_upper
-            },
-            'metrics_stats': self._calculate_metrics_statistics()
-        }
-        
-        return stats
-
-    def _calculate_metrics_statistics(self) -> Dict:
-        """各指標の統計量を計算
-
-        Returns:
-            Dict: 各指標の統計量
-        """
-        metrics = ['total_return', 'max_drawdown', 'sharpe_ratio', 'sortino_ratio', 
-                  'win_rate', 'profit_factor', 'alpha_score']
-        
-        stats = {}
-        for metric in metrics:
-            values = [r[metric] for r in self.simulation_results]
-            stats[metric] = {
-                'mean': np.mean(values),
-                'median': np.median(values),
-                'std': np.std(values),
-                'min': np.min(values),
-                'max': np.max(values),
-                f'percentile_{int(self.confidence_level*100)}': np.percentile(values, self.confidence_level * 100),
-                f'percentile_{int((1-self.confidence_level)*100)}': np.percentile(values, (1-self.confidence_level) * 100)
-            }
-        
-        return stats
+        return self.statistics_calculator.calculate(
+            self.simulation_results,
+            self.initial_capital,
+            self.confidence_level
+        )
 
     def get_worst_case_scenario(self) -> Dict:
-        """最悪のシナリオを取得
-
-        Returns:
-            Dict: 最も低いリターンを記録したシミュレーションの結果
-        """
+        """最悪のシナリオを取得"""
         return min(self.simulation_results, key=lambda x: x['total_return'])
 
     def get_best_case_scenario(self) -> Dict:
-        """最良のシナリオを取得
-
-        Returns:
-            Dict: 最も高いリターンを記録したシミュレーションの結果
-        """
+        """最良のシナリオを取得"""
         return max(self.simulation_results, key=lambda x: x['total_return'])
 
-    def plot_equity_curves(self, save_path: Optional[str] = None):
-        """エクイティカーブをプロット
-
-        Args:
-            save_path: グラフの保存パス（Noneの場合は表示のみ）
-        """
-        plt.figure(figsize=(15, 8))
-        
-        # スタイル設定
-        plt.style.use('seaborn-v0_8-darkgrid')  # seabornのスタイルを正しく指定
-        
-        # 全シミュレーションのエクイティカーブをプロット
-        for i, equity_curve in enumerate(self.equity_curves):
-            plt.plot(equity_curve, alpha=0.1, linewidth=0.5, color='blue')
-        
-        # 平均エクイティカーブを計算してプロット
-        avg_equity = np.mean(self.equity_curves, axis=0)
-        plt.plot(avg_equity, color='red', linewidth=2, label='平均')
-        
-        # 信頼区間を計算してプロット
-        lower_percentile = (1 - self.confidence_level) * 100
-        upper_percentile = self.confidence_level * 100
-        lower_bound = np.percentile(self.equity_curves, lower_percentile, axis=0)
-        upper_bound = np.percentile(self.equity_curves, upper_percentile, axis=0)
-        
-        plt.fill_between(
-            range(len(avg_equity)),
-            lower_bound,
-            upper_bound,
-            alpha=0.2,
-            color='red',
-            label=f'{int(self.confidence_level*100)}%信頼区間'
+    def plot_equity_curves(self) -> None:
+        """エクイティカーブをプロット"""
+        self.result_visualizer.visualize(
+            self.equity_curves,
+            self.confidence_level
         )
-        
-        # グラフの設定
-        plt.title('モンテカルロシミュレーション: エクイティカーブ', fontsize=14)
-        plt.xlabel('トレード数', fontsize=12)
-        plt.ylabel('口座残高', fontsize=12)
-        plt.grid(True, alpha=0.3)
-        plt.legend()
-        
-        # Y軸を通貨形式で表示
-        plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-        
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        else:
-            plt.show()
-        
-        plt.close()
 
     def print_simulation_results(self) -> None:
-        """シミュレーション結果を出力し、グラフを表示"""
+        """シミュレーション結果を出力"""
         if not self.simulation_results:
             print("シミュレーションが実行されていません。")
             return
 
-        stats = self._calculate_statistics()
+        stats = self.statistics_calculator.calculate(
+            self.simulation_results,
+            self.initial_capital,
+            self.confidence_level
+        )
         
         print("\n=== モンテカルロシミュレーション結果 ===")
         print(f"シミュレーション回数: {self.num_simulations}")

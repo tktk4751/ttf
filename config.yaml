@@ -3,7 +3,7 @@
 # データ設定
 data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
-  symbol: "SUIUSDT"  # 取引対象の銘柄
+  symbol: "SOLUSDT"  # 取引対象の銘柄
   timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
   start: "2020-12-30"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
@@ -46,7 +46,7 @@ walkforward:
 # モンテカルロシミュレーション設定
 montecarlo:
   enabled: false          # モンテカルロシミュレーションを行うかどうか
-  num_simulations: 20000   # シミュレーション回数
+  num_simulations: 2000   # シミュレーション回数
 
 # ログ設定
 logging:
