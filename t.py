@@ -9,6 +9,7 @@ from backtesting.backtester import Backtester
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
 from strategies.implementations.supertrend_rsi_chop.strategy import SupertrendRsiChopStrategy
+from strategies.implementations.alma_cycle.strategy import ALMACycleStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
@@ -29,7 +30,7 @@ def run_backtest(config: dict):
     
     # 戦略の作成
 
-    strategy = SupertrendRsiChopStrategy()
+    strategy = ALMACycleStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
@@ -79,8 +80,8 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=SupertrendRsiChopStrategy,
-        param_generator=SupertrendRsiChopStrategy.create_optimization_params,
+        strategy_class=ALMACycleStrategy,
+        param_generator=ALMACycleStrategy.create_optimization_params,
         config=config,
         n_trials=100,
         n_jobs=-1
@@ -96,7 +97,7 @@ def run_optimization(config: dict):
     
     # 最適化されたパラメータを戦略クラスの形式に変換
     print("\nRunning backtest with optimized parameters...")
-    strategy_params = SupertrendRsiChopStrategy.convert_params_to_strategy_format(best_params)
+    strategy_params = {'params': ALMACycleStrategy.convert_params_to_strategy_format(best_params)}
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -104,7 +105,7 @@ def run_optimization(config: dict):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = SupertrendRsiChopStrategy(**strategy_params)
+    strategy = ALMACycleStrategy(**strategy_params)
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
@@ -177,8 +178,8 @@ def run_walkforward_test(config: dict):
 
     # Bayesian最適化器の作成
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=SupertrendRsiChopStrategy,
-        param_generator=SupertrendRsiChopStrategy.create_optimization_params,
+        strategy_class=ALMACycleStrategy,
+        param_generator=ALMACycleStrategy.create_optimization_params,
         config=config,
         n_trials=100,
         n_jobs=-1
@@ -206,7 +207,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     data_processor = DataProcessor()
     
     # 戦略の作成
-    strategy = SupertrendRsiChopStrategy()
+    strategy = ALMACycleStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
@@ -260,6 +261,9 @@ def main():
     # run_walkforward_test(config)
 
     run_optimization(config)
+
+
+    
 
     # run_montecarlo(config)
 
