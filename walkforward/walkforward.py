@@ -13,10 +13,10 @@ import yaml
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
-from optimization.Bayesian_optimizer import BayesianOptimizer
-from strategies.strategy import Strategy
+from optimization.bayesian_optimizer import BayesianOptimizer
+from strategies.base.strategy import BaseStrategy
 from analytics.analytics import Analytics
-from data.data_loader import DataLoader
+from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
 from backtesting.backtester import Backtester
 from position_sizing.position_sizing import PositionSizing
@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 class WalkForward:
     def __init__(
         self,
-        strategy_class: Type[Strategy],
+        strategy_class: Type[BaseStrategy],
         config_path: str,
         param_generator: Callable,
     ):
@@ -65,16 +65,24 @@ class WalkForward:
         timeframe = data_config.get('timeframe', '1h')
         
         # データの読み込みと処理
-        loader = DataLoader(data_dir)
+        loader = DataLoader(CSVDataSource(data_dir))
         processor = DataProcessor()
         
-        # 全期間のデータを読み込む
-        data = loader.load_data(
-            symbol=symbol,
-            timeframe=timeframe,
-            load_all=True  # 全データを読み込む
-        )
-        self.data = processor.process(data)
+        # 全期間のデータを読み込む（start/endの指定を無視）
+        config_without_dates = self.config.copy()
+        if 'start' in config_without_dates.get('data', {}):
+            del config_without_dates['data']['start']
+        if 'end' in config_without_dates.get('data', {}):
+            del config_without_dates['data']['end']
+        
+        raw_data = loader.load_data_from_config(config_without_dates)
+        processed_data = {
+            symbol: processor.process(df)
+            for symbol, df in raw_data.items()
+        }
+        
+        # 最初のシンボルのデータを使用
+        self.data = processed_data[symbol]
         
         logger.info(f"データを読み込みました: {symbol}/{timeframe}")
         logger.info(f"期間: {self.data.index.min()} → {self.data.index.max()}")

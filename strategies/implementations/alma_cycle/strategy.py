@@ -102,9 +102,9 @@ class ALMACycleStrategy(BaseStrategy):
             最適化パラメータ
         """
         return {
-            'short_period': trial.suggest_int('short_period', 5, 34, step=1),
-            'middle_period': trial.suggest_int('middle_period', 13, 150, step=1),
-            'long_period': trial.suggest_int('long_period', 55, 350, step=1),
+            'short_period': trial.suggest_int('short_period', 5, 40, step=1),
+            'middle_period': trial.suggest_int('middle_period', 40, 120, step=1),
+            'long_period': trial.suggest_int('long_period', 120, 400, step=1),
             'sigma': 6,
             'offset': 0.85
         }

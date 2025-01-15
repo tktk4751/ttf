@@ -83,7 +83,7 @@ def run_optimization(config: dict):
         strategy_class=ALMACycleStrategy,
         param_generator=ALMACycleStrategy.create_optimization_params,
         config=config,
-        n_trials=100,
+        n_trials=500,
         n_jobs=-1
     )
     
@@ -181,7 +181,7 @@ def run_walkforward_test(config: dict):
         strategy_class=ALMACycleStrategy,
         param_generator=ALMACycleStrategy.create_optimization_params,
         config=config,
-        n_trials=100,
+        n_trials=300,
         n_jobs=-1
     )
 
@@ -189,7 +189,7 @@ def run_walkforward_test(config: dict):
     optimizer = WalkForwardOptimizer(
         optimizer=bayesian_optimizer,
         data_splitter=data_splitter,
-        config=config
+        config=config,
     )
     result = optimizer.run(processed_data)
 
@@ -201,13 +201,34 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     """モンテカルロシミュレーションを実行する"""
     print("\nモンテカルロシミュレーションを開始します...")
     
+    # 最適化の実行
+    print("\nパラメータの最適化を実行中...")
+    optimizer = BayesianOptimizer(
+        strategy_class=ALMACycleStrategy,
+        param_generator=ALMACycleStrategy.create_optimization_params,
+        config=config,
+        n_trials=500,
+        n_jobs=-1
+    )
+    
+    best_params, best_score = optimizer.optimize()
+    
+    print("\n最適化が完了しました")
+    print(f"最適スコア: {best_score:.2f}")
+    print("最適パラメータ:")
+    for param_name, param_value in best_params.items():
+        print(f"  {param_name}: {param_value}")
+    
+    # 最適化されたパラメータを戦略クラスの形式に変換
+    strategy_params = {'params': ALMACycleStrategy.convert_params_to_strategy_format(best_params)}
+    
     # データの準備
     data_dir = config['data']['data_dir']
     data_loader = DataLoader(CSVDataSource(data_dir))
     data_processor = DataProcessor()
     
-    # 戦略の作成
-    strategy = ALMACycleStrategy()
+    # 最適化されたパラメータで戦略を作成
+    strategy = ALMACycleStrategy(**strategy_params)
     
     # ポジションサイジングの作成
     position_config = config.get('position', {})
@@ -228,14 +249,14 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     )
     
     # データの読み込みと処理
-    print("データを読み込んでいます...")
+    print("\nデータを読み込んでいます...")
     raw_data = data_loader.load_data_from_config(config)
     processed_data = {
         symbol: data_processor.process(df)
         for symbol, df in raw_data.items()
     }
     
-    print("バックテストを実行しています...")
+    print("最適化されたパラメータでバックテストを実行中...")
     trades = backtester.run(processed_data)
     
     # モンテカルロシミュレーションの実行
@@ -258,9 +279,9 @@ def main():
         config = yaml.safe_load(f)
     
 
-    # run_walkforward_test(config)
+    run_walkforward_test(config)
 
-    run_optimization(config)
+    # run_optimization(config)
 
 
     

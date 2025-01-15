@@ -106,7 +106,7 @@ class MatplotlibVisualizer(IResultVisualizer):
         
         # 平均エクイティカーブ
         avg_equity = np.mean(equity_curves, axis=0)
-        plt.plot(avg_equity, color='red', linewidth=2, label='平均')
+        plt.plot(avg_equity, color='red', linewidth=2, label='Average')
         
         # 信頼区間
         lower_percentile = (1 - confidence_level) * 100
@@ -120,7 +120,7 @@ class MatplotlibVisualizer(IResultVisualizer):
             upper_bound,
             alpha=0.2,
             color='red',
-            label=f'{int(confidence_level*100)}%信頼区間'
+            label=f'{int(confidence_level*100)}%Confidence interval'
         )
         
         plt.title('Monte Carlo simulation: equity curve', fontsize=14)

@@ -5,7 +5,7 @@ data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
   symbol: "SOLUSDT"  # 取引対象の銘柄
   timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
-  start: "2020-12-30"  # データ開始日 (YYYY-MM-DD)
+  start: "2017-10-30"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 
 # ポジションサイズ設定
@@ -31,7 +31,7 @@ position:
 optimization:
   enabled: true
   metric: "alpha_score"
-  n_trials: 100
+  n_trials: 500
   n_jobs: -1
   timeout: null
   strategy_class: "SupertrendRsiChopStrategy"

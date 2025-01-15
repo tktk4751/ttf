@@ -102,7 +102,7 @@ class WalkForwardOptimizer:
         self,
         optimizer: BayesianOptimizer,
         data_splitter: IDataSplitter,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
     ):
         """
         Args:
@@ -114,7 +114,19 @@ class WalkForwardOptimizer:
         self.data_splitter = data_splitter
         self.config = config
         self.result = WalkForwardResult()
-    
+
+    def _create_strategy(self, params: Dict[str, Any]) -> Any:
+        """戦略インスタンスを作成
+
+        Args:
+            params: 最適化されたパラメータ
+
+        Returns:
+            戦略インスタンス
+        """
+        strategy_params = {'params': self.optimizer.strategy_class.convert_params_to_strategy_format(params)}
+        return self.optimizer.strategy_class(**strategy_params)
+
     def run(self, data: Dict[str, pd.DataFrame]) -> IWalkForwardResult:
         """ウォークフォワードテストを実行
         
@@ -156,7 +168,7 @@ class WalkForwardOptimizer:
                 continue
                 
             valid_data[symbol] = df
-        
+
         if not valid_data:
             print("Error: No valid data available for walk-forward test")
             return self.result
@@ -197,8 +209,7 @@ class WalkForwardOptimizer:
                 self.config['data'].update(original_data_config)
                 
                 # テストデータでバックテスト
-                strategy_params = self.optimizer.strategy_class.convert_params_to_strategy_format(best_params)
-                strategy = self.optimizer.strategy_class(**strategy_params)
+                strategy = self._create_strategy(best_params)
                 
                 # ポジションサイジングの設定
                 position_config = self.config.get('position', {})
@@ -248,7 +259,7 @@ class WalkForwardOptimizer:
                     })
                 else:
                     print(f"Warning: Insufficient trades ({len(trades)}) for period starting {current_date}")
-            
+
             except Exception as e:
                 print(f"Error processing period starting {current_date}: {str(e)}")
             
@@ -284,7 +295,7 @@ class WalkForwardOptimizer:
                     out_sample_score = period_analytics.calculate_alpha_score()
                     wfe = out_sample_score / in_sample_score
                     wfe_values.append(wfe)
-            
+
             # 平均WFEを計算
             avg_wfe = np.mean(wfe_values) if wfe_values else 0
             

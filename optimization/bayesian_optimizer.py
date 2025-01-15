@@ -21,7 +21,7 @@ class BayesianOptimizer(BaseOptimizer):
         strategy_class: Type[BaseStrategy],
         param_generator: Callable[[optuna.Trial], Dict[str, Any]],
         config: Dict[str, Any],
-        n_trials: int = 100,
+        n_trials: int ,
         n_jobs: int = -1,
         timeout: Optional[int] = None
     ):
