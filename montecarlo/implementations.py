@@ -25,7 +25,7 @@ class BootstrapTradeSimulator(ITradeSimulator):
             returns = [t.profit_loss / t.position_size for t in trades]
             volatility = np.std(returns)
             original_return = original_trade.profit_loss / original_trade.position_size
-            random_return = np.random.normal(original_return, volatility * 0.5)
+            random_return = np.random.normal(original_return, volatility * 0.4)
             
             # 新しい損益を計算
             new_trade.profit_loss = random_return * original_trade.position_size
@@ -58,19 +58,40 @@ class SimpleEquityCurveCalculator(IEquityCurveCalculator):
 class MonteCarloStatisticsCalculator(IStatisticsCalculator):
     """モンテカルロシミュレーションの統計計算機"""
     def calculate(self, results: List[Dict], initial_capital: float, confidence_level: float) -> Dict:
-        returns = np.array([(r['final_capital'] - initial_capital) / initial_capital * 100 
-                           for r in results])
+        """シミュレーション結果の統計を計算
+
+        Args:
+            results: シミュレーション結果のリスト
+            initial_capital: 初期資金
+            confidence_level: 信頼水準
+
+        Returns:
+            Dict: 統計結果
+        """
+        # 各シミュレーションの分析結果を取得
+        analytics_list = [Analytics(r['trades'], initial_capital) for r in results]
         
-        confidence_lower = np.percentile(returns, (1 - confidence_level) * 100)
-        confidence_upper = np.percentile(returns, confidence_level * 100)
+        # 計算する指標のリスト
+        metrics = {
+            'total_return': lambda x: x.calculate_total_return(),
+            'max_drawdown': lambda x: x.calculate_max_drawdown()[0],
+            'sharpe_ratio': lambda x: x.calculate_sharpe_ratio(),
+            'sortino_ratio': lambda x: x.calculate_sortino_ratio(),
+            'win_rate': lambda x: x.calculate_win_rate(),
+            'profit_factor': lambda x: x.calculate_profit_factor(),
+            'alpha_score': lambda x: x.calculate_alpha_score(),
+            'alpha_score_v2': lambda x: x.calculate_alpha_score_v2(),
+            'calmar_ratio': lambda x: x.calculate_calmar_ratio(),
+            'pessimistic_return_ratio': lambda x: x.calculate_pessimistic_return_ratio(),
+            'gpr': lambda x: x.calculate_gpr(),
+            'sqn': lambda x: x.calculate_sqn()
+        }
         
-        metrics = ['total_return', 'max_drawdown', 'sharpe_ratio', 'sortino_ratio', 
-                  'win_rate', 'profit_factor', 'alpha_score']
-        
+        # 各指標の統計を計算
         metrics_stats = {}
-        for metric in metrics:
-            values = [r[metric] for r in results]
-            metrics_stats[metric] = {
+        for metric_name, metric_func in metrics.items():
+            values = [metric_func(analytics) for analytics in analytics_list]
+            metrics_stats[metric_name] = {
                 'mean': np.mean(values),
                 'median': np.median(values),
                 'std': np.std(values),
@@ -79,6 +100,11 @@ class MonteCarloStatisticsCalculator(IStatisticsCalculator):
                 f'percentile_{int(confidence_level*100)}': np.percentile(values, confidence_level * 100),
                 f'percentile_{int((1-confidence_level)*100)}': np.percentile(values, (1-confidence_level) * 100)
             }
+        
+        # リターンの統計を計算
+        returns = [analytics.calculate_total_return() for analytics in analytics_list]
+        confidence_lower = np.percentile(returns, (1 - confidence_level) * 100)
+        confidence_upper = np.percentile(returns, confidence_level * 100)
         
         return {
             'mean_return': np.mean(returns),

@@ -5,7 +5,7 @@ from backtesting.backtester import IPositionManager
 class FixedRatioSizing(IPositionManager):
     """固定比率のポジションサイジング"""
     
-    def __init__(self, ratio: float = 0.99, leverage: float = 1.0):
+    def __init__(self, ratio: float, leverage: float = 1.0):
         """
         コンストラクタ
         
@@ -31,7 +31,7 @@ class FixedRatioSizing(IPositionManager):
         Returns:
             float: ポジションサイズ（USD建て）
         """
-        # 利用可能な資金を計算（資金の99%）
+        # 利用可能な資金を計算
         available_capital = capital * self.ratio
         
         # レバレッジを適用してUSD建てのポジションサイズを計算

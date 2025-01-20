@@ -457,7 +457,7 @@ class Analytics:
             return 0.0
 
         # 各指標を0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 3) / 3    # 0-1にスケール
+        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 2) / 2    # 0-1にスケール
         sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
         prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
         max_dd = self.calculate_max_drawdown()[0]
@@ -805,6 +805,7 @@ class Analytics:
             'profit_factor': self.calculate_profit_factor(),
             'pessimistic_return_ratio': self.calculate_pessimistic_return_ratio(),
             'alpha_score': self.calculate_alpha_score(),
+            'alpha_score_v2': self.calculate_alpha_score_v2(),
             'sqn': self.calculate_sqn(),
             'average_bars': self.calculate_average_bars(),
             
@@ -919,5 +920,42 @@ class Analytics:
         print(f"📈 期待値: {self.calculate_expected_value():.2f}")
         print(f"📉 悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
         print(f"📈 アルファスコア: {self.calculate_alpha_score():.2f}")
+        print(f"📈 アルファスコアv2: {self.calculate_alpha_score_v2():.2f}")
         print(f"📊 SQNスコア: {self.calculate_sqn():.2f}")
+
+    def calculate_alpha_score_v2(self) -> float:
+        """アルファスコアv2を計算
+
+        以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
+
+        1. ソルティノレシオ (34%): ダウンサイドリスクに対するリターン
+        2. 悲観的リターンレシオ (33%): 保守的な収益性評価
+        3. GPR (33%): リターンの効率性
+
+        Returns:
+            float: 0-100のスケールでのスコア。高いほど良い。
+        """
+        if not self.trades:
+            return 0.0
+
+        # 各指標を0-1にスケール
+        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
+        prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
+        gpr = min(max(self.calculate_gpr(), 0), 4) / 4  # 0-1にスケール
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        sortino = sortino if sortino > 0 else replacement_value
+        prr = prr if prr > 0 else replacement_value
+        gpr = gpr if gpr > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定
+        score = (
+            sortino ** 0.34 *        # ソルティノレシオ (34%)
+            prr ** 0.33 *            # 悲観的リターンレシオ (33%)
+            gpr ** 0.33              # GPR (33%)
+        )
+
+        # 0-100のスケールに変換
+        return score * 100
 

@@ -9,6 +9,7 @@ from backtesting.backtester import Backtester
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
 from strategies.implementations.supertrend_rsi_chop.strategy import SupertrendRsiChopStrategy
+from strategies.implementations.supertrend_chop_mfi.strategy import SupertrendChopMfiStrategy
 from strategies.implementations.alma_cycle.strategy import ALMACycleStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
 from analytics.analytics import Analytics
@@ -20,6 +21,7 @@ from walkforward.walkforward_optimizer import TimeSeriesDataSplitter
 from typing import List
 from backtesting.trade import Trade
 from montecarlo.montecarlo import MonteCarlo
+from optimization.signal_combination_optimizer import SignalCombinationOptimizer
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -30,13 +32,13 @@ def run_backtest(config: dict):
     
     # 戦略の作成
 
-    strategy = ALMACycleStrategy()
+    strategy = SupertrendChopMfiStrategy()
     
     # ポジションサイジングの作成
-    position_config = config.get('position', {})
+    position_config = config.get('position_sizing', {})
     position_sizing = FixedRatioSizing(
-        ratio=0.99,
-        leverage=1.0
+        ratio=position_config.get('ratio', 0.04),
+        leverage=position_config.get('leverage', 1.0)
     )
     
     # バックテスターの作成
@@ -80,10 +82,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=ALMACycleStrategy,
-        param_generator=ALMACycleStrategy.create_optimization_params,
+        strategy_class=SupertrendChopMfiStrategy,
+        param_generator=SupertrendChopMfiStrategy.create_optimization_params,
         config=config,
-        n_trials=500,
+        n_trials=300,
         n_jobs=-1
     )
     
@@ -97,7 +99,7 @@ def run_optimization(config: dict):
     
     # 最適化されたパラメータを戦略クラスの形式に変換
     print("\nRunning backtest with optimized parameters...")
-    strategy_params = {'params': ALMACycleStrategy.convert_params_to_strategy_format(best_params)}
+    strategy_params = SupertrendChopMfiStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -105,12 +107,12 @@ def run_optimization(config: dict):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = ALMACycleStrategy(**strategy_params)
+    strategy = SupertrendChopMfiStrategy(**strategy_params)
     
     # ポジションサイジングの作成
-    position_config = config.get('position', {})
+    position_config = config.get('position_sizing', {})
     position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.99),
+        ratio=position_config.get('ratio', 0.04),
         leverage=position_config.get('leverage', 1.0)
     )
     
@@ -178,10 +180,10 @@ def run_walkforward_test(config: dict):
 
     # Bayesian最適化器の作成
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=ALMACycleStrategy,
-        param_generator=ALMACycleStrategy.create_optimization_params,
+        strategy_class=SupertrendChopMfiStrategy,
+        param_generator=SupertrendChopMfiStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=100,
         n_jobs=-1
     )
 
@@ -190,6 +192,7 @@ def run_walkforward_test(config: dict):
         optimizer=bayesian_optimizer,
         data_splitter=data_splitter,
         config=config,
+
     )
     result = optimizer.run(processed_data)
 
@@ -204,10 +207,10 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=ALMACycleStrategy,
-        param_generator=ALMACycleStrategy.create_optimization_params,
+        strategy_class=SupertrendChopMfiStrategy,
+        param_generator=SupertrendChopMfiStrategy.create_optimization_params,
         config=config,
-        n_trials=500,
+        n_trials=100,
         n_jobs=-1
     )
     
@@ -220,7 +223,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         print(f"  {param_name}: {param_value}")
     
     # 最適化されたパラメータを戦略クラスの形式に変換
-    strategy_params = {'params': ALMACycleStrategy.convert_params_to_strategy_format(best_params)}
+    strategy_params = SupertrendChopMfiStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -228,12 +231,12 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = ALMACycleStrategy(**strategy_params)
+    strategy = SupertrendChopMfiStrategy(**strategy_params)
     
     # ポジションサイジングの作成
-    position_config = config.get('position', {})
+    position_config = config.get('position_sizing', {})
     position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.99),
+        ratio=position_config.get('ratio', 0.04),
         leverage=position_config.get('leverage', 1.0)
     )
     
@@ -271,6 +274,30 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     monte_carlo.run()
     monte_carlo.print_simulation_results()
 
+def run_signal_combination_optimization(config: dict):
+    """シグナルの組み合わせの最適化を実行"""
+    print("\nシグナルの組み合わせの最適化を開始します...")
+    
+    # カスタム評価指標の例（シャープレシオとアルファスコアの組み合わせ）
+    def custom_metric(analytics: Analytics) -> float:
+        return analytics.calculate_alpha_score() * 0.7 + analytics.calculate_sharpe_ratio() * 0.3
+    
+    optimizer = SignalCombinationOptimizer(
+        config=config,
+        n_trials=300,
+        max_signals=3,
+        metric_function=custom_metric,  # カスタム評価指標を使用（コメントアウトするとデフォルトのアルファスコアを使用）
+        n_jobs=-1
+    )
+    
+    best_params, best_score = optimizer.optimize()
+    
+    print("\n最適化が完了しました！")
+    print(f"最高スコア: {best_score:.2f}")
+    print("\n選択されたシグナルの組み合わせ:")
+    for i, signal_name in enumerate(best_params['selected_signals'], 1):
+        print(f"{i}. {signal_name}")
+
 def main():
     """メイン関数"""
     # 設定ファイルの読み込み
@@ -278,17 +305,15 @@ def main():
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-
-    run_walkforward_test(config)
-
+    # run_walkforward_test(config)
     # run_optimization(config)
+    run_montecarlo(config)
+    # run_backtest(config)
 
 
     
-
-    # run_montecarlo(config)
-
-    # run_backtest(config)
+    
+    # run_signal_combination_optimization(config)
 
 if __name__ == '__main__':
     main()

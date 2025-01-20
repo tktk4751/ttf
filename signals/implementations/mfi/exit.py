@@ -29,8 +29,8 @@ class MFIExitSignal(BaseSignal, IExitSignal):
         params = {
             'period': period,
             'solid': solid or {
-                'mfi_long_exit_solid': 85,
-                'mfi_short_exit_solid': 15
+                'mfi_long_exit_solid': 90,
+                'mfi_short_exit_solid': 10
             }
         }
         super().__init__(f"MFIExit({period})", params)

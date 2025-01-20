@@ -78,16 +78,16 @@ class SupertrendRsiChopStrategy(BaseStrategy):
     def create_optimization_params(cls, trial: optuna.Trial) -> Dict[str, Any]:
         """最適化パラメータを生成する"""
         params = {
-            'supertrend_period': trial.suggest_int('supertrend_period', 5, 30),
-            'supertrend_multiplier': trial.suggest_float('supertrend_multiplier', 1.0, 5.0),
-            'rsi_entry_period': trial.suggest_int('rsi_entry_period', 2, 10),
-            'rsi_long_entry': trial.suggest_int('rsi_long_entry', 10, 40),
-            'rsi_short_entry': trial.suggest_int('rsi_short_entry', 60, 90),
-            'rsi_exit_period': trial.suggest_int('rsi_exit_period', 5, 20),
-            'rsi_long_exit': trial.suggest_int('rsi_long_exit', 60, 90),
-            'rsi_short_exit': trial.suggest_int('rsi_short_exit', 10, 40),
-            'chop_period': trial.suggest_int('chop_period', 5, 30),
-            'chop_solid': trial.suggest_int('chop_solid', 30, 70)
+            'supertrend_period': trial.suggest_int('supertrend_period', 5, 30,step=1),
+            'supertrend_multiplier': trial.suggest_float('supertrend_multiplier', 1.0, 5.0,step=0.5),
+            'rsi_entry_period': 2,
+            'rsi_long_entry': 20,
+            'rsi_short_entry': 80,
+            'rsi_exit_period': trial.suggest_int('rsi_exit_period', 5, 34,step=1),
+            'rsi_long_exit': 86,
+            'rsi_short_exit': 14,
+            'chop_period': trial.suggest_int('chop_period', 5, 100,step=1),
+            'chop_solid':50
         }
         return params
     
@@ -100,23 +100,23 @@ class SupertrendRsiChopStrategy(BaseStrategy):
                 'multiplier': params['supertrend_multiplier']
             },
             'rsi_entry_params': {
-                'period': params['rsi_entry_period'],
+                'period': 2,
                 'solid': {
-                    'rsi_long_entry': params['rsi_long_entry'],
-                    'rsi_short_entry': params['rsi_short_entry']
+                    'rsi_long_entry': 20,
+                    'rsi_short_entry': 80
                 }
             },
             'rsi_exit_params': {
                 'period': params['rsi_exit_period'],
                 'solid': {
-                    'rsi_long_exit_solid': params['rsi_long_exit'],
-                    'rsi_short_exit_solid': params['rsi_short_exit']
+                    'rsi_long_exit_solid': 86,
+                    'rsi_short_exit_solid': 14
                 }
             },
             'chop_params': {
                 'period': params['chop_period'],
                 'solid': {
-                    'chop_solid': params['chop_solid']
+                    'chop_solid': 50
                 }
             }
         } 

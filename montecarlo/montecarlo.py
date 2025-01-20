@@ -66,13 +66,7 @@ class MonteCarlo:
             # 分析を実行
             analytics = Analytics(simulated_trades, self.initial_capital)
             result = {
-                'total_return': analytics.calculate_total_return(),
-                'max_drawdown': analytics.calculate_max_drawdown()[0],
-                'sharpe_ratio': analytics.calculate_sharpe_ratio(),
-                'sortino_ratio': analytics.calculate_sortino_ratio(),
-                'win_rate': analytics.calculate_win_rate(),
-                'profit_factor': analytics.calculate_profit_factor(),
-                'alpha_score': analytics.calculate_alpha_score(),
+                'trades': simulated_trades,
                 'final_capital': analytics.final_capital
             }
             self.simulation_results.append(result)
@@ -92,11 +86,19 @@ class MonteCarlo:
 
     def get_worst_case_scenario(self) -> Dict:
         """最悪のシナリオを取得"""
-        return min(self.simulation_results, key=lambda x: x['total_return'])
+        if not self.simulation_results:
+            return {}
+        # Analyticsを使用してトータルリターンを計算
+        return min(self.simulation_results, 
+                  key=lambda x: Analytics(x['trades'], self.initial_capital).calculate_total_return())
 
     def get_best_case_scenario(self) -> Dict:
         """最良のシナリオを取得"""
-        return max(self.simulation_results, key=lambda x: x['total_return'])
+        if not self.simulation_results:
+            return {}
+        # Analyticsを使用してトータルリターンを計算
+        return max(self.simulation_results, 
+                  key=lambda x: Analytics(x['trades'], self.initial_capital).calculate_total_return())
 
     def plot_equity_curves(self) -> None:
         """エクイティカーブをプロット"""
@@ -140,8 +142,6 @@ class MonteCarlo:
             print(f"平均: {metric_stats['mean']:.2f}")
             print(f"中央値: {metric_stats['median']:.2f}")
             print(f"標準偏差: {metric_stats['std']:.2f}")
-            print(f"最小値: {metric_stats['min']:.2f}")
-            print(f"最大値: {metric_stats['max']:.2f}")
             print(f"{int(self.confidence_level*100)}%信頼区間:")
             print(f"下限: {metric_stats[f'percentile_{int((1-self.confidence_level)*100)}']:.2f}")
             print(f"上限: {metric_stats[f'percentile_{int(self.confidence_level*100)}']:.2f}")
@@ -150,17 +150,21 @@ class MonteCarlo:
         worst_case = self.get_worst_case_scenario()
         best_case = self.get_best_case_scenario()
         
-        print("\n最悪のシナリオ:")
-        print(f"総リターン: {worst_case['total_return']:.2f}%")
-        print(f"最大ドローダウン: {worst_case['max_drawdown']:.2f}%")
-        print(f"シャープレシオ: {worst_case['sharpe_ratio']:.2f}")
-        print(f"勝率: {worst_case['win_rate']:.2f}%")
-        
-        print("\n最良のシナリオ:")
-        print(f"総リターン: {best_case['total_return']:.2f}%")
-        print(f"最大ドローダウン: {best_case['max_drawdown']:.2f}%")
-        print(f"シャープレシオ: {best_case['sharpe_ratio']:.2f}")
-        print(f"勝率: {best_case['win_rate']:.2f}%")
+        if worst_case and best_case:
+            worst_analytics = Analytics(worst_case['trades'], self.initial_capital)
+            best_analytics = Analytics(best_case['trades'], self.initial_capital)
+            
+            print("\n最悪のシナリオ:")
+            print(f"総リターン: {worst_analytics.calculate_total_return():.2f}%")
+            print(f"最大ドローダウン: {worst_analytics.calculate_max_drawdown()[0]:.2f}%")
+            print(f"シャープレシオ: {worst_analytics.calculate_sharpe_ratio():.2f}")
+            print(f"勝率: {worst_analytics.calculate_win_rate():.2f}%")
+            
+            print("\n最良のシナリオ:")
+            print(f"総リターン: {best_analytics.calculate_total_return():.2f}%")
+            print(f"最大ドローダウン: {best_analytics.calculate_max_drawdown()[0]:.2f}%")
+            print(f"シャープレシオ: {best_analytics.calculate_sharpe_ratio():.2f}")
+            print(f"勝率: {best_analytics.calculate_win_rate():.2f}%")
         
         # エクイティカーブのグラフを表示
         self.plot_equity_curves()

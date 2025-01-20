@@ -68,7 +68,7 @@ class BayesianOptimizer(BaseOptimizer):
     def _create_strategy(self, trial: optuna.Trial) -> BaseStrategy:
         """Optunaのtrialから戦略インスタンスを生成"""
         params = self.param_generator(trial)
-        strategy_params = {'params': self.strategy_class.convert_params_to_strategy_format(params)}
+        strategy_params = self.strategy_class.convert_params_to_strategy_format(params)
         return self.strategy_class(**strategy_params)
     
     def _run_backtest(self, strategy: BaseStrategy) -> List[Any]:
@@ -102,7 +102,7 @@ class BayesianOptimizer(BaseOptimizer):
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position', {}).get('initial_balance', 10000))
-        score = analytics.calculate_alpha_score()
+        score = analytics.calculate_alpha_score_v2()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score
@@ -137,7 +137,7 @@ class BayesianOptimizer(BaseOptimizer):
 
         # 最適なパラメータでバックテストを実行
         best_params = study.best_params
-        strategy_params = {'params': self.strategy_class.convert_params_to_strategy_format(best_params)}
+        strategy_params = self.strategy_class.convert_params_to_strategy_format(best_params)
         best_strategy = self.strategy_class(**strategy_params)
         best_trades = self._run_backtest(best_strategy)
         analytics = Analytics(best_trades, self.config.get('position', {}).get('initial_balance', 10000))

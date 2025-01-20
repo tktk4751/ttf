@@ -124,7 +124,9 @@ class WalkForwardOptimizer:
         Returns:
             戦略インスタンス
         """
-        strategy_params = {'params': self.optimizer.strategy_class.convert_params_to_strategy_format(params)}
+        strategy_params = self.optimizer.strategy_class.convert_params_to_strategy_format(params)
+        # strategy_params = {'params': self.optimizer.strategy_class.convert_params_to_strategy_format(params)}
+
         return self.optimizer.strategy_class(**strategy_params)
 
     def run(self, data: Dict[str, pd.DataFrame]) -> IWalkForwardResult:
@@ -209,10 +211,10 @@ class WalkForwardOptimizer:
                 self.config['data'].update(original_data_config)
                 
                 # テストデータでバックテスト
-                strategy = self._create_strategy(best_params)
+                strategy = self._create_strategy(params=best_params)
                 
                 # ポジションサイジングの設定
-                position_config = self.config.get('position', {})
+                position_config = self.config.get('position_sizing', {})
                 position_sizing = FixedRatioSizing(
                     ratio=position_config.get('ratio', 0.99),
                     leverage=position_config.get('leverage', 1.0)

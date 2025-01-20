@@ -12,7 +12,7 @@ data:
 position_sizing:
   name: "FixedRatioPositionSizing"  # ポジションサイズ計算方法
   params:
-    ratio: 0.99  # 資金に対する割合
+    ratio: 0.04  # 資金に対する割合
 
 # バックテスト設定
 backtest:

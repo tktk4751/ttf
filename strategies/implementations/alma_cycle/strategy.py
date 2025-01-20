@@ -12,36 +12,42 @@ from .signal_generator import ALMACycleSignalGenerator
 class ALMACycleStrategy(BaseStrategy):
     """ALMAサイクルストラテジー"""
     
-    def __init__(self, name: str = "ALMACycle", sigma: float = 6.0, offset: float = 0.85, params: Dict[str, Any] = None):
+    def __init__(
+        self,
+        short_period: int = 9,
+        middle_period: int = 21,
+        long_period: int = 55,
+        sigma: float = 6.0,
+        offset: float = 0.85,
+        name: str = "ALMACycle"
+    ):
         """
         コンストラクタ
         
         Args:
-            name: 戦略名
+            short_period: 短期ALMAの期間
+            middle_period: 中期ALMAの期間
+            long_period: 長期ALMAの期間
             sigma: ガウス分布の標準偏差
             offset: 重みの中心位置（0-1）
-            params: パラメータ辞書
-                - short_period: 短期ALMAの期間
-                - middle_period: 中期ALMAの期間
-                - long_period: 長期ALMAの期間
+            name: 戦略名
         """
         super().__init__(name)
         
-        # デフォルトのパラメータ設定
-        default_params = {
-            'short_period': 9,
-            'middle_period': 21,
-            'long_period': 55
+        # パラメータの設定
+        self._parameters = {
+            'short_period': short_period,
+            'middle_period': middle_period,
+            'long_period': long_period,
+            'sigma': sigma,
+            'offset': offset
         }
-        
-        # パラメータのマージ
-        self._params = params or default_params
         
         # シグナルジェネレーターの作成
         self._signal_generator = ALMACycleSignalGenerator(
             sigma=sigma,
             offset=offset,
-            params=self._params
+            params=self._parameters
         )
         
         # 現在のポジション（0: なし、1: ロング、-1: ショート）
@@ -123,7 +129,9 @@ class ALMACycleStrategy(BaseStrategy):
         return {
             'short_period': params['short_period'],
             'middle_period': params['middle_period'],
-            'long_period': params['long_period']
+            'long_period': params['long_period'],
+            'sigma': params.get('sigma', 6.0),
+            'offset': params.get('offset', 0.85)
         }
     
     def get_parameters(self) -> Dict[str, Any]:
@@ -133,4 +141,4 @@ class ALMACycleStrategy(BaseStrategy):
         Returns:
             戦略パラメータ
         """
-        return self._params 
+        return self._parameters 
