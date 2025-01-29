@@ -3,16 +3,17 @@
 # データ設定
 data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
-  symbol: "SOLUSDT"  # 取引対象の銘柄
-  timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
+  symbol: "SUIUSDT"  # 取引対象の銘柄
+  timeframe: "1h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
   start: "2017-10-30"  # データ開始日 (YYYY-MM-DD)
   end: "2024-11-30"    # データ終了日 (YYYY-MM-DD)
 
 # ポジションサイズ設定
 position_sizing:
-  name: "FixedRatioPositionSizing"  # ポジションサイズ計算方法
-  params:
-    ratio: 0.04  # 資金に対する割合
+  ratio: 0.21  # 資金に対する割合
+  leverage: 1
+  initial_balance: 10000
+  commission_rate: 0.001
 
 # バックテスト設定
 backtest:
@@ -20,12 +21,6 @@ backtest:
   commission: 0.001        # 手数料率
   max_positions: 1         # 同時保有可能な最大ポジション数
 
-# ポジション設定
-position:
-  ratio: 0.99
-  leverage: 1
-  initial_balance: 10000
-  commission_rate: 0.001
 
 # 最適化設定
 optimization:

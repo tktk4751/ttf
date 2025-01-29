@@ -191,19 +191,21 @@ class WalkForward:
                 training_alpha = training_analytics.calculate_alpha_score()
                 
                 # テストデータでのバックテスト
-                position_sizing = FixedRatioSizing({
-                    'ratio': self.config['position_sizing']['params']['ratio'],
-                    'min_position': None,
-                    'max_position': None,
-                    'leverage': 1
-                })
+                position_config = self.config.get('position_sizing', {})
+                position_sizing = FixedRatioSizing(
+                    ratio=position_config.get('ratio', 0.5),  # デフォルト値を0.5に設定
+                    leverage=position_config.get('leverage', 1.0)
+                )
 
+                # バックテスターの作成
+                initial_balance = self.config.get('position_sizing', {}).get('initial_balance', 10000)
+                commission_rate = self.config.get('position_sizing', {}).get('commission_rate', 0.001)
                 backtester = Backtester(
                     strategy=strategy,
-                    position_sizing=position_sizing,
-                    initial_balance=self.config['backtest']['initial_balance'],
-                    commission=self.config['backtest']['commission'],
-                    max_positions=self.config['backtest'].get('max_positions', 1)
+                    position_manager=position_sizing,
+                    initial_balance=initial_balance,
+                    commission=commission_rate,
+                    verbose=True
                 )
                 
                 # シンボルはデータ設定から取得

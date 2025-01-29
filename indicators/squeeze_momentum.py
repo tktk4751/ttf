@@ -23,7 +23,6 @@ class SqueezeMomentum(Indicator):
         bb_mult: float = 2.0,
         kc_length: int = 20,
         kc_mult: float = 1.5,
-        use_tr: bool = True
     ):
         """
         コンストラクタ

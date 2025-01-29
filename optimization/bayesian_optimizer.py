@@ -74,15 +74,15 @@ class BayesianOptimizer(BaseOptimizer):
     def _run_backtest(self, strategy: BaseStrategy) -> List[Any]:
         """バックテストを実行"""
         # ポジションサイジングの作成
-        position_config = self.config.get('position', {})
+        position_config = self.config.get('position_sizing', {})
         position_sizing = FixedRatioSizing(
-            ratio=position_config.get('ratio', 0.99),
+            ratio=position_config.get('ratio', 0.5),
             leverage=position_config.get('leverage', 1.0)
         )
         
         # バックテスターの作成
-        initial_balance = self.config.get('position', {}).get('initial_balance', 10000)
-        commission_rate = self.config.get('position', {}).get('commission_rate', 0.001)
+        initial_balance = self.config.get('position_sizing', {}).get('initial_balance', 10000)
+        commission_rate = self.config.get('position_sizing', {}).get('commission_rate', 0.001)
         backtester = Backtester(
             strategy=strategy,
             position_manager=position_sizing,
@@ -101,8 +101,8 @@ class BayesianOptimizer(BaseOptimizer):
         if len(trades) < 30:  # 最小トレード数の閾値
             raise optuna.TrialPruned()
         
-        analytics = Analytics(trades, self.config.get('position', {}).get('initial_balance', 10000))
-        score = analytics.calculate_alpha_score_v2()
+        analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
+        score = analytics.calculate_win_calmar_score()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score

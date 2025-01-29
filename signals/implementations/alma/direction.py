@@ -9,7 +9,7 @@ from ...base_signal import BaseSignal
 from ...interfaces.direction import IDirectionSignal
 from indicators.alma import ALMA
 
-class ALMADirectionSignal(BaseSignal, IDirectionSignal):
+class ALMATrendFollowingStrategy(BaseSignal, IDirectionSignal):
     """
     ALMAを使用した方向性シグナル
     - 短期ALMA > 長期ALMA: ロング方向 (1)
@@ -156,5 +156,45 @@ class ALMACirculationSignal(BaseSignal, IDirectionSignal):
         signals = np.where(stage4, 4, signals)
         signals = np.where(stage5, 5, signals)
         signals = np.where(stage6, 6, signals)
+        
+        return signals 
+    
+
+
+class ALMADirectionSignal2(BaseSignal, IDirectionSignal):
+    """ALMAディレクションシグナル2
+    
+    n期間ALMAが終値より下にあるときは1（上昇トレンド）、
+    上にあるときは-1（下降トレンド）を出力する
+    """
+    
+    def __init__(self, period: int = 200):
+        """
+        初期化
+        
+        Args:
+            period: ALMA期間（デフォルト: 200）
+        """
+        super().__init__("ALMADirectionSignal", {"period": period})
+        self.alma = ALMA(period=period)
+    
+    def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        シグナルを生成
+        
+        Args:
+            data: 価格データ
+            
+        Returns:
+            1（上昇トレンド）または-1（下降トレンド）の配列
+        """
+        df = pd.DataFrame(data)
+        close = df['close'].values
+        
+        # ALMAの計算
+        alma_values = self.alma.calculate(data)
+        
+        # シグナルの生成
+        signals = np.where(close > alma_values, 1, -1)
         
         return signals 

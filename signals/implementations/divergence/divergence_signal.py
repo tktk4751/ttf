@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from signals.base_signal import BaseSignal
-from signals.interfaces import IEntrySignal
+from ...interfaces.entry import IEntrySignal
 
 
 class DivergenceSignal(BaseSignal, IEntrySignal):

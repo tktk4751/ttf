@@ -6,49 +6,53 @@ import numpy as np
 import pandas as pd
 
 from ...base_signal import BaseSignal
-from ...interfaces.filter import IFilterSignal
 from indicators.adx import ADX
 
-class ADXFilterSignal(BaseSignal, IFilterSignal):
+class ADXFilterSignal(BaseSignal):
     """
-    ADXを使用したフィルターシグナル
-    - ADX >= solid: トレンド相場 (1)
-    - ADX < solid: レンジ相場 (-1)
+    ADXフィルターシグナル
+    
+    ADXが閾値を上回っているときにトレンド相場と判断し、1を返す
     """
     
-    def __init__(self, period: int = 14, solid: Dict[str, Any] = None):
+    def __init__(self, period: int = 14, threshold: float = 25.0):
         """
-        コンストラクタ
+        初期化
         
         Args:
             period: ADXの期間
-            solid: パラメータ辞書
-                - adx_solid: ADXのしきい値
+            threshold: ADXの閾値
         """
-        params = {
+        super().__init__("ADXFilter", {
             'period': period,
-            'solid': solid or {
-                'adx_solid': 40  # デフォルトのしきい値
-            }
-        }
-        super().__init__(f"ADXFilter({period})", params)
+            'threshold': threshold
+        })
         self._adx = ADX(period)
+        self.threshold = threshold
+        
+        # キャッシュ用の変数
+        self._data_len = 0
+        self._signals = None
     
     def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        シグナルを生成する
+        シグナルを生成
         
         Args:
             data: 価格データ
-        
+            
         Returns:
-            シグナルの配列 (1: トレンド相場, -1: レンジ相場)
+            np.ndarray: フィルターシグナル (1: トレンド相場, 0: レンジ相場)
         """
-        # ADXの計算
-        adx_values = self._adx.calculate(data).adx
+        current_len = len(data)
         
-        # シグナルの生成
-        solid = self._params['solid']
-        signals = np.where(adx_values >= solid['adx_solid'], 1, -1)
+        # データ長が変わった場合のみ再計算
+        if self._signals is None or current_len != self._data_len:
+            # ADX値の計算
+            adx_result = self._adx.calculate(data)
+            
+            # シグナルの生成
+            self._signals = np.where(adx_result.adx > self.threshold, 1, 0)
+            self._data_len = current_len
         
-        return signals 
+        return self._signals 

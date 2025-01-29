@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 from .entry import ALMACrossoverEntrySignal
-from .direction import ALMADirectionSignal
+from .direction import ALMADirectionSignal2
 
 __all__ = [
     'ALMACrossoverEntrySignal',
-    'ALMADirectionSignal'
+    'ALMADirectionSignal2'
 ] 

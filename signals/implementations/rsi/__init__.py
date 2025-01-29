@@ -4,4 +4,4 @@
 from .entry import RSIEntrySignal
 from .exit import RSIExitSignal
 
-__all__ = ['RSIEntrySignal', 'RSIExitSignal'] 
+__all__ = ['RSIEntrySignal', 'RSIExitSignal', 'RSIExit2Signal'] 

@@ -216,13 +216,13 @@ class WalkForwardOptimizer:
                 # ポジションサイジングの設定
                 position_config = self.config.get('position_sizing', {})
                 position_sizing = FixedRatioSizing(
-                    ratio=position_config.get('ratio', 0.99),
+                    ratio=position_config.get('ratio', 0.5),
                     leverage=position_config.get('leverage', 1.0)
                 )
                 
                 # バックテスターの作成と実行
-                initial_balance = self.config.get('position', {}).get('initial_balance', 10000)
-                commission_rate = self.config.get('position', {}).get('commission_rate', 0.001)
+                initial_balance = self.config.get('position_sizing', {}).get('initial_balance', 10000)
+                commission_rate = self.config.get('position_sizing', {}).get('commission_rate', 0.001)
                 backtester = Backtester(
                     strategy=strategy,
                     position_manager=position_sizing,

@@ -67,3 +67,62 @@ class MFIExitSignal(BaseSignal, IExitSignal):
         signals = np.where(short_exit, -1, signals)
         
         return signals 
+    
+
+
+class MFIExit2Signal(BaseSignal, IExitSignal):
+    """
+    MFIを使用したエグジットシグナル
+    - ロングエグジット: MFI <= 20 (1を出力)
+    - ショートエグジット: MFI >= 80 (-1を出力)
+    """
+    
+    def __init__(self, period: int = 14, solid: Dict[str, Any] = None):
+        """
+        コンストラクタ
+        
+        Args:
+            period: MFIの期間
+            solid: パラメータ辞書
+                - mfi_long_exit_solid: ロングエグジットのMFIしきい値
+                - mfi_short_exit_solid: ショートエグジットのMFIしきい値
+        """
+        params = {
+            'period': period,
+            'solid': solid or {
+                'mfi_long_exit_solid': 20,
+                'mfi_short_exit_solid': 80
+            }
+        }
+        super().__init__(f"MFIExit2({period})", params)
+        self._mfi = MFI(period)
+    
+    def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        シグナルを生成する
+        
+        Args:
+            data: 価格データ
+        
+        Returns:
+            シグナルの配列 (1: ロングエグジット, -1: ショートエグジット, 0: シグナルなし)
+        """
+        mfi_values = pd.Series(self._mfi.calculate(data))
+        
+        # シグナルの初期化
+        signals = np.zeros(len(mfi_values))
+        
+        # エグジットシグナルの生成
+        solid = self._params['solid']
+        
+        # ロングポジションのエグジット条件
+        long_exit = mfi_values <= solid['mfi_long_exit_solid']
+        
+        # ショートポジションのエグジット条件
+        short_exit = mfi_values >= solid['mfi_short_exit_solid']
+        
+        # シグナルの設定
+        signals = np.where(long_exit, 1, signals)
+        signals = np.where(short_exit, -1, signals)
+        
+        return signals 

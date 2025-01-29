@@ -1,3 +1,5 @@
+import yaml
+from pathlib import Path
 import numpy as np
 from typing import List, Optional, Tuple, Dict
 from datetime import datetime
@@ -778,6 +780,10 @@ class Analytics:
         
     def get_full_analysis(self) -> Dict:
         """すべての分析結果を取得"""
+        # ポジションサイジングの推奨値を取得
+        position_sizing = self.get_position_sizing_recommendations()
+        current_position_size = 0.04  # デフォルト値
+        
         return {
             'initial_capital': self.initial_capital,
             'final_capital': self.final_capital,
@@ -806,8 +812,20 @@ class Analytics:
             'pessimistic_return_ratio': self.calculate_pessimistic_return_ratio(),
             'alpha_score': self.calculate_alpha_score(),
             'alpha_score_v2': self.calculate_alpha_score_v2(),
+            'win_calmar_score': self.calculate_win_calmar_score(),
             'sqn': self.calculate_sqn(),
             'average_bars': self.calculate_average_bars(),
+            
+            # ポジションサイジング関連の指標
+            'position_sizing': {
+                'kelly_criterion': position_sizing['kelly_criterion'],
+                'half_kelly': position_sizing['half_kelly'],
+                'quarter_kelly': position_sizing['quarter_kelly'],
+                'optimal_f': position_sizing['optimal_f'],
+                'safe_position_size': position_sizing['safe_position_size'],
+                'current_position_size': current_position_size,
+                'current_ruin_probability': self.calculate_balsar_ruin_probability(current_position_size)
+            },
             
             # ポジションタイプ別の分析
             'long': {
@@ -921,7 +939,51 @@ class Analytics:
         print(f"📉 悲観的リターンレシオ: {self.calculate_pessimistic_return_ratio():.2f}")
         print(f"📈 アルファスコア: {self.calculate_alpha_score():.2f}")
         print(f"📈 アルファスコアv2: {self.calculate_alpha_score_v2():.2f}")
+        print(f"🎯 勝率/カルマースコア: {self.calculate_win_calmar_score():.2f}")
         print(f"📊 SQNスコア: {self.calculate_sqn():.2f}")
+
+        # ポジションサイジングの推奨値
+        print("\n💰 === ポジションサイジング分析 ===")
+        recommendations = self.get_position_sizing_recommendations()
+        
+        print("\n📊 推奨ポジションサイズ:")
+        print(f"🎯 ケリー基準: {recommendations['kelly_criterion']:.4f}")
+        print(f"📊 半ケリー: {recommendations['half_kelly']:.4f} (より保守的)")
+        print(f"📉 1/4ケリー: {recommendations['quarter_kelly']:.4f} (最も保守的)")
+        print(f"📈 オプティマルF: {recommendations['optimal_f']:.4f}")
+        print(f"🛡️ 安全なポジションサイズ: {recommendations['safe_position_size']:.4f} (破産確率0.000001%以下)")
+        
+        # 現在のポジションサイズの分析
+        # 設定ファイルの読み込み
+        config_path = Path('config.yaml')
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    
+        position_config = config.get('position_sizing', {})
+        current_position_size = position_config.get('ratio', 0.1)  # タプルではなく単一の値として取得
+        current_ruin_prob = self.calculate_balsar_ruin_probability(current_position_size)
+        
+        print(f"\n📈 現在の設定:")
+        print(f"💹 ポジションサイズ: {current_position_size:.4f}")
+        print(f"⚠️ 破産確率: {current_ruin_prob:.8%}")
+        
+        # 各手法との比較
+        print("\n📊 現在の設定と推奨値の比較:")
+        kelly_ratio = current_position_size / recommendations['kelly_criterion'] if recommendations['kelly_criterion'] > 0 else float('inf')
+        optimal_f_ratio = current_position_size / recommendations['optimal_f'] if recommendations['optimal_f'] > 0 else float('inf')
+        safe_ratio = current_position_size / recommendations['safe_position_size'] if recommendations['safe_position_size'] > 0 else float('inf')
+        
+        print(f"📈 ケリー基準との比率: {kelly_ratio:.2f}x")
+        print(f"📊 オプティマルFとの比率: {optimal_f_ratio:.2f}x")
+        print(f"🛡️ 安全サイズとの比率: {safe_ratio:.2f}x")
+        
+        # リスク評価
+        risk_level = "🟢 低"
+        if current_ruin_prob > 0.01:  # 1%
+            risk_level = "🔴 高"
+        elif current_ruin_prob > 0.001:  # 0.1%
+            risk_level = "🟡 中"
+        print(f"\n⚠️ リスクレベル: {risk_level}")
 
     def calculate_alpha_score_v2(self) -> float:
         """アルファスコアv2を計算
@@ -954,6 +1016,187 @@ class Analytics:
             sortino ** 0.34 *        # ソルティノレシオ (34%)
             prr ** 0.33 *            # 悲観的リターンレシオ (33%)
             gpr ** 0.33              # GPR (33%)
+        )
+
+        # 0-100のスケールに変換
+        return score * 100
+
+    def calculate_balsar_ruin_probability(self, position_size_ratio: float) -> float:
+        """バルサラの破産確率を計算
+
+        Args:
+            position_size_ratio: ポジションサイズの割合（0-1）
+
+        Returns:
+            float: 破産確率（0-1）
+        """
+        if not self.trades:
+            return 1.0
+
+        win_rate = self.calculate_win_rate() / 100
+        avg_profit, avg_loss = self.calculate_average_profit_loss()
+        
+        if avg_loss == 0:
+            return 0.0
+
+        # リスク/リワード比の計算
+        rr_ratio = abs(avg_profit / avg_loss)
+        
+        # TWRの計算
+        twr = (1 + position_size_ratio * rr_ratio) ** win_rate * (1 - position_size_ratio) ** (1 - win_rate)
+        
+        # 破産確率の計算（バルサラの公式）
+        if twr <= 1:
+            return 1.0
+        return (1 / twr) ** self.initial_capital
+
+    def calculate_safe_position_size(self, max_ruin_probability: float = 0.00000001) -> float:
+        """指定された破産確率以下となる最大のポジションサイズを計算
+
+        Args:
+            max_ruin_probability: 許容される最大破産確率（デフォルト: 0.00000001 = 0.000001%）
+
+        Returns:
+            float: 安全なポジションサイズの割合（0-1）
+        """
+        if not self.trades:
+            return 0.0
+
+        # 二分探索でポジションサイズを探索
+        left = 0.0
+        right = 1.0
+        epsilon = 0.0001  # 収束判定の閾値
+
+        while right - left > epsilon:
+            mid = (left + right) / 2
+            ruin_prob = self.calculate_balsar_ruin_probability(mid)
+            
+            if ruin_prob > max_ruin_probability:
+                right = mid
+            else:
+                left = mid
+
+        return left
+
+    def calculate_kelly_criterion(self) -> float:
+        """ケリー基準を計算
+
+        Returns:
+            float: ケリー基準による最適ポジションサイズの割合（0-1）
+        """
+        if not self.trades:
+            return 0.0
+
+        win_rate = self.calculate_win_rate() / 100
+        avg_profit, avg_loss = self.calculate_average_profit_loss()
+        
+        if avg_loss == 0:
+            return 0.0
+
+        # b = 勝ちトレードの平均利益 / 負けトレードの平均損失の絶対値
+        b = abs(avg_profit / avg_loss)
+        
+        # ケリー基準の計算: f = (bp - q) / b
+        # ここで、p = 勝率、q = 1 - p（負率）
+        f = (b * win_rate - (1 - win_rate)) / b
+        
+        # 結果を0-1の範囲に制限
+        return max(0.0, min(1.0, f))
+
+    def calculate_optimal_f(self) -> float:
+        """オプティマルFを計算
+
+        Returns:
+            float: オプティマルFによる最適ポジションサイズの割合（0-1）
+        """
+        if not self.trades:
+            return 0.0
+
+        # 各トレードのR倍数を計算
+        returns = self.returns
+        
+        if len(returns) == 0:
+            return 0.0
+
+        # 最大の損失を見つける
+        max_loss = abs(min(returns))
+        if max_loss == 0:
+            return 0.0
+
+        # オプティマルFの計算
+        def calculate_twr(f: float) -> float:
+            # TWR（Terminal Wealth Relative）の計算
+            twr = 1.0
+            for r in returns:
+                # f = リスク額 / 最大損失額
+                # r = 実現したリターン
+                twr *= (1 + f * r / max_loss)
+            return twr
+
+        # 黄金分割探索でTWRを最大化するfを見つける
+        golden_ratio = (1 + 5 ** 0.5) / 2
+        a = 0.0
+        b = 1.0
+        c = b - (b - a) / golden_ratio
+        d = a + (b - a) / golden_ratio
+        
+        epsilon = 0.0001  # 収束判定の閾値
+        
+        while abs(b - a) > epsilon:
+            if calculate_twr(c) > calculate_twr(d):
+                b = d
+            else:
+                a = c
+            
+            c = b - (b - a) / golden_ratio
+            d = a + (b - a) / golden_ratio
+
+        return (a + b) / 2
+
+    def get_position_sizing_recommendations(self) -> Dict[str, float]:
+        """各種ポジションサイジング手法による推奨値を取得
+
+        Returns:
+            Dict[str, float]: 各手法による推奨ポジションサイズの割合
+        """
+        kelly = self.calculate_kelly_criterion()
+        optimal_f = self.calculate_optimal_f()
+        safe_size = self.calculate_safe_position_size()
+        
+        return {
+            'kelly_criterion': kelly,
+            'optimal_f': optimal_f,
+            'safe_position_size': safe_size,
+            'half_kelly': kelly / 2,  # 半ケリー（より保守的）
+            'quarter_kelly': kelly / 4  # 1/4ケリー（最も保守的）
+        }
+
+    def calculate_win_calmar_score(self) -> float:
+        """勝率とカルマーレシオを組み合わせたスコアを計算
+
+        以下の要素を幾何平均で組み合わせたパフォーマンス指標：
+        1. 勝率 (50%): トレードの成功率
+        2. カルマーレシオ (50%): リターンとリスクの効率性
+
+        Returns:
+            float: 0-100のスケールでのスコア。高いほど良い。
+        """
+        if not self.trades:
+            return 0.0
+
+        # 各指標を0-1にスケール
+        win_rate = min(max(self.calculate_win_rate(), 0), 100) / 100  # 0-1にスケール
+        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 2) / 2  # 0-1にスケール（2を超える場合は1に丸める）
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        win_rate = win_rate if win_rate > 0 else replacement_value
+        calmar = calmar if calmar > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定（両方50%）
+        score = (
+            win_rate ** 0.5 *     # 勝率 (50%)
+            calmar ** 0.5         # カルマーレシオ (50%)
         )
 
         # 0-100のスケールに変換
