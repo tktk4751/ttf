@@ -8,47 +8,42 @@ from numba import jit
 
 from ...base.signal_generator import BaseSignalGenerator
 from signals.implementations.supertrend.direction import SupertrendDirectionSignal
-from signals.implementations.adx.filter import ADXFilterSignal
 
 @jit(nopython=True)
-def calculate_entry_signals(supertrend: np.ndarray, filter_signal: np.ndarray) -> np.ndarray:
+def calculate_entry_signals(supertrend_signals: np.ndarray) -> np.ndarray:
     """エントリーシグナルを一度に計算（高速化版）"""
-    return np.where(
-        (supertrend == -1) & (filter_signal == 1),
-        -1,
-        0
-    ).astype(np.int8)
+    signals = np.zeros_like(supertrend_signals)
+    
+    for i in range(len(signals)):
+        # スーパートレンドが買いの場合
+        if supertrend_signals[i] == 1:
+            signals[i] = 1
+    
+    return signals.astype(np.int8)
 
-class SupertrendADXShortSignalGenerator(BaseSignalGenerator):
+class SupertrendLongSignalGenerator(BaseSignalGenerator):
     """
-    スーパートレンド+ADXフィルターのシグナル生成クラス（売り専用・高速化版）
+    スーパートレンドのシグナル生成クラス（買い専用・高速化版）
     
     エントリー条件:
-    - スーパートレンドが売りシグナル
-    - ADXがトレンド相場を示している
+    - スーパートレンドが買いシグナル
     
     エグジット条件:
-    - スーパートレンドが買いシグナル
+    - スーパートレンドが売りシグナル
     """
     
     def __init__(
         self,
         supertrend_period: int = 10,
         supertrend_multiplier: float = 3.0,
-        adx_period: int = 14,
-        adx_threshold: float = 30.0,
     ):
         """初期化"""
-        super().__init__("SupertrendADXShortSignalGenerator")
+        super().__init__("SupertrendLongSignalGenerator")
         
         # シグナル生成器の初期化
-        self.direction_signal = SupertrendDirectionSignal(
+        self.supertrend_signal = SupertrendDirectionSignal(
             period=supertrend_period,
             multiplier=supertrend_multiplier
-        )
-        self.filter_signal = ADXFilterSignal(
-            period=adx_period,
-            threshold=adx_threshold
         )
         
         # キャッシュ用の変数
@@ -62,17 +57,13 @@ class SupertrendADXShortSignalGenerator(BaseSignalGenerator):
         
         # データ長が変わった場合のみ再計算
         if self._signals is None or current_len != self._data_len:
-            # データフレームの作成（必要な列のみ）
-            df = data[['open', 'high', 'low', 'close']] if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
-            
-            # 各シグナルの計算（一度に実行）
-            supertrend_signals = self.direction_signal.generate(df).astype(np.int8)
-            filter_signals = self.filter_signal.generate(df).astype(np.int8)
+            # スーパートレンドシグナルの計算
+            supertrend_signals = self.supertrend_signal.generate(data)
             
             # エントリーシグナルの計算（ベクトル化）
-            self._signals = calculate_entry_signals(supertrend_signals, filter_signals)
+            self._signals = calculate_entry_signals(supertrend_signals)
             
-            # エグジット用のシグナルを事前計算
+            # エグジット用にシグナルを保存
             self._supertrend_signals = supertrend_signals
             
             self._data_len = current_len
@@ -85,7 +76,7 @@ class SupertrendADXShortSignalGenerator(BaseSignalGenerator):
     
     def get_exit_signals(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> bool:
         """エグジットシグナル生成（高速化版）"""
-        if position != -1:  # 売りポジションのみ
+        if position != 1:  # ロングポジションのみ
             return False
         
         if self._signals is None or len(data) != self._data_len:
@@ -94,5 +85,5 @@ class SupertrendADXShortSignalGenerator(BaseSignalGenerator):
         if index == -1:
             index = len(data) - 1
         
-        # キャッシュされたシグナルを使用
-        return bool(self._supertrend_signals[index] == 1) 
+        # スーパートレンドの売りシグナルでエグジット
+        return bool(self._supertrend_signals[index] == -1) 

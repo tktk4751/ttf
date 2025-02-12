@@ -12,13 +12,7 @@ from strategies.implementations.supertrend_rsi_chop.strategy import SupertrendRs
 from strategies.implementations.supertrend_chop_mfi.strategy import SupertrendChopMfiStrategy
 from strategies.implementations.alma_trend_following.strategy import ALMATrendFollowingStrategy
 from strategies.implementations.alma_trend_following_v2.strategy import ALMATrendFollowingV2Strategy
-from strategies.implementations.donchian_chop_long.strategy import DonchianChopLongStrategy
-from strategies.implementations.donchian_adx_long.strategy import DonchianADXLongStrategy
-from strategies.implementations.donchian_adx_short.strategy import DonchianADXShortStrategy
-from strategies.implementations.donchian_chop_short.strategy import DonchianChopShortStrategy
-from strategies.implementations.supertrend_chop_long.strategy import SupertrendChopLongStrategy
-from strategies.implementations.supertrend_chop_short.strategy import SupertrendChopShortStrategy
-from strategies.implementations.supertrend_adx_long.strategy import SupertrendADXLongStrategy
+
 from strategies.implementations.squeeze_chop_long.strategy import SqueezeChopLongStrategy
 from strategies.implementations.supertrend_adx_short.strategy import SupertrendADXShortStrategy
 from strategies.implementations.squeeze_chop_short.strategy import SqueezeChopShortStrategy
@@ -30,7 +24,6 @@ from strategies.implementations.alma_cycle.strategy import ALMACycleStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
-import optuna
 from walkforward.walkforward_optimizer import WalkForwardOptimizer
 from walkforward.walkforward_analyzer import WalkForwardAnalyzer
 from walkforward.walkforward_optimizer import TimeSeriesDataSplitter
@@ -47,6 +40,31 @@ from strategies.implementations.supertrend_chop_rsi_short.strategy import Supert
 
 from strategies.implementations.chop_rsi_donchian_long.strategy import ChopRSIDonchianLongStrategy
 from strategies.implementations.chop_rsi_donchian_short.strategy import ChopRSIDonchianShortStrategy
+
+from strategies.implementations.supertrend_chop_roc_long.strategy import SupertrendChopROCLongStrategy
+from strategies.implementations.supertrend_chop_roc_short.strategy import SupertrendChopROCShortStrategy
+
+
+from strategies.implementations.donchian_chop_long.strategy import DonchianChopLongStrategy
+from strategies.implementations.donchian_chop_short.strategy import DonchianChopShortStrategy
+
+from strategies.implementations.donchian_adx_long.strategy import DonchianADXLongStrategy
+from strategies.implementations.donchian_adx_short.strategy import DonchianADXShortStrategy
+
+from strategies.implementations.supertrend_chop_long.strategy import SupertrendChopLongStrategy
+from strategies.implementations.supertrend_chop_short.strategy import SupertrendChopShortStrategy
+
+from strategies.implementations.supertrend_adx_long.strategy import SupertrendADXLongStrategy
+from strategies.implementations.supertrend_adx_short.strategy import SupertrendADXShortStrategy
+
+from strategies.implementations.supertrend_chop_adx_long.strategy import SupertrendChopADXLongStrategy
+from strategies.implementations.supertrend_chop_adx_short.strategy import SupertrendChopADXShortStrategy
+
+from strategies.implementations.supertrend_long.strategy import SupertrendLongStrategy
+from strategies.implementations.supertrend_short.strategy import SupertrendShortStrategy
+
+from strategies.implementations.rsi_range_chop_donchian_long.strategy import RSIRangeChopDonchianLongStrategy
+from strategies.implementations.rsi_range_chop_donchian_short.strategy import RSIRangeChopDonchianShortStrategy
 
 
 
@@ -128,8 +146,8 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=ChopRSIDonchianLongStrategy,
-        param_generator=ChopRSIDonchianLongStrategy.create_optimization_params,
+        strategy_class=SupertrendChopLongStrategy,
+        param_generator=SupertrendChopLongStrategy.create_optimization_params,
         config=config,
         n_trials=300,
         n_jobs=-1
@@ -353,7 +371,7 @@ def main():
     # run_walkforward_test(config)
     run_optimization(config)
     # run_montecarlo(config)
-    # run_backtest(config)  # この行を削除または#でコメントアウト
+    # run_backtest(config)  
 
 
     

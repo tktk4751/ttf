@@ -28,8 +28,8 @@ class DonchianChopLongStrategy(BaseStrategy):
         donchian_period: int = 20,
         chop_period: int = 14,
         chop_threshold: float = 50.0,
-        rsi_period: int = 14,
-        rsi_exit_threshold: float = 86.0
+        # rsi_period: int = 14,
+        # rsi_exit_threshold: float = 90.0
     ):
         """
         初期化
@@ -48,8 +48,8 @@ class DonchianChopLongStrategy(BaseStrategy):
             'donchian_period': donchian_period,
             'chop_period': chop_period,
             'chop_threshold': chop_threshold,
-            'rsi_period': rsi_period,
-            'rsi_exit_threshold': rsi_exit_threshold
+            # 'rsi_period': rsi_period,
+            # 'rsi_exit_threshold': rsi_exit_threshold
         }
         
         # シグナル生成器の初期化
@@ -57,8 +57,8 @@ class DonchianChopLongStrategy(BaseStrategy):
             donchian_period=donchian_period,
             chop_period=chop_period,
             chop_threshold=chop_threshold,
-            rsi_period=rsi_period,
-            rsi_exit_threshold=rsi_exit_threshold
+            # rsi_period=rsi_period,
+            # rsi_exit_threshold=rsi_exit_threshold
         )
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -102,8 +102,8 @@ class DonchianChopLongStrategy(BaseStrategy):
             'donchian_period': trial.suggest_int('donchian_period', 10, 300, step=1),
             'chop_period': trial.suggest_int('chop_period', 5, 100, step=1),
             'chop_threshold': 50,
-            'rsi_period': trial.suggest_int('rsi_period', 8, 34, step=1),
-            'rsi_exit_threshold': 86
+            # 'rsi_period': trial.suggest_int('rsi_period', 8, 34, step=1),
+            # 'rsi_exit_threshold': 86
         }
         return params
     
@@ -122,6 +122,6 @@ class DonchianChopLongStrategy(BaseStrategy):
             'donchian_period': int(params['donchian_period']),
             'chop_period': int(params['chop_period']),
             'chop_threshold': 50,
-            'rsi_period': int(params['rsi_period']),
-            'rsi_exit_threshold': 86
+            # 'rsi_period': int(params['rsi_period']),
+            # 'rsi_exit_threshold': 86
         } 

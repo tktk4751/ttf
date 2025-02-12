@@ -4,6 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+binance-historical-data = "*"
 
 [dev-packages]
 

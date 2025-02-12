@@ -22,4 +22,16 @@ class IStrategy(Protocol):
     
     def set_parameters(self, params: Dict[str, Any]) -> None:
         """パラメータを設定する"""
+        ...
+
+    def get_entry_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """エントリー価格を取得する"""
+        ...
+
+    def get_stop_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """ストップロス価格を取得する"""
+        ...
+
+    def get_exit_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """エグジット価格を取得する"""
         ... 

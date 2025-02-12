@@ -72,4 +72,41 @@ class SupertrendChopLongStrategy(BaseStrategy):
             'supertrend_multiplier': float(params['supertrend_multiplier']),
             'chop_period': int(params['chop_period']),
             'chop_threshold': 50,
-        } 
+        }
+
+    def get_entry_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """
+        エントリー価格を取得する
+        
+        Args:
+            data: 価格データ
+            position: ポジション方向 (1: ロング, -1: ショート)
+            index: データのインデックス（デフォルト: -1 = 最新のデータ）
+            
+        Returns:
+            float: エントリー価格
+        """
+        if position != 1:  # ロングポジションのみ対応
+            raise ValueError("This strategy only supports long positions")
+            
+        if isinstance(data, pd.DataFrame):
+            return data['close'].iloc[index]
+        return data[index, 3]  # close価格のインデックス
+
+    def get_stop_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """
+        ストップロス価格を取得する
+        
+        Args:
+            data: 価格データ
+            position: ポジション方向 (1: ロング, -1: ショート)
+            index: データのインデックス（デフォルト: -1 = 最新のデータ）
+            
+        Returns:
+            float: ストップロス価格（スーパートレンドの下限値）
+        """
+        if position != 1:  # ロングポジションのみ対応
+            raise ValueError("This strategy only supports long positions")
+            
+        # シグナル生成器からスーパートレンドの下限値を取得
+        return self._signal_generator.get_stop_price(data, index) 

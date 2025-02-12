@@ -15,7 +15,7 @@ class ADXFilterSignal(BaseSignal):
     ADXが閾値を上回っているときにトレンド相場と判断し、1を返す
     """
     
-    def __init__(self, period: int = 14, threshold: float = 25.0):
+    def __init__(self, period: int = 14, threshold: float = 30.0):
         """
         初期化
         

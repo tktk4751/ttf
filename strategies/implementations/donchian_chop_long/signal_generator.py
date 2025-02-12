@@ -41,8 +41,8 @@ class DonchianChopLongSignalGenerator(BaseSignalGenerator):
         donchian_period: int = 20,
         chop_period: int = 14,
         chop_threshold: float = 50.0,
-        rsi_period: int = 14,
-        rsi_exit_threshold: float = 86.0,
+        # rsi_period: int = 14,
+        # rsi_exit_threshold: float = 90.0,
         # rsi_exit2_threshold: float = 20.0
     ):
         """初期化"""
@@ -54,13 +54,13 @@ class DonchianChopLongSignalGenerator(BaseSignalGenerator):
             period=chop_period,
             solid={'chop_solid': chop_threshold}
         )
-        self.exit_signal = RSIExitSignal(
-            period=rsi_period,
-            solid={
-                'rsi_long_exit_solid': rsi_exit_threshold,
-                'rsi_short_exit_solid': 14  # 使用しない
-            }
-        )
+        # self.exit_signal = RSIExitSignal(
+        #     period=rsi_period,
+        #     solid={
+        #         'rsi_long_exit_solid': rsi_exit_threshold,
+        #         'rsi_short_exit_solid': 14  # 使用しない
+        #     }
+        # )
         # self.exit2_signal = RSIExit2Signal(
         #     period=rsi_period,
         #     solid={
@@ -94,7 +94,7 @@ class DonchianChopLongSignalGenerator(BaseSignalGenerator):
             
             # エグジット用のシグナルを事前計算
             self._donchian_signals = donchian_signals
-            self._rsi_exit = self.exit_signal.generate(df)
+            # self._rsi_exit = self.exit_signal.generate(df)
             # self._rsi_exit2 = self.exit2_signal.generate(df)
             
             self._data_len = current_len
@@ -118,7 +118,7 @@ class DonchianChopLongSignalGenerator(BaseSignalGenerator):
         
         # キャッシュされたシグナルを使用
         return bool(
-            self._donchian_signals[index] == -1 or
-            self._rsi_exit[index] == 1 
+            self._donchian_signals[index] == -1
+            # self._rsi_exit[index] == 1 
             # self._rsi_exit2[index] == 1
         ) 

@@ -102,7 +102,7 @@ class BayesianOptimizer(BaseOptimizer):
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
-        score = analytics.calculate_win_calmar_score()
+        score = analytics.calculate_alpha_score()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score

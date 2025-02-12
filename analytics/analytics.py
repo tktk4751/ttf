@@ -459,7 +459,7 @@ class Analytics:
             return 0.0
 
         # 各指標を0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 2) / 2    # 0-1にスケール
+        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 3) / 3    # 0-1にスケール
         sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
         prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
         max_dd = self.calculate_max_drawdown()[0]
@@ -813,6 +813,7 @@ class Analytics:
             'alpha_score': self.calculate_alpha_score(),
             'alpha_score_v2': self.calculate_alpha_score_v2(),
             'win_calmar_score': self.calculate_win_calmar_score(),
+            'drawdown_prr_score': self.calculate_drawdown_prr_score(),
             'sqn': self.calculate_sqn(),
             'average_bars': self.calculate_average_bars(),
             
@@ -940,6 +941,7 @@ class Analytics:
         print(f"📈 アルファスコア: {self.calculate_alpha_score():.2f}")
         print(f"📈 アルファスコアv2: {self.calculate_alpha_score_v2():.2f}")
         print(f"🎯 勝率/カルマースコア: {self.calculate_win_calmar_score():.2f}")
+        print(f"📊 ドローダウン/PRRスコア: {self.calculate_drawdown_prr_score():.2f}")
         print(f"📊 SQNスコア: {self.calculate_sqn():.2f}")
 
         # ポジションサイジングの推奨値
@@ -990,9 +992,9 @@ class Analytics:
 
         以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
 
-        1. ソルティノレシオ (34%): ダウンサイドリスクに対するリターン
-        2. 悲観的リターンレシオ (33%): 保守的な収益性評価
-        3. GPR (33%): リターンの効率性
+        1. ソルティノレシオ (40%): ダウンサイドリスクに対するリターン
+        2. カルマーレシオ (60%): 最大ドローダウンに対するリターン
+
 
         Returns:
             float: 0-100のスケールでのスコア。高いほど良い。
@@ -1001,26 +1003,22 @@ class Analytics:
             return 0.0
 
         # 各指標を0-1にスケール
-        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
-        prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
-        gpr = min(max(self.calculate_gpr(), 0), 4) / 4  # 0-1にスケール
+        calmar = min(max(self.calculate_calmar_ratio(), 0), 5) / 5    # 0-1にスケール
+        sortino = min(max(self.calculate_sortino_ratio(), 0), 6) / 6  # 0-1にスケール     
 
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
+        calmar = calmar if calmar > 0 else replacement_value
         sortino = sortino if sortino > 0 else replacement_value
-        prr = prr if prr > 0 else replacement_value
-        gpr = gpr if gpr > 0 else replacement_value
 
         # 各指標の重要度に応じて指数を設定
         score = (
-            sortino ** 0.34 *        # ソルティノレシオ (34%)
-            prr ** 0.33 *            # 悲観的リターンレシオ (33%)
-            gpr ** 0.33              # GPR (33%)
+            calmar ** 0.60 *         # カルマーレシオ (60%)
+            sortino ** 0.40       # ソルティノレシオ (40%)
         )
 
-        # 0-100のスケールに変換
+        # 0-100のスケールに変換 (補正不要)
         return score * 100
-
     def calculate_balsar_ruin_probability(self, position_size_ratio: float) -> float:
         """バルサラの破産確率を計算
 
@@ -1186,7 +1184,7 @@ class Analytics:
 
         # 各指標を0-1にスケール
         win_rate = min(max(self.calculate_win_rate(), 0), 100) / 100  # 0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 2) / 2  # 0-1にスケール（2を超える場合は1に丸める）
+        calmar = min(max(self.calculate_calmar_ratio(), 0), 6) / 6  # 0-1にスケール（6を超える場合は1に丸める）
 
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
@@ -1195,8 +1193,39 @@ class Analytics:
 
         # 各指標の重要度に応じて指数を設定（両方50%）
         score = (
-            win_rate ** 0.5 *     # 勝率 (50%)
-            calmar ** 0.5         # カルマーレシオ (50%)
+            win_rate ** 0.4 *     # 勝率 (40%)
+            calmar ** 0.6       # カルマーレシオ (60%)
+        )
+
+        # 0-100のスケールに変換
+        return score * 100
+
+    def calculate_drawdown_prr_score(self) -> float:
+        """最大ドローダウンと悲観的リターンレシオを組み合わせたスコアを計算
+
+        以下の要素を幾何平均で組み合わせたパフォーマンス指標：
+        1. 最大ドローダウン (60%): リスク管理の効率性
+        2. 悲観的リターンレシオ (40%): 保守的な収益性評価
+
+        Returns:
+            float: 0-100のスケールでのスコア。高いほど良い。
+        """
+        if not self.trades:
+            return 0.0
+
+        # 各指標を0-1にスケール
+        max_dd = max(0, 1 - (self.calculate_max_drawdown()[0] / 100))  # ドローダウンが小さいほど高スコア
+        prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        max_dd = max_dd if max_dd > 0 else replacement_value
+        prr = prr if prr > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定
+        score = (
+            max_dd ** 0.60 *     # 最大ドローダウン (60%)
+            prr ** 0.40          # 悲観的リターンレシオ (40%)
         )
 
         # 0-100のスケールに変換

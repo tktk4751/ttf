@@ -76,4 +76,20 @@ class BaseStrategy(IStrategy, IOptimization):
         Returns:
             float: ストップロス価格
         """
-        raise NotImplementedError 
+        raise NotImplementedError
+
+    def get_exit_price(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> float:
+        """
+        エグジット価格を取得する
+        
+        Args:
+            data: 価格データ
+            position: ポジション方向 (1: ロング, -1: ショート)
+            index: データのインデックス（デフォルト: -1 = 最新のデータ）
+            
+        Returns:
+            float: エグジット価格（デフォルトでは現在の終値）
+        """
+        if isinstance(data, pd.DataFrame):
+            return data['close'].iloc[index]
+        return data[index, 3]  # close価格のインデックスは3 
