@@ -144,6 +144,8 @@ from strategies.implementations.macd_rsi_divergence_long.strategy import MACDDiv
 from strategies.implementations.rsi_div_roc_long.strategy import RSIDivROCLongStrategy
 from strategies.implementations.roc_rsi_divergence_long.strategy import ROCDivergenceLongStrategy
 
+from strategies.implementations.gvidya_keltner_single_long.strategy import GVIDYAKeltnerSingleLongStrategy
+
 def run_backtest(config: dict):
     """バックテストを実行"""
     # データの準備
@@ -160,7 +162,7 @@ def run_backtest(config: dict):
     }
     
     # 戦略の作成
-    strategy = BuyTrendpredictor()
+    strategy = GVIDYAKeltnerSingleLongStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -202,8 +204,8 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=BuyTrendpredictor,
-        param_generator=BuyTrendpredictor.create_optimization_params,
+        strategy_class=GVIDYAKeltnerSingleLongStrategy,
+        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
         config=config,
         n_trials=500,
         n_jobs=-1
@@ -241,8 +243,8 @@ def run_walkforward_test(config: dict):
 
 
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=BuyTrendpredictor,
-        param_generator=BuyTrendpredictor.create_optimization_params,
+        strategy_class=GVIDYAKeltnerSingleLongStrategy,
+        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
         config=config,
         n_trials=300,
         n_jobs=-1
@@ -369,12 +371,12 @@ def main():
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    # run_walkforward_test(config)
+    run_walkforward_test(config)
     # run_optimization(config)
     # run_montecarlo(config)
 
 
-    run_backtest(config)  
+    # run_backtest(config)  
 
 
     
