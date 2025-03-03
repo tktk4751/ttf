@@ -7,50 +7,47 @@ import pandas as pd
 from numba import jit
 
 from ...base.signal_generator import BaseSignalGenerator
-from signals.implementations.rsi.filter import RSIRangeFilterSignal
-from signals.implementations.chop.filter import ChopFilterSignal
+from signals.implementations.supertrend.direction import SupertrendDirectionSignal
 from signals.implementations.donchian.entry import DonchianBreakoutEntrySignal
 
 @jit(nopython=True)
-def calculate_entry_signals(rsi_signals: np.ndarray, donchian_signals: np.ndarray) -> np.ndarray:
+def calculate_entry_signals(supertrend_signals: np.ndarray, donchian_signals: np.ndarray) -> np.ndarray:
     """エントリーシグナルを一度に計算（高速化版）"""
-    signals = np.zeros_like(rsi_signals)
+    signals = np.zeros_like(supertrend_signals)
     
     for i in range(len(signals)):
-        # RSIレンジフィルターが1、CHOPフィルターが-1、ドンチャンが-1の場合
-        if rsi_signals[i] == 1 and donchian_signals[i] == -1:
+        # スーパートレンドが-1（下降トレンド）かつドンチャンが1の場合
+        if supertrend_signals[i] == -1 and donchian_signals[i] == 1:
             signals[i] = 1
     
     return signals.astype(np.int8)
 
-class RSIRangeChopDonchianLongSignalGenerator(BaseSignalGenerator):
+class SupertrendDonchianShortSignalGenerator(BaseSignalGenerator):
     """
-    RSIレンジ+CHOP+ドンチャンのシグナル生成クラス（買い専用・高速化版）
+    スーパートレンド+ドンチャンのシグナル生成クラス（売り専用・高速化版）
     
     エントリー条件:
-    - RSIレンジフィルターが1（レンジ相場）
-    - CHOPフィルターが-1（トレンド相場）
-    - ドンチャンシグナルが-1
+    - スーパートレンドが-1（下降トレンド）
+    - ドンチャンシグナルが1
     
     エグジット条件:
-    - ドンチャンシグナルが再度-1
-    もしくは
-    - ドンチャンシグナルが1
+    - スーパートレンドが1（上昇トレンド）
     """
     
     def __init__(
         self,
-        rsi_period: int = 14,
+        supertrend_period: int = 10,
+        supertrend_multiplier: float = 3.0,
         donchian_period: int = 20,
     ):
         """初期化"""
-        super().__init__("RSIRangeChopDonchianLongSignalGenerator")
+        super().__init__("SupertrendDonchianShortSignalGenerator")
         
         # シグナル生成器の初期化
-        self.rsi_signal = RSIRangeFilterSignal(
-            period=rsi_period
+        self.supertrend_signal = SupertrendDirectionSignal(
+            period=supertrend_period,
+            multiplier=supertrend_multiplier
         )
-
         self.donchian_signal = DonchianBreakoutEntrySignal(
             period=donchian_period
         )
@@ -58,7 +55,7 @@ class RSIRangeChopDonchianLongSignalGenerator(BaseSignalGenerator):
         # キャッシュ用の変数
         self._data_len = 0
         self._signals = None
-        self._rsi_signals = None
+        self._supertrend_signals = None
         self._donchian_signals = None
     
     def calculate_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> None:
@@ -68,14 +65,14 @@ class RSIRangeChopDonchianLongSignalGenerator(BaseSignalGenerator):
         # データ長が変わった場合のみ再計算
         if self._signals is None or current_len != self._data_len:
             # 各シグナルの計算
-            rsi_signals = self.rsi_signal.generate(data)
+            supertrend_signals = self.supertrend_signal.generate(data)
             donchian_signals = self.donchian_signal.generate(data)
             
             # エントリーシグナルの計算（ベクトル化）
-            self._signals = calculate_entry_signals(rsi_signals, donchian_signals)
+            self._signals = calculate_entry_signals(supertrend_signals, donchian_signals)
             
             # エグジット用にシグナルを保存
-            self._rsi_signals = rsi_signals
+            self._supertrend_signals = supertrend_signals
             self._donchian_signals = donchian_signals
             
             self._data_len = current_len
@@ -88,7 +85,7 @@ class RSIRangeChopDonchianLongSignalGenerator(BaseSignalGenerator):
     
     def get_exit_signals(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> bool:
         """エグジットシグナル生成（高速化版）"""
-        if position != 1:  # ロングポジションのみ
+        if position != -1:  # ショートポジションのみ
             return False
         
         if self._signals is None or len(data) != self._data_len:
@@ -97,5 +94,5 @@ class RSIRangeChopDonchianLongSignalGenerator(BaseSignalGenerator):
         if index == -1:
             index = len(data) - 1
         
-        # ドンチャンシグナルが再度-1、もしくは1になったらエグジット
-        return bool(self._donchian_signals[index] == -1 or self._donchian_signals[index] == 1) 
+        # スーパートレンドが1になったらエグジット
+        return bool(self._supertrend_signals[index] == 1) 

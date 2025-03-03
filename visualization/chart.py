@@ -6,7 +6,7 @@ import mplfinance as mpf
 import pandas as pd
 from pathlib import Path
 
-from logger import get_logger
+# from logger.logger import get_logger
 from data.data_loader import DataLoader
 from data.data_processor import DataProcessor
 from indicators.supertrend import Supertrend
@@ -26,7 +26,7 @@ class Chart:
         Args:
             data: チャートデータ
         """
-        self.logger = get_logger()
+        # self.logger = get_logger()
         self.data = data
         self.indicators: List[Dict[str, Any]] = []
         

@@ -65,18 +65,16 @@ def plot_chart():
     
     print("\nデータを読み込んでいます...")
     
-    # データを読み込む
-    data_dir = Path(config['data']['data_dir'])
-    loader = DataLoader(CSVDataSource(data_dir))
-    raw_data = loader.load_data_from_config(config)
+   # データの準備
+    data_dir = config['data']['data_dir']
+    data_loader = DataLoader(CSVDataSource(data_dir))
+    data_processor = DataProcessor()
+
     
-    # データを処理する
-    processor = DataProcessor()
-    symbol = config['data']['symbol']
-    df = processor.process(raw_data[symbol])
-    
-    print(f"\nデータ期間: {df.index[0]} → {df.index[-1]}")
-    print(f"データ数: {len(df)}")
+    # データの読み込みと処理
+    print("\nLoading and processing data...")
+    raw_data = data_loader.load_data_from_config(config)
+    df = data_processor.process(raw_data)
     
     # スクイーズモメンタムを計算
     squeeze = SqueezeMomentum()
@@ -104,7 +102,7 @@ def plot_chart():
     # ローソク足チャートのプロット
     ax1 = fig.add_subplot(gs[0])
     mpf.plot(df, type='candle', style=s, ax=ax1)
-    ax1.set_title(f'{symbol} Price Chart')
+    ax1.set_title('Price Chart')
     
     # スクイーズモメンタムのプロット
     ax2 = fig.add_subplot(gs[1])

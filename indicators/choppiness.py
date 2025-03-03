@@ -48,8 +48,12 @@ class ChoppinessIndex(Indicator):
         tr['l-pc'] = abs(low - low.shift(1))
         tr = tr.max(axis=1)
         
-        # ATRの合計とレンジの合計を計算
-        atr_sum = tr.rolling(window=self.period).sum()
+        # EMATRの計算
+        alpha = 2 / (self.period + 1)
+        ema_tr = tr.ewm(alpha=alpha, adjust=False).mean()
+        atr_sum = ema_tr * self.period
+        
+        # レンジの計算
         range_sum = (high.rolling(window=self.period).max() - 
                     low.rolling(window=self.period).min())
         

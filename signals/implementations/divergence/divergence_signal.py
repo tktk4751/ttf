@@ -4,9 +4,140 @@
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
+from numba import jit
 
 from signals.base_signal import BaseSignal
 from ...interfaces.entry import IEntrySignal
+
+
+@jit(nopython=True)
+def find_peaks(data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    データから高値と安値のピークを検出（高速化版）
+    
+    Args:
+        data: 検索対象のデータ配列
+        
+    Returns:
+        (peak_indices, trough_indices) のタプル
+        - peak_indices: 高値のインデックス配列
+        - trough_indices: 安値のインデックス配列
+    """
+    peaks = []
+    troughs = []
+    
+    for i in range(1, len(data)-1):
+        if data[i-1] < data[i] > data[i+1]:
+            peaks.append(i)
+        elif data[i-1] > data[i] < data[i+1]:
+            troughs.append(i)
+    
+    return np.array(peaks), np.array(troughs)
+
+
+@jit(nopython=True)
+def detect_divergence(
+    price: np.ndarray,
+    oscillator: np.ndarray,
+    start_idx: int,
+    lookback: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    ダイバージェンスを検出（高速化版）
+    
+    Args:
+        price: 価格データ
+        oscillator: オシレーターの値
+        start_idx: 検索開始インデックス
+        lookback: ルックバック期間
+        
+    Returns:
+        (bullish, bearish) のタプル
+        各配列は検出されたダイバージェンスの位置を示すブール値の配列
+    """
+    # 結果を格納する配列を初期化
+    bullish = np.zeros(len(price), dtype=np.bool_)
+    bearish = np.zeros(len(price), dtype=np.bool_)
+    
+    # データが少なすぎる場合は早期リターン
+    if len(price) < start_idx + 2:
+        return bullish, bearish
+    
+    # ピークを検出
+    price_peaks, price_troughs = find_peaks(price[start_idx:])
+    osc_peaks, osc_troughs = find_peaks(oscillator[start_idx:])
+    
+    # 空の配列チェック
+    if len(price_peaks) == 0 or len(price_troughs) == 0 or len(osc_peaks) == 0 or len(osc_troughs) == 0:
+        return bullish, bearish
+    
+    # インデックスを調整（Numba互換の方法）
+    price_peaks = np.array([p + start_idx for p in price_peaks])
+    price_troughs = np.array([p + start_idx for p in price_troughs])
+    osc_peaks = np.array([p + start_idx for p in osc_peaks])
+    osc_troughs = np.array([p + start_idx for p in osc_troughs])
+    
+    # 強気ダイバージェンス
+    if len(price_troughs) >= 2:
+        for i in range(len(price_troughs)-1):
+            idx1, idx2 = price_troughs[i], price_troughs[i+1]
+            if idx2 - idx1 > lookback:
+                continue
+            
+            # 価格が安値を切り下げている
+            if price[idx2] < price[idx1]:
+                # オシレーターの対応する安値を探す
+                min_dist1 = np.inf
+                min_dist2 = np.inf
+                osc_idx1 = osc_troughs[0]
+                osc_idx2 = osc_troughs[0]
+                
+                # 最も近い安値を探す
+                for t in osc_troughs:
+                    dist1 = abs(t - idx1)
+                    dist2 = abs(t - idx2)
+                    if dist1 < min_dist1:
+                        min_dist1 = dist1
+                        osc_idx1 = t
+                    if dist2 < min_dist2:
+                        min_dist2 = dist2
+                        osc_idx2 = t
+                
+                # オシレーターが安値を切り上げている
+                if oscillator[osc_idx2] > oscillator[osc_idx1]:
+                    bullish[idx2] = True
+    
+    # 弱気ダイバージェンス
+    if len(price_peaks) >= 2:
+        for i in range(len(price_peaks)-1):
+            idx1, idx2 = price_peaks[i], price_peaks[i+1]
+            if idx2 - idx1 > lookback:
+                continue
+            
+            # 価格が高値を切り上げている
+            if price[idx2] > price[idx1]:
+                # オシレーターの対応する高値を探す
+                min_dist1 = np.inf
+                min_dist2 = np.inf
+                osc_idx1 = osc_peaks[0]
+                osc_idx2 = osc_peaks[0]
+                
+                # 最も近い高値を探す
+                for p in osc_peaks:
+                    dist1 = abs(p - idx1)
+                    dist2 = abs(p - idx2)
+                    if dist1 < min_dist1:
+                        min_dist1 = dist1
+                        osc_idx1 = p
+                    if dist2 < min_dist2:
+                        min_dist2 = dist2
+                        osc_idx2 = p
+                
+                # オシレーターが高値を切り下げている
+                if oscillator[osc_idx2] < oscillator[osc_idx1]:
+                    bearish[idx2] = True
+    
+    return bullish, bearish
 
 
 class DivergenceSignal(BaseSignal, IEntrySignal):
@@ -35,101 +166,6 @@ class DivergenceSignal(BaseSignal, IEntrySignal):
         """
         super().__init__("Divergence")
         self.lookback = lookback
-        
-        # 検出結果を保持する変数
-        self._bullish: np.ndarray = None
-        self._bearish: np.ndarray = None
-    
-    def _find_peaks(self, data: np.ndarray) -> Tuple[List[int], List[int]]:
-        """
-        データから高値と安値のピークを検出
-        
-        Args:
-            data: 検索対象のデータ配列
-            
-        Returns:
-            (peak_indices, trough_indices) のタプル
-            - peak_indices: 高値のインデックスリスト
-            - trough_indices: 安値のインデックスリスト
-        """
-        peaks = []
-        troughs = []
-        
-        for i in range(1, len(data)-1):
-            if data[i-1] < data[i] > data[i+1]:
-                peaks.append(i)
-            elif data[i-1] > data[i] < data[i+1]:
-                troughs.append(i)
-        
-        return peaks, troughs
-    
-    def _detect_divergence(
-        self,
-        price: np.ndarray,
-        oscillator: np.ndarray,
-        start_idx: int
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        ダイバージェンスを検出
-        
-        Args:
-            price: 価格データ
-            oscillator: オシレーターの値
-            start_idx: 検索開始インデックス
-            
-        Returns:
-            (bullish, bearish) のタプル
-            各配列は検出されたダイバージェンスの位置を示すブール値の配列
-        """
-        # 結果を格納する配列を初期化
-        bullish = np.zeros(len(price), dtype=bool)
-        bearish = np.zeros(len(price), dtype=bool)
-        
-        # ピークを検出
-        price_peaks, price_troughs = self._find_peaks(price[start_idx:])
-        osc_peaks, osc_troughs = self._find_peaks(oscillator[start_idx:])
-        
-        # インデックスを調整
-        price_peaks = [i + start_idx for i in price_peaks]
-        price_troughs = [i + start_idx for i in price_troughs]
-        osc_peaks = [i + start_idx for i in osc_peaks]
-        osc_troughs = [i + start_idx for i in osc_troughs]
-        
-        # 強気ダイバージェンス
-        # 価格が安値を切り下げ（より低い安値）、オシレーターが安値を切り上げ（より高い安値）
-        for i in range(len(price_troughs)-1):
-            idx1, idx2 = price_troughs[i], price_troughs[i+1]
-            if idx2 - idx1 > self.lookback:
-                continue
-            
-            # 価格が安値を切り下げている
-            if price[idx2] < price[idx1]:
-                # オシレーターの対応する安値を探す
-                osc_idx1 = min(osc_troughs, key=lambda x: abs(x - idx1))
-                osc_idx2 = min(osc_troughs, key=lambda x: abs(x - idx2))
-                
-                # オシレーターが安値を切り上げている
-                if oscillator[osc_idx2] > oscillator[osc_idx1]:
-                    bullish[idx2] = True
-        
-        # 弱気ダイバージェンス
-        # 価格が高値を切り上げ（より高い高値）、オシレーターが高値を切り下げ（より低い高値）
-        for i in range(len(price_peaks)-1):
-            idx1, idx2 = price_peaks[i], price_peaks[i+1]
-            if idx2 - idx1 > self.lookback:
-                continue
-            
-            # 価格が高値を切り上げている
-            if price[idx2] > price[idx1]:
-                # オシレーターの対応する高値を探す
-                osc_idx1 = min(osc_peaks, key=lambda x: abs(x - idx1))
-                osc_idx2 = min(osc_peaks, key=lambda x: abs(x - idx2))
-                
-                # オシレーターが高値を切り下げている
-                if oscillator[osc_idx2] < oscillator[osc_idx1]:
-                    bearish[idx2] = True
-        
-        return bullish, bearish
     
     def generate(self, df: pd.DataFrame, oscillator: np.ndarray) -> np.ndarray:
         """
@@ -148,9 +184,12 @@ class DivergenceSignal(BaseSignal, IEntrySignal):
         # 初期のlookback期間はダイバージェンス計算から除外
         start_idx = self.lookback
         
-        # ダイバージェンスを検出
-        bullish, bearish = self._detect_divergence(
-            df['close'].values, oscillator, start_idx
+        # ダイバージェンスを検出（高速化版）
+        bullish, bearish = detect_divergence(
+            df['close'].values,
+            oscillator,
+            start_idx,
+            self.lookback
         )
         
         # シグナルを生成

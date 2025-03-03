@@ -1,5 +1,6 @@
 # data/spotディレクトリを無視
 data/spot
+data/binance
 # 一般的なPython関連ファイルも無視
 __pycache__/
 *.py[cod]

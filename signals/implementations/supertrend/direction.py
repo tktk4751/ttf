@@ -47,3 +47,17 @@ class SupertrendDirectionSignal(BaseSignal, IDirectionSignal):
         # トレンド方向をそのままシグナルとして使用
         # trend属性は1（上昇トレンド）または-1（下降トレンド）を返す
         return supertrend_result.trend 
+
+    def get_lower_band(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        スーパートレンドの下限バンドを取得する
+
+        Args:
+            data: 価格データ（OHLCV）
+
+        Returns:
+            np.ndarray: 下限バンドの値の配列
+        """
+        # Supertrendの計算
+        supertrend_result = self._supertrend.calculate(data)
+        return supertrend_result.lower_band 

@@ -7,37 +7,47 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import RSIRangeChopDonchianLongSignalGenerator
+from .signal_generator import SupertrendDonchianChopLongSignalGenerator
 
-class RSIRangeChopDonchianLongStrategy(BaseStrategy):
-    """RSIレンジ+CHOP+ドンチャンの買い専用戦略"""
+class SupertrendDonchianChopLongStrategy(BaseStrategy):
+    """スーパートレンド+ドンチャン+CHOPの買い専用戦略"""
     
     def __init__(
         self,
-        rsi_period: int = 14,
+        supertrend_period: int = 10,
+        supertrend_multiplier: float = 3.0,
         donchian_period: int = 20,
+        chop_period: int = 14,
+        chop_threshold: float = 50.0,
     ):
         """
         初期化
         
         Args:
-            rsi_period: RSIの期間
-            chop_period: CHOPの期間
-            chop_threshold: CHOPの閾値
+            supertrend_period: スーパートレンドの期間
+            supertrend_multiplier: スーパートレンドの乗数
             donchian_period: ドンチャンの期間
+            chop_period: CHOPの期間
+            chop_threshold: CHOPのしきい値
         """
-        super().__init__("RSIRangeChopDonchianLong")
+        super().__init__("SupertrendDonchianChopLong")
         
         # パラメータの保存
         self._parameters = {
-            'rsi_period': rsi_period,
+            'supertrend_period': supertrend_period,
+            'supertrend_multiplier': supertrend_multiplier,
             'donchian_period': donchian_period,
+            'chop_period': chop_period,
+            'chop_threshold': chop_threshold,
         }
         
         # シグナル生成器の初期化
-        self._signal_generator = RSIRangeChopDonchianLongSignalGenerator(
-            rsi_period=rsi_period,
+        self._signal_generator = SupertrendDonchianChopLongSignalGenerator(
+            supertrend_period=supertrend_period,
+            supertrend_multiplier=supertrend_multiplier,
             donchian_period=donchian_period,
+            chop_period=chop_period,
+            chop_threshold=chop_threshold,
         )
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -61,14 +71,20 @@ class RSIRangeChopDonchianLongStrategy(BaseStrategy):
     def create_optimization_params(cls, trial: optuna.Trial) -> Dict[str, Any]:
         """最適化パラメータを生成"""
         return {
-            'rsi_period': trial.suggest_int('rsi_period', 5, 30, step=1),
-            'donchian_period': trial.suggest_int('donchian_period', 5, 200, step=5),
+            'supertrend_period': trial.suggest_int('supertrend_period', 5, 120, step=5),
+            'supertrend_multiplier': trial.suggest_float('supertrend_multiplier', 1.0, 10.0, step=0.5),
+            'donchian_period': trial.suggest_int('donchian_period', 5, 400, step=5),
+            'chop_period': trial.suggest_int('chop_period', 5, 120),
+            'chop_threshold': 50,
         }
     
     @classmethod
     def convert_params_to_strategy_format(cls, params: Dict[str, Any]) -> Dict[str, Any]:
         """最適化パラメータを戦略パラメータに変換"""
         return {
-            'rsi_period': int(params['rsi_period']),
+            'supertrend_period': int(params['supertrend_period']),
+            'supertrend_multiplier': float(params['supertrend_multiplier']),
             'donchian_period': int(params['donchian_period']),
+            'chop_period': int(params['chop_period']),
+            'chop_threshold': 50,
         } 

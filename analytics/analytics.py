@@ -442,15 +442,13 @@ class Analytics:
         return geometric_mean * 100
 
     def calculate_alpha_score(self) -> float:
-        """アルファスコアを計算 (ゼロ値置換)
+        """アルファスコアを計算
 
         以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
 
-        1. カルマーレシオ (25%): ドローダウンに対するリターンの効率性
-        2. ソルティノレシオ (30%): ダウンサイドリスクに対するリターン
-        3. 悲観的リターンレシオ (20%): 保守的な収益性評価
-        4. 最大ドローダウン (15%): リスク管理の効率性
-        5. GPR (10%): リターンの効率性
+        1. CAGR (30%): 50%を基準とし、それ以上であればより高いスコア
+        2. 最大ドローダウン (40%): 3%以下で1、20%以上で0
+        3. ソルティノレシオ (30%): 7以上は1に丸める
 
         Returns:
             float: 0-100のスケールでのスコア。高いほど良い。
@@ -458,34 +456,38 @@ class Analytics:
         if not self.trades:
             return 0.0
 
-        # 各指標を0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio_v2(), 0), 3) / 3    # 0-1にスケール
-        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
-        prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
+        # CAGRのスコア化（50%を0.5とし、それ以上は比例的に高くなる）
+        cagr = min(max(self.calculate_cagr() / 100, 0), 1)  # 100%以上は1に丸める
+
+        # 最大ドローダウンのスコア化（3%以下で1、20%以上で0）
         max_dd = self.calculate_max_drawdown()[0]
-        max_dd_score = max(0, 1 - (max_dd / 100))  # ドローダウンが小さいほど高スコア
-        gpr = min(max(self.calculate_gpr(), 0), 3) / 3  # 0-1にスケール（3を超える場合は1に丸める）     
+        if max_dd <= 5:
+            max_dd_score = 1.0
+        elif max_dd >= 20:
+            max_dd_score = 0.0
+        else:
+            # 3%から20%の間で線形補間
+            max_dd_score = 1.0 - ((max_dd - 3) / (20 - 3))
+
+        # ソルティノレシオのスコア化（大きいほど高スコア）
+        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 7以上は1に丸める
 
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
-        calmar = calmar if calmar > 0 else replacement_value
-        sortino = sortino if sortino > 0 else replacement_value
-        prr = prr if prr > 0 else replacement_value
+        cagr = cagr if cagr > 0 else replacement_value
         max_dd_score = max_dd_score if max_dd_score > 0 else replacement_value
-        gpr = gpr if gpr > 0 else replacement_value
+        sortino = sortino if sortino > 0 else replacement_value
 
         # 各指標の重要度に応じて指数を設定
         score = (
-            calmar ** 0.25 *         # カルマーレシオ (25%)
-            sortino ** 0.30 *        # ソルティノレシオ (30%)
-            prr ** 0.20 *            # 悲観的リターンレシオ (20%)
-            max_dd_score ** 0.15 *       # 最大ドローダウン (15%)
-            gpr ** 0.10   # gpr (10%)
+            cagr ** 0.30 *          # CAGR (30%)
+            max_dd_score ** 0.40 *  # 最大ドローダウン (40%)
+            sortino ** 0.30         # ソルティノレシオ (30%)
         )
 
-        # 0-100のスケールに変換 (補正不要)
+        # 0-100のスケールに変換
         return score * 100
-    
+
     def calculate_cagr_dd_score(self) -> float:
        
         if not self.trades:
@@ -814,6 +816,8 @@ class Analytics:
             'alpha_score_v2': self.calculate_alpha_score_v2(),
             'win_calmar_score': self.calculate_win_calmar_score(),
             'drawdown_prr_score': self.calculate_drawdown_prr_score(),
+            'defensive_score': self.calculate_defensive_score(),  # 追加
+            'ratio_score': self.calculate_ratio_score(),  # 追加
             'sqn': self.calculate_sqn(),
             'average_bars': self.calculate_average_bars(),
             
@@ -841,7 +845,7 @@ class Analytics:
             }
         }
 
-    def print_backtest_results(self) -> None:
+    def print_backtest_results(self, close_prices: Optional[np.ndarray] = None) -> None:
         """バックテスト結果の詳細を出力"""
 
         if not self.trades:
@@ -879,6 +883,12 @@ class Analytics:
         avg_profit, avg_loss = self.calculate_average_profit_loss()
         print(f"📈 平均利益: {avg_profit:.2f}")
         print(f"📉 平均損失: {avg_loss:.2f}")
+
+        # 新しい指標の出力を追加
+        avg_win_amount, avg_win_percentage = self.calculate_average_win_metrics()
+        avg_loss_amount, avg_loss_percentage = self.calculate_average_loss_metrics()
+        print(f"💰 平均勝ちトレード: {avg_win_amount:.2f} USD ({avg_win_percentage:.2f}%)")
+        print(f"💸 平均負けトレード: {avg_loss_amount:.2f} USD ({avg_loss_percentage:.2f}%)")
 
         # ポジションタイプ別の分析
         print("\n🎯 === ポジションタイプ別の分析 ===")
@@ -942,7 +952,16 @@ class Analytics:
         print(f"📈 アルファスコアv2: {self.calculate_alpha_score_v2():.2f}")
         print(f"🎯 勝率/カルマースコア: {self.calculate_win_calmar_score():.2f}")
         print(f"📊 ドローダウン/PRRスコア: {self.calculate_drawdown_prr_score():.2f}")
+        print(f"🛡️ ディフェンシブスコア: {self.calculate_defensive_score():.2f}")  # 追加
+        print(f"📊 レシオスコア: {self.calculate_ratio_score():.2f}")  # 追加
         print(f"📊 SQNスコア: {self.calculate_sqn():.2f}")
+
+        metrics = self.calculate_volatility_metrics(close_prices)
+        print("\n📊 === 価格ボラティリティ指標 ===")
+        print(f"📈 年次ボラティリティ: {metrics['annual_volatility']:.2f}%")
+        print(f"📉 日次ボラティリティ: {metrics['daily_volatility']:.2f}%")
+        print(f"📊 年次ボラティリティ(21EMA): {metrics['annual_volatility_ema21']:.2f}%")
+        print(f"📈 日次ボラティリティ(21EMA): {metrics['daily_volatility_ema21']:.2f}%")
 
         # ポジションサイジングの推奨値
         print("\n💰 === ポジションサイジング分析 ===")
@@ -1019,6 +1038,7 @@ class Analytics:
 
         # 0-100のスケールに変換 (補正不要)
         return score * 100
+
     def calculate_balsar_ruin_probability(self, position_size_ratio: float) -> float:
         """バルサラの破産確率を計算
 
@@ -1230,4 +1250,212 @@ class Analytics:
 
         # 0-100のスケールに変換
         return score * 100
+
+    def calculate_average_win_metrics(self) -> Tuple[float, float]:
+        """勝ちトレードの平均利益額とその時の資本に対する割合を計算
+
+        Returns:
+            Tuple[float, float]: (平均利益額（USD）, 平均利益率（%）)
+        """
+        if len(self.profits) == 0:
+            return 0.0, 0.0
+
+        # 勝ちトレードの平均利益額を計算
+        avg_win_amount = np.mean(self.profits)
+
+        # 勝ちトレードの時点での資本に対する平均利益率を計算
+        win_percentages = []
+        for trade in self.trades:
+            if trade.profit_loss > 0:
+                # トレード時点の資本（トレード前の残高）を計算
+                capital_at_trade = trade.balance - trade.profit_loss
+                win_percentages.append((trade.profit_loss / capital_at_trade) * 100)
+
+        avg_win_percentage = np.mean(win_percentages) if win_percentages else 0.0
+
+        return avg_win_amount, avg_win_percentage
+
+    def calculate_average_loss_metrics(self) -> Tuple[float, float]:
+        """負けトレードの平均損失額とその時の資本に対する割合を計算
+
+        Returns:
+            Tuple[float, float]: (平均損失額（USD）, 平均損失率（%）)
+        """
+        if len(self.losses) == 0:
+            return 0.0, 0.0
+
+        # 負けトレードの平均損失額を計算
+        avg_loss_amount = abs(np.mean(self.losses))
+
+        # 負けトレードの時点での資本に対する平均損失率を計算
+        loss_percentages = []
+        for trade in self.trades:
+            if trade.profit_loss < 0:
+                # トレード時点の資本（トレード前の残高）を計算
+                capital_at_trade = trade.balance - trade.profit_loss
+                loss_percentages.append((abs(trade.profit_loss) / capital_at_trade) * 100)
+
+        avg_loss_percentage = np.mean(loss_percentages) if loss_percentages else 0.0
+
+        return avg_loss_amount, avg_loss_percentage
+
+    def calculate_defensive_score(self) -> float:
+        """ディフェンシブスコアを計算
+
+        以下の要素を幾何平均で組み合わせたリスク管理指標：
+        1. 最大ドローダウン (40%): 小さいほど良い
+        2. 平均負けトレード (30%): 小さいほど良い
+        3. ドローダウン回復効率 (30%): 大きいほど良い
+
+        Returns:
+            float: 0-100のスケールでのスコア。高いほど良い（リスクが低い）。
+        """
+        if not self.trades:
+            return 0.0
+
+        # 最大ドローダウンのスコア化（小さいほど高スコア）
+        max_dd = max(0, 1 - (self.calculate_max_drawdown()[0] / 100))
+
+        # 平均負けトレードのスコア化（小さいほど高スコア）
+        avg_loss_amount, avg_loss_percentage = self.calculate_average_loss_metrics()
+        avg_loss_score = max(0, 1 - (avg_loss_percentage / 30))  # 30%以上の損失で0、0%で1
+
+        # ドローダウン回復効率のスコア化（大きいほど高スコア）
+        recovery_efficiency = self.calculate_drawdown_recovery_efficiency()
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        max_dd = max_dd if max_dd > 0 else replacement_value
+        avg_loss_score = avg_loss_score if avg_loss_score > 0 else replacement_value
+        recovery_efficiency = recovery_efficiency if recovery_efficiency > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定
+        score = (
+            max_dd ** 0.40 *                  # 最大ドローダウン (40%)
+            avg_loss_score ** 0.30 *          # 平均負けトレード (30%)
+            recovery_efficiency ** 0.30        # ドローダウン回復効率 (30%)
+        )
+
+        # 0-100のスケールに変換
+        return score * 100
+
+    def calculate_ratio_score(self) -> float:
+        """レシオスコアを計算
+
+        以下の要素を幾何平均で組み合わせたリスク調整後リターン指標：
+        1. シャープレシオ (40%): 4以上で1
+        2. ソルティノレシオ (30%): 7以上で1
+        3. カルマーレシオ (30%): 3以上で1
+
+        Returns:
+            float: 0-100のスケールでのスコア。高いほど良い。
+        """
+        if not self.trades:
+            return 0.0
+
+        # シャープレシオのスコア化
+        sharpe = min(max(self.calculate_sharpe_ratio(), 0), 4) / 4  # 4以上は1に丸める
+
+        # ソルティノレシオのスコア化
+        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 7以上は1に丸める
+
+        # カルマーレシオのスコア化
+        calmar = min(max(self.calculate_calmar_ratio(), 0), 3) / 3  # 3以上は1に丸める
+
+        # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
+        replacement_value = 0.01
+        sharpe = sharpe if sharpe > 0 else replacement_value
+        sortino = sortino if sortino > 0 else replacement_value
+        calmar = calmar if calmar > 0 else replacement_value
+
+        # 各指標の重要度に応じて指数を設定
+        score = (
+            sharpe ** 0.40 *   # シャープレシオ (40%)
+            sortino ** 0.30 *  # ソルティノレシオ (30%)
+            calmar ** 0.30     # カルマーレシオ (30%)
+        )
+
+        # 0-100のスケールに変換
+        return score * 100
+
+    def calculate_volatility_metrics(self, close_prices: np.ndarray) -> Dict[str, float]:
+        """価格データに基づくボラティリティ関連の指標を計算
+
+        以下の指標を計算します：
+        1. 年次リターンの標準偏差
+        2. 日次リターンの標準偏差
+        3. 年次標準偏差の21日EMA
+        4. 日次標準偏差の21日EMA
+
+        Args:
+            close_prices: 終値の配列
+
+        Returns:
+            Dict[str, float]: 各ボラティリティ指標の値
+        """
+        if len(close_prices) < 2:
+            return {
+                'annual_volatility': 0.0,
+                'daily_volatility': 0.0,
+                'annual_volatility_ema21': 0.0,
+                'daily_volatility_ema21': 0.0
+            }
+
+        # 日次リターンを計算
+        daily_returns = np.diff(np.log(close_prices))
+        
+        # 取引日数を計算
+        trading_days = len(close_prices)
+        years = trading_days / 365  # 年間営業日数で除算
+
+        # 日次ボラティリティの計算
+        daily_volatility = np.std(daily_returns, ddof=1)
+
+        # 年次ボラティリティの計算（実際の取引日数に基づく）
+        if years > 0:
+            annual_volatility = daily_volatility * np.sqrt(356)  # 年間営業日数の平方根を乗算
+        else:
+            annual_volatility = 0.0
+
+        # 21日ローリング標準偏差の配列を作成
+        window_size = 21
+        rolling_std_daily = []
+        for i in range(len(daily_returns)):
+            start_idx = max(0, i - window_size + 1)
+            window_data = daily_returns[start_idx:i + 1]
+            if len(window_data) > 1:  # 標準偏差の計算には少なくとも2つのデータポイントが必要
+                std = np.std(window_data, ddof=1)
+            else:
+                std = 0.0
+            rolling_std_daily.append(std)
+        
+        rolling_std_daily = np.array(rolling_std_daily)
+        rolling_std_annual = rolling_std_daily * np.sqrt(252)  # 年間営業日数の平方根を乗算
+
+        # EMSの計算
+        alpha = 2 / (window_size + 1)
+        daily_volatility_ema21 = rolling_std_daily[0]  # 初期値
+        annual_volatility_ema21 = rolling_std_annual[0]  # 初期値
+
+        # EMSを計算
+        for i in range(1, len(rolling_std_daily)):
+            daily_volatility_ema21 = rolling_std_daily[i] * alpha + daily_volatility_ema21 * (1 - alpha)
+            annual_volatility_ema21 = rolling_std_annual[i] * alpha + annual_volatility_ema21 * (1 - alpha)
+
+        return {
+            'annual_volatility': annual_volatility * 100,  # パーセンテージで返す
+            'daily_volatility': daily_volatility * 100,
+            'annual_volatility_ema21': annual_volatility_ema21 * 100,
+            'daily_volatility_ema21': daily_volatility_ema21 * 100
+        }
+
+    def print_volatility_metrics(self) -> None:
+        """ボラティリティ指標を出力"""
+        metrics = self.calculate_volatility_metrics()
+
+        print("\n📊 === ボラティリティ指標 ===")
+        print(f"📈 年次ボラティリティ: {metrics['annual_volatility']:.2f}%")
+        print(f"📉 日次ボラティリティ: {metrics['daily_volatility']:.2f}%")
+        print(f"📊 年次ボラティリティ(21EMA): {metrics['annual_volatility_ema21']:.2f}%")
+        print(f"📈 日次ボラティリティ(21EMA): {metrics['daily_volatility_ema21']:.2f}%")
 

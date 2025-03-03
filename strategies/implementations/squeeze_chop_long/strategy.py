@@ -70,7 +70,7 @@ class SqueezeChopLongStrategy(BaseStrategy):
             'bb_mult': trial.suggest_float('bb_mult', 1.0, 3.0, step=0.5),
             'kc_length': trial.suggest_int('kc_length', 3, 100),
             'kc_mult': trial.suggest_float('kc_mult', 1.0, 3.0, step=0.5),
-            'chop_period': trial.suggest_int('chop_period', 3, 100),
+            'chop_period': 55,
             'chop_threshold': 50,
         }
     
@@ -82,6 +82,6 @@ class SqueezeChopLongStrategy(BaseStrategy):
             'bb_mult': float(params['bb_mult']),
             'kc_length': int(params['kc_length']),
             'kc_mult': float(params['kc_mult']),
-            'chop_period': int(params['chop_period']),
+            'chop_period': 55,
             'chop_threshold': 50,
         } 

@@ -61,9 +61,14 @@ class BayesianOptimizer(BaseOptimizer):
             symbol: data_processor.process(df)
             for symbol, df in raw_data.items()
         }
+
+                # 最初の銘柄の終値データを取得
+        first_symbol = next(iter(processed_data))
+        close_prices = processed_data[first_symbol]['close'].values
         
         self.data = processed_data[symbol]
         self._data_dict = processed_data
+        self._close_prices = close_prices
     
     def _create_strategy(self, trial: optuna.Trial) -> BaseStrategy:
         """Optunaのtrialから戦略インスタンスを生成"""
@@ -98,11 +103,11 @@ class BayesianOptimizer(BaseOptimizer):
         strategy = self._create_strategy(trial)
         trades = self._run_backtest(strategy)
         
-        if len(trades) < 30:  # 最小トレード数の閾値
+        if len(trades) < 10:  # 最小トレード数の閾値
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
-        score = analytics.calculate_alpha_score()
+        score = analytics.calculate_calmar_ratio()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score
@@ -140,12 +145,13 @@ class BayesianOptimizer(BaseOptimizer):
         strategy_params = self.strategy_class.convert_params_to_strategy_format(best_params)
         best_strategy = self.strategy_class(**strategy_params)
         best_trades = self._run_backtest(best_strategy)
-        analytics = Analytics(best_trades, self.config.get('position', {}).get('initial_balance', 10000))
+        analytics = Analytics(best_trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
         
         print("\n=== 最適化結果 ===")
         print(f"最適なパラメータ: {best_params}")
         print(f"最適なスコア: {study.best_value}")
         print("\n=== バックテスト結果 ===")
-        print(analytics.print_backtest_results())
+        print(analytics.print_backtest_results(close_prices=self._close_prices))
+
         
         return best_params, study.best_value 

@@ -1,11 +1,56 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from typing import Union
 import numpy as np
 import pandas as pd
-from typing import Union
+from numba import jit
 
 from .indicator import Indicator
+
+
+@jit(nopython=True)
+def calculate_alma(close: np.ndarray, period: int, offset: float, sigma: float) -> np.ndarray:
+    """
+    ALMAを計算する（高速化版）
+    
+    Args:
+        close: 終値の配列
+        period: 期間
+        offset: オフセット (0-1)。1に近いほど最新のデータを重視
+        sigma: シグマ。大きいほど重みの差が大きくなる
+    
+    Returns:
+        ALMA値の配列
+    """
+    length = len(close)
+    result = np.full(length, np.nan)
+    
+    # ウィンドウサイズが価格データより大きい場合は調整
+    window_size = min(period, length)
+    
+    # ウェイトの計算
+    m = offset * (window_size - 1)
+    s = window_size / sigma
+    weights = np.zeros(window_size)
+    weights_sum = 0.0
+    
+    for i in range(window_size):
+        weight = np.exp(-((i - m) ** 2) / (2 * s * s))
+        weights[i] = weight
+        weights_sum += weight
+    
+    # 重みの正規化
+    weights = weights / weights_sum
+    
+    # ALMAの計算
+    for i in range(window_size - 1, length):
+        result[i] = 0.0
+        for j in range(window_size):
+            result[i] += close[i - window_size + 1 + j] * weights[j]
+    
+    return result
+
 
 class ALMA(Indicator):
     """
@@ -37,25 +82,18 @@ class ALMA(Indicator):
         Returns:
             ALMA値の配列
         """
-        df = pd.DataFrame(data)
-        close = df['close'].values
+        # データの検証と変換
+        if isinstance(data, pd.DataFrame):
+            if 'close' not in data.columns:
+                raise ValueError("DataFrameには'close'カラムが必要です")
+            close = data['close'].values
+        else:
+            close = data[:, 3]  # close
         
-        # ウィンドウサイズが価格データより大きい場合は調整
-        window_size = min(self.period, len(close))
+        # データ長の検証
+        data_length = len(close)
+        self._validate_period(self.period, data_length)
         
-        # ウェイトの計算
-        m = self.offset * (window_size - 1)
-        s = window_size / self.sigma
-        weights = np.array([
-            np.exp(-((i - m) ** 2) / (2 * s * s))
-            for i in range(window_size)
-        ])
-        weights = weights / weights.sum()
-        
-        # ALMAの計算
-        result = np.zeros_like(close)
-        for i in range(window_size - 1, len(close)):
-            result[i] = (close[i - window_size + 1:i + 1] * weights).sum()
-        
-        self._values = result
-        return result 
+        # ALMAの計算（高速化版）
+        self._values = calculate_alma(close, self.period, self.offset, self.sigma)
+        return self._values 

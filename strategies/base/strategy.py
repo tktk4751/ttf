@@ -5,11 +5,12 @@ from typing import Union, Dict, Any
 import numpy as np
 import pandas as pd
 import optuna
+from abc import ABC, abstractmethod
 
 from ..interfaces.strategy import IStrategy
 from ..interfaces.optimization import IOptimization
 
-class BaseStrategy(IStrategy, IOptimization):
+class BaseStrategy(IStrategy, IOptimization, ABC):
     """戦略の基底クラス"""
     
     def __init__(self, name: str):

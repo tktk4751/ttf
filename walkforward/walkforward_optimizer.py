@@ -216,7 +216,7 @@ class WalkForwardOptimizer:
                 # ポジションサイジングの設定
                 position_config = self.config.get('position_sizing', {})
                 position_sizing = FixedRatioSizing(
-                    ratio=position_config.get('ratio', 0.5),
+                    ratio=position_config.get('ratio', 0.2),
                     leverage=position_config.get('leverage', 1.0)
                 )
                 

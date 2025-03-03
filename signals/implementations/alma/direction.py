@@ -120,7 +120,7 @@ class ALMACirculationSignal(BaseSignal, IDirectionSignal):
             data: 価格データ
         
         Returns:
-            シグナルの配列 (1-6: 各ステージを表す数値)
+            シグナルの配列 (1: エントリー, -1: エグジット, 0: その他)
         """
         # ALMAの計算
         short_alma = self._short_alma.calculate(data)
@@ -149,16 +149,70 @@ class ALMACirculationSignal(BaseSignal, IDirectionSignal):
         # ステージ6: 短期 > 長期 > 中期
         stage6 = (short_alma > long_alma) & (long_alma > middle_alma)
         
+        # エントリーシグナル（ステージ2または3）
+        entry_signal = stage2 | stage3
+        
+        # エグジットシグナル（ステージ5、6、または1）
+        exit_signal = stage5 | stage6 | stage1
+        
         # シグナルの設定
-        signals = np.where(stage1, 1, signals)
-        signals = np.where(stage2, 2, signals)
-        signals = np.where(stage3, 3, signals)
-        signals = np.where(stage4, 4, signals)
-        signals = np.where(stage5, 5, signals)
-        signals = np.where(stage6, 6, signals)
+        signals = np.where(entry_signal, -1, signals)  # 売りシグナル
+        signals = np.where(exit_signal, 1, signals)    # 買いシグナル（エグジット）
         
         return signals 
     
+    def get_stage(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        現在のステージを返す
+        
+        Args:
+            data: 価格データ
+        
+        Returns:
+            ステージ番号の配列 (1-6)
+            1: 短期 > 中期 > 長期  （安定上昇相場）
+            2: 中期 > 短期 > 長期  （上昇相場の終焉）
+            3: 中期 > 長期 > 短期   (下降相場の入口)
+            4: 長期 > 中期 > 短期   (安定下降相場)
+            5: 長期 > 短期 > 中期   (下降相場の終焉)
+            6: 短期 > 長期 > 中期   (上昇相場の入口)
+        """
+        # ALMAの計算
+        short_alma = self._short_alma.calculate(data)
+        middle_alma = self._middle_alma.calculate(data)
+        long_alma = self._long_alma.calculate(data)
+        
+        # シグナルの初期化
+        stages = np.zeros(len(data))
+        
+        # ステージの判定
+        # ステージ1: 短期 > 中期 > 長期
+        stage1 = (short_alma > middle_alma) & (middle_alma > long_alma)
+        
+        # ステージ2: 中期 > 短期 > 長期
+        stage2 = (middle_alma > short_alma) & (short_alma > long_alma)
+        
+        # ステージ3: 中期 > 長期 > 短期
+        stage3 = (middle_alma > long_alma) & (long_alma > short_alma)
+        
+        # ステージ4: 長期 > 中期 > 短期
+        stage4 = (long_alma > middle_alma) & (middle_alma > short_alma)
+        
+        # ステージ5: 長期 > 短期 > 中期
+        stage5 = (long_alma > short_alma) & (short_alma > middle_alma)
+        
+        # ステージ6: 短期 > 長期 > 中期
+        stage6 = (short_alma > long_alma) & (long_alma > middle_alma)
+        
+        # ステージの設定
+        stages = np.where(stage1, 1, stages)
+        stages = np.where(stage2, 2, stages)
+        stages = np.where(stage3, 3, stages)
+        stages = np.where(stage4, 4, stages)
+        stages = np.where(stage5, 5, stages)
+        stages = np.where(stage6, 6, stages)
+        
+        return stages
 
 
 class ALMADirectionSignal2(BaseSignal, IDirectionSignal):
@@ -198,3 +252,75 @@ class ALMADirectionSignal2(BaseSignal, IDirectionSignal):
         signals = np.where(close > alma_values, 1, -1)
         
         return signals 
+
+
+class ALMATripleDirectionSignal(BaseSignal, IDirectionSignal):
+    """
+    3本のALMAを使用したディレクションシグナル
+    
+    シグナル条件:
+    1: 短期 > 中期 > 長期 （完全な上昇配列）
+    -1: 短期 < 中期 < 長期 （完全な下降配列）
+    0: その他の配列パターン
+    """
+    
+    def __init__(
+        self,
+        short_period: int = 9,
+        middle_period: int = 21,
+        long_period: int = 55,
+        sigma: float = 6.0,
+        offset: float = 0.85
+    ):
+        """
+        コンストラクタ
+        
+        Args:
+            short_period: 短期ALMAの期間
+            middle_period: 中期ALMAの期間
+            long_period: 長期ALMAの期間
+            sigma: ガウス分布の標準偏差
+            offset: 重みの中心位置（0-1）
+        """
+        params = {
+            'short_period': short_period,
+            'middle_period': middle_period,
+            'long_period': long_period,
+            'sigma': sigma,
+            'offset': offset
+        }
+        super().__init__(f"ALMATripleDirection({short_period}, {middle_period}, {long_period})", params)
+        
+        # ALMAインジケーターの初期化
+        self._short_alma = ALMA(short_period, sigma, offset)
+        self._middle_alma = ALMA(middle_period, sigma, offset)
+        self._long_alma = ALMA(long_period, sigma, offset)
+    
+    def generate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+        """
+        シグナルを生成する
+        
+        Args:
+            data: 価格データ
+        
+        Returns:
+            シグナルの配列 (1: 上昇配列, -1: 下降配列, 0: その他)
+        """
+        # ALMAの計算
+        short_alma = self._short_alma.calculate(data)
+        middle_alma = self._middle_alma.calculate(data)
+        long_alma = self._long_alma.calculate(data)
+        
+        # シグナルの生成
+        # 上昇配列: 短期 > 中期 > 長期
+        uptrend = (short_alma > middle_alma) & (middle_alma > long_alma)
+        
+        # 下降配列: 短期 < 中期 < 長期
+        downtrend = (short_alma < middle_alma) & (middle_alma < long_alma)
+        
+        # シグナルの設定
+        signals = np.zeros(len(data))
+        signals = np.where(uptrend, 1, signals)
+        signals = np.where(downtrend, -1, signals)
+        
+        return signals

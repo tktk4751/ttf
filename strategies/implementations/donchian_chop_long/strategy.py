@@ -99,7 +99,7 @@ class DonchianChopLongStrategy(BaseStrategy):
             Dict[str, Any]: 最適化パラメータ
         """
         params = {
-            'donchian_period': trial.suggest_int('donchian_period', 10, 300, step=1),
+            'donchian_period': trial.suggest_int('donchian_period', 10, 300, step=5),
             'chop_period': trial.suggest_int('chop_period', 5, 100, step=1),
             'chop_threshold': 50,
             # 'rsi_period': trial.suggest_int('rsi_period', 8, 34, step=1),

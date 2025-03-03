@@ -22,6 +22,7 @@ from strategies.implementations.mfi_div_roc_short.strategy import MFIDivROCShort
 from strategies.implementations.mfi_div_roc_long.strategy import MFIDivROCLongStrategy
 from strategies.implementations.alma_cycle.strategy import ALMACycleStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
+from position_sizing.atr_position_sizing import ATRBasedPositionSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
 from walkforward.walkforward_optimizer import WalkForwardOptimizer
@@ -63,10 +64,85 @@ from strategies.implementations.supertrend_chop_adx_short.strategy import Supert
 from strategies.implementations.supertrend_long.strategy import SupertrendLongStrategy
 from strategies.implementations.supertrend_short.strategy import SupertrendShortStrategy
 
-from strategies.implementations.rsi_range_chop_donchian_long.strategy import RSIRangeChopDonchianLongStrategy
-from strategies.implementations.rsi_range_chop_donchian_short.strategy import RSIRangeChopDonchianShortStrategy
+from strategies.implementations.supertrend_donchian_long.strategy import SupertrendDonchianLongStrategy
+from strategies.implementations.supertrend_donchian_short.strategy import SupertrendDonchianShortStrategy
+
+from strategies.implementations.supertrend_donchian_chop_long.strategy import SupertrendDonchianChopLongStrategy
+
+from strategies.implementations.keltner_chop_long.strategy import KeltnerChopLongStrategy
+from strategies.implementations.keltner_chop_short.strategy import KeltnerChopShortStrategy
+
+from strategies.implementations.keltner_half_chop_long.strategy import KeltnerHalfChopLongStrategy
 
 
+from strategies.implementations.squeeze_donchian_long.strategy import SqueezeDonchianLongStrategy
+
+from strategies.implementations.supertrend2_chop_long.strategy import Supertrend2ChopLongStrategy
+from strategies.implementations.supertrend2_chop_short.strategy import Supertrend2ChopShortStrategy
+
+from strategies.implementations.supertrend2_adx_long.strategy import Supertrend2ADXLongStrategy
+
+from strategies.implementations.supertrend2_long.strategy import Supertrend2LongStrategy
+
+from strategies.implementations.donchian2_chop_long.strategy import Donchian2ChopLongStrategy
+from strategies.implementations.donchian2_chop_short.strategy import Donchian2ChopShortStrategy
+
+from strategies.implementations.keltner2_chop_long.strategy import Keltner2ChopLongStrategy
+
+from strategies.implementations.keltner2_adx_long.strategy import Keltner2ADXLongStrategy
+
+from strategies.implementations.keltner2_long.strategy import Keltner2LongStrategy
+
+from strategies.implementations.donchian_atr_long.strategy import DonchianATRLongStrategy
+
+from strategies.implementations.donchian_atr_chop_long.strategy import DonchianATRChopLongStrategy
+from strategies.implementations.donchian_atr_chop_short.strategy import DonchianATRChopShortStrategy
+
+from strategies.implementations.kama_keltner_long.strategy import KAMAKeltnerLongStrategy
+from strategies.implementations.kama_keltner_short.strategy import KAMAKeltnerShortStrategy
+
+from strategies.implementations.kama_keltner_chop_long.strategy import KAMAKeltnerChopLongStrategy
+
+from strategies.implementations.kama_keltner_single_chop_long.strategy import KAMAKeltnerSingleChopLongStrategy
+from strategies.implementations.kama_keltner_single_chop_short.strategy import KAMAKeltnerSingleChopShortStrategy
+
+from strategies.implementations.donchian2_chop_long.strategy import Donchian2ChopLongStrategy
+
+
+from strategies.implementations.kama_keltner_single_adx_long.strategy import KAMAKeltnerSingleADXLongStrategy
+
+from strategies.implementations.alma_keltner_single_chop_long.strategy import ALMAKeltnerSingleChopLongStrategy
+
+from strategies.implementations.keltner_dual_multiplier_long.strategy import KeltnerDualMultiplierLongStrategy
+from strategies.implementations.kama_keltner_single_long.strategy import KAMAKeltnerSingleLongStrategy
+
+
+from strategies.implementations.kama_keltner_chop_rsi_short.strategy import KAMAKeltnerChopRSIShortStrategy
+
+from strategies.implementations.supertrend_dual_chop_long.strategy import SupertrendDualChopLongStrategy
+
+from strategies.implementations.ema_keltner_single_chop_long.strategy import EMAKeltnerSingleChopLongStrategy
+
+from strategies.implementations.buy_trend_predictor.strategy import BuyTrendpredictor
+from strategies.implementations.sell_trend_predictor.strategy import SellTrendpredictor
+
+from strategies.implementations.alma_triple_chop_long.strategy import ALMATripleChopLongStrategy
+
+from strategies.implementations.buy_counter_predicter.strategy import BuyCounterPredicter
+
+from strategies.implementations.span_model_chop_long.strategy import SpanModelChopLongStrategy
+
+from strategies.implementations.sell_counter_predicter.strategy import SellCounterPredicter
+
+from strategies.implementations.kama_cross_chop_long.strategy import KAMACrossChopLongStrategy
+
+
+from strategies.implementations.squeeze_chop_long.strategy import SqueezeChopLongStrategy
+from strategies.implementations.squeeze_chop_short.strategy import SqueezeChopShortStrategy
+from strategies.implementations.macd_rsi_divergence_long.strategy import MACDDivergenceLongStrategy
+
+from strategies.implementations.rsi_div_roc_long.strategy import RSIDivROCLongStrategy
+from strategies.implementations.roc_rsi_divergence_long.strategy import ROCDivergenceLongStrategy
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -75,36 +151,24 @@ def run_backtest(config: dict):
     data_loader = DataLoader(CSVDataSource(data_dir))
     data_processor = DataProcessor()
     
+    # データの読み込みと処理
+    print("\nLoading and processing data...")
+    raw_data = data_loader.load_data_from_config(config)
+    processed_data = {
+        symbol: data_processor.process(df)
+        for symbol, df in raw_data.items()
+    }
+    
     # 戦略の作成
-
-    strategy = MFIDivROCLongStrategy()
+    strategy = BuyTrendpredictor()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
     position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.5),
+        ratio=position_config.get('ratio', 0.2),
         leverage=position_config.get('leverage', 1.0)
     )
-
-    # # インスタンス化
-    # position_sizing = ATRPositionSizing(
-    # risk_percent=0.04,  # 4%のリスク
-    # atr_period=14,
-    # supertrend_period=10,
-
-
-    # supertrend_multiplier=3.0
-    # )
-
-    # # ポジションサイズの計算
-    # position_size = position_sizing.calculate(
-    # capital=10000,      # 総資金
-    # price=100,          # 現在価格
-    # data=processed_data,    # 価格データ（OHLCV）
-    # index=current_index,  # 現在のインデックス
-    # direction=1         # ロングポジション
-    # )
-    
+        
     # バックテスターの作成
     initial_balance = config.get('backtest', {}).get('initial_balance', 10000)
     commission_rate = config.get('backtest', {}).get('commission', 0.001)
@@ -116,14 +180,6 @@ def run_backtest(config: dict):
         verbose=True  # 詳細なログを表示
     )
     
-    # データの読み込みと処理
-    print("\nLoading and processing data...")
-    raw_data = data_loader.load_data_from_config(config)
-    processed_data = {
-        symbol: data_processor.process(df)
-        for symbol, df in raw_data.items()
-    }
-    
     print("\nExecuting backtest...")
     # バックテストの実行
     trades = backtester.run(processed_data)
@@ -131,90 +187,30 @@ def run_backtest(config: dict):
     print("\nAnalyzing results...")
     # 分析の実行と結果の出力
     analytics = Analytics(trades, initial_balance)
-    analytics.print_backtest_results()
     
-    # 銘柄別の分析
-    trade_symbols = {trade.symbol for trade in trades}
-    for symbol in trade_symbols:
-        symbol_trades = [t for t in trades if t.symbol == symbol]
-        symbol_analytics = Analytics(symbol_trades, initial_balance)
-        print(f"\n=== {symbol} の分析結果 ===")
-        symbol_analytics.print_backtest_results()
+    # 最初の銘柄の終値データを取得
+    first_symbol = next(iter(processed_data))
+    close_prices = processed_data[first_symbol]['close'].values
+    
+    # バックテスト結果を出力（終値データを渡す）
+    analytics.print_backtest_results(close_prices=close_prices)
+
+    backtester.plot_balance_history()
 
 def run_optimization(config: dict):
     """Bayesian最適化を実行"""
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=SupertrendChopLongStrategy,
-        param_generator=SupertrendChopLongStrategy.create_optimization_params,
+        strategy_class=BuyTrendpredictor,
+        param_generator=BuyTrendpredictor.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=500,
         n_jobs=-1
     )
     
     optimizer.optimize()
-    
-    # # データの準備
-    # data_dir = config['data']['data_dir']
-    # data_loader = DataLoader(CSVDataSource(data_dir))
-    # data_processor = DataProcessor()
-    
-    # # データの読み込みと処理
-    # print("\nLoading and processing data...")
-    # raw_data = data_loader.load_data_from_config(config)
-    # processed_data = {
-    #     symbol: data_processor.process(df)
-    #     for symbol, df in raw_data.items()
-    # }
-    
-    # print("\n=== 最終バックテスト結果 ===")
-    # print(f"使用データ期間: {next(iter(processed_data.values())).index[0]} → {next(iter(processed_data.values())).index[-1]}")
-    
-    # # 最適化されたパラメータで戦略を作成
-    # strategy_params = SupertrendChopMfiStrategy.convert_params_to_strategy_format(best_params)
-    # strategy = SupertrendChopMfiStrategy(**strategy_params)
-    
-    # print("\nOptimization completed!")
-    # print(f"Best score: {best_score:.2f}")
-    # print("Best parameters:")
-    # for param_name, param_value in best_params.items():
-    #     print(f"  {param_name}: {param_value}")
-    
-    # # ポジションサイジングの作成
-    # position_config = config.get('position_sizing', {})
-    # position_sizing = FixedRatioSizing(
-    #     ratio=position_config.get('ratio', 0.5),  # デフォルト値を0.5に設定
-    #     leverage=position_config.get('leverage', 1.0)
-    # )
-    
-    # # バックテスターの作成
-    # initial_balance = config.get('position_sizing', {}).get('initial_balance', 10000)
-    # commission_rate = config.get('position_sizing', {}).get('commission_rate', 0.001)
-    # backtester = Backtester(
-    #     strategy=strategy,
-    #     position_manager=position_sizing,
-    #     initial_balance=initial_balance,
-    #     commission=commission_rate,
-    #     verbose=True
-    # )
-    
-    # print("\nExecuting backtest with optimized parameters...")
-    # # バックテストの実行
-    # backtester.run(processed_data)
-    
-    # print("\nAnalyzing results...")
-    # # 分析の実行と結果の出力
-    # analytics = Analytics(trades, initial_balance)
-    # analytics.print_backtest_results()
-    
-    # # 銘柄別の分析
-    # trade_symbols = {trade.symbol for trade in trades}
-    # for symbol in trade_symbols:
-    #     symbol_trades = [t for t in trades if t.symbol == symbol]
-    #     symbol_analytics = Analytics(symbol_trades, initial_balance)
-    #     print(f"\n=== {symbol} の分析結果 ===")
-    #     symbol_analytics.print_backtest_results()
+  
 
 def run_walkforward_test(config: dict):
     """ウォークフォワードテストを実行する"""
@@ -242,15 +238,20 @@ def run_walkforward_test(config: dict):
     data_splitter = TimeSeriesDataSplitter(training_days, testing_days)
 
     # Bayesian最適化器の作成
+
+
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=DonchianChopLongStrategy,
-        param_generator=DonchianChopLongStrategy.create_optimization_params,
+        strategy_class=BuyTrendpredictor,
+        param_generator=BuyTrendpredictor.create_optimization_params,
         config=config,
         n_trials=300,
         n_jobs=-1
     )
 
     # ウォークフォワード最適化器の作成と実行
+
+
+
     optimizer = WalkForwardOptimizer(
         optimizer=bayesian_optimizer,
         data_splitter=data_splitter,
@@ -270,8 +271,8 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=DonchianChopLongStrategy,
-        param_generator=DonchianChopLongStrategy.create_optimization_params,
+        strategy_class=KAMAKeltnerSingleChopLongStrategy,
+        param_generator=KAMAKeltnerSingleChopLongStrategy.create_optimization_params,
         config=config,
         n_trials=300,
         n_jobs=-1
@@ -286,7 +287,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         print(f"  {param_name}: {param_value}")
     
     # 最適化されたパラメータを戦略クラスの形式に変換
-    strategy_params = DonchianChopLongStrategy.convert_params_to_strategy_format(best_params)
+    strategy_params = KAMAKeltnerSingleChopLongStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -294,12 +295,12 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = DonchianChopLongStrategy(**strategy_params)
+    strategy = KAMAKeltnerSingleChopLongStrategy(**strategy_params)
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
     position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.5),
+        ratio=position_config.get('ratio', 0.2),
         leverage=position_config.get('leverage', 1.0)
     )
     
@@ -369,9 +370,11 @@ def main():
         config = yaml.safe_load(f)
     
     # run_walkforward_test(config)
-    run_optimization(config)
+    # run_optimization(config)
     # run_montecarlo(config)
-    # run_backtest(config)  
+
+
+    run_backtest(config)  
 
 
     

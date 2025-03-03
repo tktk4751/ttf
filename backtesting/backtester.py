@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime
 from backtesting.trade import Trade
 import logging
+import matplotlib.pyplot as plt
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
@@ -57,6 +58,10 @@ class Backtester:
         self.commission = commission
         self.max_positions = max_positions
         self.verbose = verbose
+        
+        # 口座残高の推移を記録
+        self.balance_history = []
+        self.balance_dates = []
         
         # ロガーの設定
         self._setup_logger()
@@ -140,6 +145,10 @@ class Backtester:
         pending_exit: bool = False
         trades: List[Trade] = []
         
+        # 口座残高の初期値を記録
+        self.balance_history.append(self.current_capital)
+        self.balance_dates.append(dates[0])
+        
         # エントリーシグナルの生成
         entry_signals = self.strategy.generate_entry(data)
         
@@ -160,6 +169,10 @@ class Backtester:
                 self.current_capital = current_position.balance
                 current_position = None
                 pending_exit = False
+                
+                # 口座残高を記録
+                self.balance_history.append(self.current_capital)
+                self.balance_dates.append(date)
             
             # 保留中のエントリーの処理
             if pending_entry is not None and current_position is None and self.position_manager.can_enter():
@@ -211,3 +224,16 @@ class Backtester:
             logger.info(f"Total trades: {len(trades)}")
         
         return trades
+
+    def plot_balance_history(self):
+        """口座残高の推移をプロット"""
+        plt.figure(figsize=(12, 6))
+        plt.plot(self.balance_dates, self.balance_history, label='Account Balance')
+        plt.title('Account Balance History')
+        plt.xlabel('Date')
+        plt.ylabel('Balance (USD)')
+        plt.grid(True)
+        plt.legend()
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()

@@ -1,16 +1,55 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from dataclasses import dataclass
 from typing import Union, Tuple
 import numpy as np
 import pandas as pd
+from numba import jit
 
 from .indicator import Indicator
 
 
+@dataclass
+class DonchianChannelResult:
+    """ドンチャンチャネルの計算結果"""
+    upper: np.ndarray  # 上限（n期間の最高値）
+    lower: np.ndarray  # 下限（n期間の最安値）
+    middle: np.ndarray  # 中央線（(上限 + 下限) / 2）
+
+
+@jit(nopython=True)
+def calculate_donchian(high: np.ndarray, low: np.ndarray, period: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    ドンチャンチャネルを計算する（高速化版）
+    
+    Args:
+        high: 高値の配列
+        low: 安値の配列
+        period: 期間
+    
+    Returns:
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: 上限、下限、中央線の配列
+    """
+    length = len(high)
+    
+    # 結果配列の初期化
+    upper = np.full(length, np.nan)
+    lower = np.full(length, np.nan)
+    middle = np.full(length, np.nan)
+    
+    # 各時点でのperiod期間の最高値、最安値を計算
+    for i in range(period-1, length):
+        upper[i] = np.max(high[i-period+1:i+1])
+        lower[i] = np.min(low[i-period+1:i+1])
+        middle[i] = (upper[i] + lower[i]) / 2
+    
+    return upper, lower, middle
+
+
 class DonchianChannel(Indicator):
     """
-    ドンチャンチャネルインディケーター
+    ドンチャンチャネルインディケーター（高速化版）
     
     指定期間の最高値、最安値、およびその中央値を計算する
     - 上限: n期間の最高値
@@ -27,9 +66,7 @@ class DonchianChannel(Indicator):
         """
         super().__init__(f"DonchianChannel({period})")
         self.period = period
-        self._upper = None
-        self._lower = None
-        self._middle = None
+        self._result = None
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -49,30 +86,24 @@ class DonchianChannel(Indicator):
             high = data['high'].values
             low = data['low'].values
         else:
-            raise ValueError("データはDataFrameである必要があります")
+            high = data[:, 1]  # high
+            low = data[:, 2]   # low
         
         # データ長の検証
         data_length = len(high)
         self._validate_period(self.period, data_length)
         
-        # 初期化
-        self._upper = np.zeros(data_length)
-        self._lower = np.zeros(data_length)
-        self._middle = np.zeros(data_length)
+        # ドンチャンチャネルの計算（高速化版）
+        upper, lower, middle = calculate_donchian(high, low, self.period)
         
-        # 最初のperiod-1個は計算不可能なのでnanで埋める
-        self._upper[:self.period-1] = np.nan
-        self._lower[:self.period-1] = np.nan
-        self._middle[:self.period-1] = np.nan
+        self._result = DonchianChannelResult(
+            upper=upper,
+            lower=lower,
+            middle=middle
+        )
         
-        # 各時点でのperiod期間の最高値、最安値を計算
-        for i in range(self.period-1, data_length):
-            self._upper[i] = np.max(high[i-self.period+1:i+1])
-            self._lower[i] = np.min(low[i-self.period+1:i+1])
-            self._middle[i] = (self._upper[i] + self._lower[i]) / 2
-        
-        self._values = self._middle
-        return self._middle
+        self._values = middle  # 基底クラスの要件を満たすため
+        return middle
     
     def get_bands(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -81,6 +112,6 @@ class DonchianChannel(Indicator):
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: (上限, 下限, 中央線)の値
         """
-        if self._upper is None or self._lower is None or self._middle is None:
+        if self._result is None:
             raise RuntimeError("calculate()を先に呼び出してください")
-        return self._upper, self._lower, self._middle 
+        return self._result.upper, self._result.lower, self._result.middle 

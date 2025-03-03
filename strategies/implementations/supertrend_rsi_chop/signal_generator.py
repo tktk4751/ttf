@@ -4,117 +4,113 @@
 from typing import Dict, Any, Union
 import numpy as np
 import pandas as pd
+from numba import jit
 
+from ...base.signal_generator import BaseSignalGenerator
 from signals.implementations.supertrend.direction import SupertrendDirectionSignal
-from signals.implementations.rsi.entry import RSIEntrySignal
+from signals.implementations.rsi.entry import RSICounterTrendEntrySignal
 from signals.implementations.rsi.exit import RSIExitSignal
 from signals.implementations.chop.filter import ChopFilterSignal
 
-class SupertrendRsiChopSignalGenerator:
-    """スーパートレンド、RSI、Chopを組み合わせたシグナル生成器"""
+
+@jit(nopython=True)
+def calculate_entry_signals(supertrend: np.ndarray, rsi: np.ndarray, chop: np.ndarray) -> np.ndarray:
+    """エントリーシグナルを計算（高速化版）"""
+    return np.where((supertrend == 1) & (rsi == 1) & (chop == 1), 1, 0).astype(np.int8)
+
+
+class SupertrendRsiChopSignalGenerator(BaseSignalGenerator):
+    """
+    スーパートレンド、RSI、チョピネスフィルターを組み合わせたシグナル生成クラス（買い専用・高速化版）
+    
+    エントリー条件:
+    - スーパートレンドが上昇トレンドと判断
+    - RSIが売られすぎ水準から上抜けた場合
+    - チョピネスフィルターがトレンド相場と判断
+    
+    エグジット条件:
+    - スーパートレンドが上昇トレンドでなくなった場合
+    - または、チョピネスフィルターがレンジ相場と判断した場合
+    """
     
     def __init__(
         self,
-        supertrend_params: Dict[str, Any],
-        rsi_entry_params: Dict[str, Any],
-        rsi_exit_params: Dict[str, Any],
-        chop_params: Dict[str, Any]
+        period: int = 10,
+        multiplier: float = 3.0,
+        rsi_period: int = 14,
+        rsi_entry_solid: float = 30.0,
+        chop_period: int = 14,
+        chop_threshold: float = 61.8,
     ):
-        """
-        コンストラクタ
+        """初期化"""
+        super().__init__("SupertrendRsiChopSignalGenerator")
         
-        Args:
-            supertrend_params: スーパートレンドのパラメータ
-            rsi_entry_params: RSIエントリーのパラメータ
-            rsi_exit_params: RSIエグジットのパラメータ
-            chop_params: チョピネスインデックスのパラメータ
-        """
-        # シグナルの初期化
+        # シグナル生成器の初期化
         self.supertrend = SupertrendDirectionSignal(
-            period=supertrend_params['period'],
-            multiplier=supertrend_params['multiplier']
+            period=period,
+            multiplier=multiplier
         )
-        self.rsi_entry = RSIEntrySignal(
-            period=rsi_entry_params['period'],
-            solid=rsi_entry_params['solid']
-        )
-        self.rsi_exit = RSIExitSignal(
-            period=rsi_exit_params['period'],
-            solid=rsi_exit_params['solid']
+        self.rsi = RSICounterTrendEntrySignal(
+            period=rsi_period,
+            solid={'rsi_long_entry_solid': rsi_entry_solid}
         )
         self.chop = ChopFilterSignal(
-            period=chop_params['period'],
-            solid=chop_params['solid']
+            period=chop_period,
+            solid={'chop_solid': chop_threshold}
         )
         
-        # シグナルのキャッシュ
+        # キャッシュ用の変数
+        self._data_len = 0
+        self._signals = None
         self._supertrend_signals = None
-        self._rsi_exit_signals = None
-        self._rsi_entry_signals = None
+        self._rsi_signals = None
         self._chop_signals = None
     
     def calculate_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> None:
-        """全てのシグナルを計算してキャッシュする"""
-        if self._supertrend_signals is None:
-            self._supertrend_signals = self.supertrend.generate(data)
-        if self._rsi_exit_signals is None:
-            self._rsi_exit_signals = self.rsi_exit.generate(data)
-        if self._rsi_entry_signals is None:
-            self._rsi_entry_signals = self.rsi_entry.generate(data)
-        if self._chop_signals is None:
-            self._chop_signals = self.chop.generate(data)
+        """シグナル計算（高速化版）"""
+        current_len = len(data)
+        
+        if self._signals is None or current_len != self._data_len:
+            # データフレームの作成
+            df = data[['open', 'high', 'low', 'close']] if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
+            
+            # 各シグナルの計算
+            self._supertrend_signals = self.supertrend.generate(df)
+            self._rsi_signals = self.rsi.generate(df)
+            self._chop_signals = self.chop.generate(df)
+            
+            # エントリーシグナルの計算
+            self._signals = calculate_entry_signals(
+                self._supertrend_signals,
+                self._rsi_signals,
+                self._chop_signals
+            )
+            
+            self._data_len = current_len
     
     def get_entry_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
-        """エントリーシグナルを生成する"""
-        self.calculate_signals(data)
-        
-        # シグナルの初期化
-        signals = np.zeros(len(self._supertrend_signals))
-        
-        # ロングエントリー条件: 全てのシグナルが1
-        long_condition = (
-            (self._supertrend_signals == 1) &
-            (self._rsi_entry_signals == 1) &
-            (self._chop_signals == 1)
-        )
-        
-        # ショートエントリー条件: スーパートレンドが-1、RSIエントリーが-1、チョピネスが1
-        short_condition = (
-            (self._supertrend_signals == -1) &
-            (self._rsi_entry_signals == -1) &
-            (self._chop_signals == 1)
-        )
-        
-        # シグナルの生成
-        signals = np.where(long_condition, 1, signals)
-        signals = np.where(short_condition, -1, signals)
-        
-        return signals
+        """エントリーシグナル取得（高速化版）"""
+        if self._signals is None or len(data) != self._data_len:
+            self.calculate_signals(data)
+        return self._signals
     
     def get_exit_signals(self, data: Union[pd.DataFrame, np.ndarray], position: int, index: int = -1) -> bool:
-        """エグジットシグナルを生成する"""
-        if position == 0:
+        """エグジットシグナル生成（高速化版）"""
+        if position != 1:  # 買いポジションのみ
             return False
         
-        self.calculate_signals(data)
+        if self._signals is None or len(data) != self._data_len:
+            self.calculate_signals(data)
         
-        # 指定されたインデックスのシグナルを取得
-        current_supertrend = self._supertrend_signals[index]
-        current_rsi_exit = self._rsi_exit_signals[index]
+        if index == -1:
+            index = len(data) - 1
         
-        # ロングポジションのエグジット条件
-        if position == 1:
-            return (current_supertrend == -1) or (current_rsi_exit == 1)
-        
-        # ショートポジションのエグジット条件
-        if position == -1:
-            return (current_supertrend == 1) or (current_rsi_exit == -1)
-        
-        return False
+        # スーパートレンドが上昇トレンドでない、またはチョピネスがレンジ相場
+        return bool(self._supertrend_signals[index] != 1 or self._chop_signals[index] != 1)
     
     def clear_cache(self) -> None:
         """シグナルのキャッシュをクリアする"""
+        self._signals = None
         self._supertrend_signals = None
-        self._rsi_exit_signals = None
-        self._rsi_entry_signals = None
+        self._rsi_signals = None
         self._chop_signals = None 

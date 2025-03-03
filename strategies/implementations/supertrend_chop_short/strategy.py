@@ -60,7 +60,7 @@ class SupertrendChopShortStrategy(BaseStrategy):
         return {
             'supertrend_period': trial.suggest_int('supertrend_period', 3, 100),
             'supertrend_multiplier': trial.suggest_float('supertrend_multiplier', 2.0, 7.0, step=0.5),
-            'chop_period': trial.suggest_int('chop_period', 5, 100),
+            'chop_period': 55,
             'chop_threshold': 50,
         }
     
@@ -70,6 +70,6 @@ class SupertrendChopShortStrategy(BaseStrategy):
         return {
             'supertrend_period': int(params['supertrend_period']),
             'supertrend_multiplier': float(params['supertrend_multiplier']),
-            'chop_period': int(params['chop_period']),
+            'chop_period': 55,
             'chop_threshold': 50,
         } 
