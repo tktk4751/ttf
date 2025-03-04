@@ -104,7 +104,7 @@ class BayesianOptimizer(BaseOptimizer):
         strategy = self._create_strategy(trial)
         trades = self._run_backtest(strategy)
         
-        if len(trades) < 50:  # 最小トレード数の閾値
+        if len(trades) < 30:  # 最小トレード数の閾値
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))

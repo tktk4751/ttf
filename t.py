@@ -8,21 +8,8 @@ from pathlib import Path
 from backtesting.backtester import Backtester
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
-from strategies.implementations.supertrend_rsi_chop.strategy import SupertrendRsiChopStrategy
-from strategies.implementations.supertrend_chop_mfi.strategy import SupertrendChopMfiStrategy
-from strategies.implementations.alma_trend_following.strategy import ALMATrendFollowingStrategy
-from strategies.implementations.alma_trend_following_v2.strategy import ALMATrendFollowingV2Strategy
 
-from strategies.implementations.squeeze_chop_long.strategy import SqueezeChopLongStrategy
-from strategies.implementations.supertrend_adx_short.strategy import SupertrendADXShortStrategy
-from strategies.implementations.squeeze_chop_short.strategy import SqueezeChopShortStrategy
-
-from strategies.implementations.rsi_div_roc_long.strategy import RSIDivROCLongStrategy
-from strategies.implementations.mfi_div_roc_short.strategy import MFIDivROCShortStrategy
-from strategies.implementations.mfi_div_roc_long.strategy import MFIDivROCLongStrategy
-from strategies.implementations.alma_cycle.strategy import ALMACycleStrategy
 from position_sizing.fixed_ratio import FixedRatioSizing
-from position_sizing.atr_position_sizing import ATRBasedPositionSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
 from walkforward.walkforward_optimizer import WalkForwardOptimizer
@@ -31,94 +18,10 @@ from walkforward.walkforward_optimizer import TimeSeriesDataSplitter
 from typing import List
 from backtesting.trade import Trade
 from montecarlo.montecarlo import MonteCarlo
-from optimization.signal_combination_optimizer import SignalCombinationOptimizer
-
-
-from strategies.implementations.supertrend_adx_rsi_long.strategy import SupertrendADXRSILongStrategy
-from strategies.implementations.supertrend_chop_rsi_long.strategy import SupertrendChopRSILongStrategy
-from strategies.implementations.supertrend_adx_rsi_short.strategy import SupertrendADXRSIShortStrategy
-from strategies.implementations.supertrend_chop_rsi_short.strategy import SupertrendChopRSIShortStrategy
-from strategies.implementations.supertrend_chop_adx_long.strategy import SupertrendChopADXLongStrategy
-from strategies.implementations.supertrend_chop_adx_short.strategy import SupertrendChopADXShortStrategy
-
-from strategies.implementations.supertrend_long.strategy import SupertrendLongStrategy
-from strategies.implementations.supertrend_short.strategy import SupertrendShortStrategy
-
-from strategies.implementations.donchian_atr_chop_long.strategy import DonchianATRChopLongStrategy
-from strategies.implementations.donchian_atr_chop_short.strategy import DonchianATRChopShortStrategy
-
-from strategies.implementations.kama_keltner_long.strategy import KAMAKeltnerLongStrategy
-from strategies.implementations.kama_keltner_short.strategy import KAMAKeltnerShortStrategy
-
-from strategies.implementations.kama_keltner_chop_long.strategy import KAMAKeltnerChopLongStrategy
-
-from strategies.implementations.kama_keltner_single_chop_long.strategy import KAMAKeltnerSingleChopLongStrategy
-from strategies.implementations.kama_keltner_single_chop_short.strategy import KAMAKeltnerSingleChopShortStrategy
-
-from strategies.implementations.donchian2_chop_long.strategy import Donchian2ChopLongStrategy
-
-
-from strategies.implementations.kama_keltner_single_adx_long.strategy import KAMAKeltnerSingleADXLongStrategy
-
-from strategies.implementations.alma_keltner_single_chop_long.strategy import ALMAKeltnerSingleChopLongStrategy
-
-from strategies.implementations.kama_keltner_single_long.strategy import KAMAKeltnerSingleLongStrategy
-
-
-from strategies.implementations.kama_keltner_chop_rsi_short.strategy import KAMAKeltnerChopRSIShortStrategy
-
-from strategies.implementations.supertrend_dual_chop_long.strategy import SupertrendDualChopLongStrategy
-
-from strategies.implementations.ema_keltner_single_chop_long.strategy import EMAKeltnerSingleChopLongStrategy
-
-from strategies.implementations.buy_trend_predictor.strategy import BuyTrendpredictor
-from strategies.implementations.sell_trend_predictor.strategy import SellTrendpredictor
-
-from strategies.implementations.alma_triple_chop_long.strategy import ALMATripleChopLongStrategy
-
-from strategies.implementations.buy_counter_predicter.strategy import BuyCounterPredicter
-
-from strategies.implementations.span_model_chop_long.strategy import SpanModelChopLongStrategy
-
-from strategies.implementations.sell_counter_predicter.strategy import SellCounterPredicter
-
-from strategies.implementations.kama_cross_chop_long.strategy import KAMACrossChopLongStrategy
-
-
-from strategies.implementations.squeeze_chop_long.strategy import SqueezeChopLongStrategy
-from strategies.implementations.squeeze_chop_short.strategy import SqueezeChopShortStrategy
-from strategies.implementations.macd_rsi_divergence_long.strategy import MACDDivergenceLongStrategy
-
-from strategies.implementations.rsi_div_roc_long.strategy import RSIDivROCLongStrategy
-from strategies.implementations.roc_rsi_divergence_long.strategy import ROCDivergenceLongStrategy
-
-from strategies.implementations.gvidya_keltner_single_long.strategy import GVIDYAKeltnerSingleLongStrategy
-from strategies.implementations.gvidya_keltner_single_short.strategy import GVIDYAKeltnerSingleShortStrategy
-
-from strategies.implementations.alma_circulation_single_long.strategy import ALMACirculationSingleLongStrategy
-from strategies.implementations.alma_circulation_single_short.strategy import ALMACirculationSingleShortStrategy
-from strategies.implementations.kama_circulation_single_long.strategy import KAMACirculationSingleLongStrategy
-from strategies.implementations.kama_circulation_single_short.strategy import KAMACirculationSingleShortStrategy
-from strategies.implementations.kama_circulation_long_short.strategy import KAMACirculationLongShortStrategy
-
-
-from strategies.implementations.kama_keltner_chop_long_short.strategy import KAMAKeltnerChopLongShortStrategy    
-from strategies.implementations.gvidya_circulation_long_short.strategy import GVIDYACirculationLongShortStrategy
-
-from strategies.implementations.tfc_chop_single_long.strategy import TFCChopSingleLongStrategy
-from strategies.implementations.tfc_chop_long_short.strategy import TFCChopLongShortStrategy
 
 from data.binance_data_source import BinanceDataSource
-
-from strategies.implementations.alpha_chop_long.strategy import AlphaChopLongStrategy
-from strategies.implementations.alpha_chop_short.strategy import AlphaChopShortStrategy
-from strategies.implementations.alpha_chop_long_short.strategy import AlphaChopLongShortStrategy
-
-from strategies.implementations.trend_alpha_chop_long.strategy import TrendAlphaChopLongStrategy
-from strategies.implementations.trend_alpha_chop_short.strategy import TrendAlphaChopShortStrategy
-from strategies.implementations.trend_alpha_chop_both.strategy import TrendAlphaChopBothStrategy
-
-from strategies.implementations.hyper_trend_chop_dual.strategy import HyperTrendChopDualStrategy
+from strategies.implementations.trend_alpha.strategy import TrendAlphaStrategy
+from strategies.implementations.hyper_trend.strategy import HyperTrendStrategy
 
 
 def run_backtest(config: dict):
@@ -145,7 +48,7 @@ def run_backtest(config: dict):
     }
     
     # 戦略の作成
-    strategy = KAMAKeltnerChopLongShortStrategy()
+    strategy = HyperTrendStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -187,10 +90,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=HyperTrendChopDualStrategy,
-        param_generator=HyperTrendChopDualStrategy.create_optimization_params,
+        strategy_class=HyperTrendStrategy,
+        param_generator=HyperTrendStrategy.create_optimization_params,
         config=config,
-        n_trials=500,
+        n_trials=300,
         n_jobs=-1
     )
     
@@ -226,8 +129,8 @@ def run_walkforward_test(config: dict):
 
 
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=GVIDYAKeltnerSingleLongStrategy,
-        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
+        strategy_class=TrendAlphaStrategy,
+        param_generator=TrendAlphaStrategy.create_optimization_params,
         config=config,
         n_trials=300,
         n_jobs=-1
@@ -256,8 +159,8 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=GVIDYAKeltnerSingleLongStrategy,
-        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
+        strategy_class=TrendAlphaStrategy,
+        param_generator=TrendAlphaStrategy.create_optimization_params,
         config=config,
         n_trials=500,
         n_jobs=-1
@@ -272,7 +175,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         print(f"  {param_name}: {param_value}")
     
     # 最適化されたパラメータを戦略クラスの形式に変換
-    strategy_params = GVIDYAKeltnerSingleLongStrategy.convert_params_to_strategy_format(best_params)
+    strategy_params = TrendAlphaStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -280,7 +183,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = GVIDYAKeltnerSingleLongStrategy(**strategy_params)
+    strategy = TrendAlphaStrategy(**strategy_params)
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -323,29 +226,6 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     monte_carlo.run()
     monte_carlo.print_simulation_results()
 
-def run_signal_combination_optimization(config: dict):
-    """シグナルの組み合わせの最適化を実行"""
-    print("\nシグナルの組み合わせの最適化を開始します...")
-    
-    # カスタム評価指標の例（シャープレシオとアルファスコアの組み合わせ）
-    def custom_metric(analytics: Analytics) -> float:
-        return analytics.calculate_alpha_score() * 0.7 + analytics.calculate_sharpe_ratio() * 0.3
-    
-    optimizer = SignalCombinationOptimizer(
-        config=config,
-        n_trials=300,
-        max_signals=3,
-        metric_function=custom_metric,  # カスタム評価指標を使用（コメントアウトするとデフォルトのアルファスコアを使用）
-        n_jobs=-1
-    )
-    
-    best_params, best_score = optimizer.optimize()
-    
-    print("\n最適化が完了しました！")
-    print(f"最高スコア: {best_score:.2f}")
-    print("\n選択されたシグナルの組み合わせ:")
-    for i, signal_name in enumerate(best_params['selected_signals'], 1):
-        print(f"{i}. {signal_name}")
 
 def main():
     """メイン関数"""

@@ -8,7 +8,7 @@ from numba import jit
 
 from ...base.signal_generator import BaseSignalGenerator
 from signals.implementations.trend_alpha.breakout_entry import TrendAlphaBreakoutEntrySignal
-from signals.implementations.chop.filter import ChopFilterSignal
+from signals.implementations.guardian_angel.filter import GuardianAngelFilterSignal
 
 
 @jit(nopython=True)
@@ -16,10 +16,10 @@ def calculate_entry_signals(trend_alpha: np.ndarray, filter_signal: np.ndarray) 
     """エントリーシグナルを一度に計算（高速化版）"""
     signals = np.zeros_like(trend_alpha, dtype=np.int8)
     
-    # ロングエントリー: TrendAlphaの買いシグナル + チョピネスが非トレンド
+    # ロングエントリー: TrendAlphaの買いシグナル + ガーディアンエンジェルがトレンド相場
     long_condition = (trend_alpha == 1) & (filter_signal == 1)
     
-    # ショートエントリー: TrendAlphaの売りシグナル + チョピネスが非トレンド
+    # ショートエントリー: TrendAlphaの売りシグナル + ガーディアンエンジェルがトレンド相場
     short_condition = (trend_alpha == -1) & (filter_signal == 1)
     
     signals[long_condition] = 1
@@ -28,13 +28,13 @@ def calculate_entry_signals(trend_alpha: np.ndarray, filter_signal: np.ndarray) 
     return signals
 
 
-class TrendAlphaChopBothSignalGenerator(BaseSignalGenerator):
+class TrendAlphaSignalGenerator(BaseSignalGenerator):
     """
-    TrendAlpha+チョピネスフィルターのシグナル生成クラス（両方向・高速化版）
+    TrendAlpha+ガーディアンエンジェルフィルターのシグナル生成クラス（両方向・高速化版）
     
     エントリー条件:
-    - ロング: TrendAlphaのブレイクアウトで買いシグナル + チョピネスが非トレンド
-    - ショート: TrendAlphaのブレイクアウトで売りシグナル + チョピネスが非トレンド
+    - ロング: TrendAlphaのブレイクアウトで買いシグナル + ガーディアンエンジェルがトレンド相場
+    - ショート: TrendAlphaのブレイクアウトで売りシグナル + ガーディアンエンジェルがトレンド相場
     
     エグジット条件:
     - ロング: TrendAlphaの売りシグナル
@@ -43,7 +43,7 @@ class TrendAlphaChopBothSignalGenerator(BaseSignalGenerator):
     
     def __init__(
         self,
-        kama_period: int = 10,
+        period: int = 175,
         max_kama_slow: int = 55,
         min_kama_slow: int = 30,
         max_kama_fast: int = 13,
@@ -52,15 +52,17 @@ class TrendAlphaChopBothSignalGenerator(BaseSignalGenerator):
         min_atr_period: int = 5,
         max_multiplier: float = 3.0,
         min_multiplier: float = 1.0,
-        chop_period: int = 14,
-        chop_threshold: float = 50.0,
+        max_period: int = 30,
+        min_period: int = 10,
+        max_threshold: float = 61.8,
+        min_threshold: float = 38.2
     ):
         """初期化"""
-        super().__init__("TrendAlphaChopBothSignalGenerator")
+        super().__init__("TrendAlphaSignalGenerator")
         
         # パラメータの設定
         self._params = {
-            'kama_period': kama_period,
+            'period': period,
             'max_kama_slow': max_kama_slow,
             'min_kama_slow': min_kama_slow,
             'max_kama_fast': max_kama_fast,
@@ -69,13 +71,15 @@ class TrendAlphaChopBothSignalGenerator(BaseSignalGenerator):
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
             'min_multiplier': min_multiplier,
-            'chop_period': chop_period,
-            'chop_threshold': chop_threshold,
+            'max_period': max_period,
+            'min_period': min_period,
+            'max_threshold': max_threshold,
+            'min_threshold': min_threshold
         }
         
         # シグナル生成器の初期化
         self.signal = TrendAlphaBreakoutEntrySignal(
-            kama_period=kama_period,
+            kama_period=period,
             max_kama_slow=max_kama_slow,
             min_kama_slow=min_kama_slow,
             max_kama_fast=max_kama_fast,
@@ -85,9 +89,14 @@ class TrendAlphaChopBothSignalGenerator(BaseSignalGenerator):
             max_multiplier=max_multiplier,
             min_multiplier=min_multiplier
         )
-        self.filter_signal = ChopFilterSignal(
-            period=chop_period,
-            solid={'chop_solid': chop_threshold}
+        self.filter_signal = GuardianAngelFilterSignal(
+            er_period=period,
+            max_period=max_period,
+            min_period=min_period,
+            solid={
+                'max_threshold': max_threshold,
+                'min_threshold': min_threshold
+            }
         )
         
         # キャッシュ用の変数（最小限に抑える）

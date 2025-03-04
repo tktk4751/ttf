@@ -64,9 +64,11 @@ class TrendAlphaBreakoutEntrySignal(BaseSignal, IEntrySignal):
     - ERが高い（トレンドが強い）時：
         - 中間バンドに近づく
         - ATR期間が短くなり、より敏感に反応
+        - KAMAのfast/slow期間が短くなり、より敏感に反応
     - ERが低い（トレンドが弱い）時：
         - 外側のバンドに近づく
         - ATR期間が長くなり、ノイズを軽減
+        - KAMAのfast/slow期間が長くなり、ノイズを軽減
     
     エントリー条件：
     - 終値が動的に調整されたバンドを上回る/下回る
@@ -75,8 +77,10 @@ class TrendAlphaBreakoutEntrySignal(BaseSignal, IEntrySignal):
     def __init__(
         self,
         kama_period: int = 10,
-        kama_fast: int = 2,
-        kama_slow: int = 30,
+        max_kama_slow: int = 55,
+        min_kama_slow: int = 30,
+        max_kama_fast: int = 13,
+        min_kama_fast: int = 2,
         max_atr_period: int = 120,
         min_atr_period: int = 5,
         max_multiplier: float = 3.0,
@@ -87,23 +91,28 @@ class TrendAlphaBreakoutEntrySignal(BaseSignal, IEntrySignal):
         
         Args:
             kama_period: KAMAの効率比の計算期間（デフォルト: 10）
-            kama_fast: KAMAの速い移動平均の期間（デフォルト: 2）
-            kama_slow: KAMAの遅い移動平均の期間（デフォルト: 30）
+            max_kama_slow: KAMAの遅い移動平均の最大期間（デフォルト: 55）
+            min_kama_slow: KAMAの遅い移動平均の最小期間（デフォルト: 30）
+            max_kama_fast: KAMAの速い移動平均の最大期間（デフォルト: 13）
+            min_kama_fast: KAMAの速い移動平均の最小期間（デフォルト: 2）
             max_atr_period: ATR期間の最大値（デフォルト: 120）
             min_atr_period: ATR期間の最小値（デフォルト: 5）
             max_multiplier: ATR乗数の最大値（デフォルト: 3.0）
             min_multiplier: ATR乗数の最小値（デフォルト: 1.0）
         """
         super().__init__(
-            f"TrendAlphaBreakout({kama_period}, {kama_fast}, {kama_slow}, "
-            f"{max_atr_period}, {min_atr_period}, {max_multiplier}, {min_multiplier})"
+            f"TrendAlphaBreakout({kama_period}, {max_kama_slow}, {min_kama_slow}, "
+            f"{max_kama_fast}, {min_kama_fast}, {max_atr_period}, {min_atr_period}, "
+            f"{max_multiplier}, {min_multiplier})"
         )
         
         # パラメータの設定
         self._params = {
             'kama_period': kama_period,
-            'kama_fast': kama_fast,
-            'kama_slow': kama_slow,
+            'max_kama_slow': max_kama_slow,
+            'min_kama_slow': min_kama_slow,
+            'max_kama_fast': max_kama_fast,
+            'min_kama_fast': min_kama_fast,
             'max_atr_period': max_atr_period,
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
@@ -113,8 +122,10 @@ class TrendAlphaBreakoutEntrySignal(BaseSignal, IEntrySignal):
         # インジケーターの初期化
         self._trend_alpha = TrendAlpha(
             kama_period=kama_period,
-            kama_fast=kama_fast,
-            kama_slow=kama_slow,
+            max_kama_slow=max_kama_slow,
+            min_kama_slow=min_kama_slow,
+            max_kama_fast=max_kama_fast,
+            min_kama_fast=min_kama_fast,
             max_atr_period=max_atr_period,
             min_atr_period=min_atr_period,
             max_multiplier=max_multiplier,

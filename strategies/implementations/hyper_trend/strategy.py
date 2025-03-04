@@ -7,21 +7,21 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import HyperTrendChopDualSignalGenerator
+from .signal_generator import HyperTrendSignalGenerator
 
 
-class HyperTrendChopDualStrategy(BaseStrategy):
+class HyperTrendStrategy(BaseStrategy):
     """
-    HyperTrend+チョピネスフィルター戦略（両方向）
+    HyperTrend+ガーディアンエンジェルフィルター戦略
     
     エントリー条件:
     [ロング]
     - HyperTrendが上昇トレンドを示している
-    - チョピネスインデックスがトレンド相場を示している
+    - ガーディアンエンジェルがトレンド相場を示している
     
     [ショート]
     - HyperTrendが下降トレンドを示している
-    - チョピネスインデックスがトレンド相場を示している
+    - ガーディアンエンジェルがトレンド相場を示している
     
     エグジット条件:
     [ロング]
@@ -33,56 +33,64 @@ class HyperTrendChopDualStrategy(BaseStrategy):
     
     def __init__(
         self,
-        er_period: int = 10,
-        max_percentile_length: int = 55,
-        min_percentile_length: int = 14,
+        period: int = 55,
+        max_percentile_length: int = 250,
+        min_percentile_length: int = 13,
         max_atr_period: int = 120,
         min_atr_period: int = 5,
-        max_multiplier: float = 3.0,
-        min_multiplier: float = 1.0,
-        chop_period: int = 14,
-        chop_threshold: float = 50.0,
+        max_multiplier: float = 3,
+        min_multiplier: float = 0.5,
+        max_period: int = 100,
+        min_period: int = 20,
+        max_threshold: float = 55,
+        min_threshold: float = 45
     ):
         """
         初期化
         
         Args:
-            er_period: 効率比の計算期間
+            period: HyperTrendとガーディアンエンジェルの効率比の計算期間
             max_percentile_length: パーセンタイル計算の最大期間
             min_percentile_length: パーセンタイル計算の最小期間
             max_atr_period: ATR期間の最大値
             min_atr_period: ATR期間の最小値
             max_multiplier: ATR乗数の最大値
             min_multiplier: ATR乗数の最小値
-            chop_period: チョピネスインデックスの期間
-            chop_threshold: チョピネスインデックスのしきい値
+            max_period: ガーディアンエンジェルのチョピネス期間の最大値
+            min_period: ガーディアンエンジェルのチョピネス期間の最小値
+            max_threshold: ガーディアンエンジェルのしきい値の最大値
+            min_threshold: ガーディアンエンジェルのしきい値の最小値
         """
-        super().__init__("HyperTrendChopDual")
+        super().__init__("HyperTrend")
         
         # パラメータの設定
         self._parameters = {
-            'er_period': er_period,
+            'period': period,
             'max_percentile_length': max_percentile_length,
             'min_percentile_length': min_percentile_length,
             'max_atr_period': max_atr_period,
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
             'min_multiplier': min_multiplier,
-            'chop_period': chop_period,
-            'chop_threshold': chop_threshold,
+            'max_period': max_period,
+            'min_period': min_period,
+            'max_threshold': max_threshold,
+            'min_threshold': min_threshold
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = HyperTrendChopDualSignalGenerator(
-            er_period=er_period,
+        self.signal_generator = HyperTrendSignalGenerator(
+            period=period,
             max_percentile_length=max_percentile_length,
             min_percentile_length=min_percentile_length,
             max_atr_period=max_atr_period,
             min_atr_period=min_atr_period,
             max_multiplier=max_multiplier,
             min_multiplier=min_multiplier,
-            chop_period=chop_period,
-            chop_threshold=chop_threshold,
+            max_period=max_period,
+            min_period=min_period,
+            max_threshold=max_threshold,
+            min_threshold=min_threshold
         )
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -122,18 +130,9 @@ class HyperTrendChopDualStrategy(BaseStrategy):
         Returns:
             Dict[str, Any]: 最適化パラメータ
         """
-        params = {
-            'er_period': trial.suggest_int('er_period', 5, 300),
-            'max_percentile_length': 250,
-            'min_percentile_length': 10,
-            'max_atr_period': 130,
-            'min_atr_period': 5,
-            'max_multiplier': 3,
-            'min_multiplier': 0.5,
-            'chop_period': 55,
-            'chop_threshold': 50,
+        return {
+            'period': trial.suggest_int('period', 5, 300)
         }
-        return params
     
     @classmethod
     def convert_params_to_strategy_format(cls, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -147,13 +146,15 @@ class HyperTrendChopDualStrategy(BaseStrategy):
             Dict[str, Any]: 戦略パラメータ
         """
         return {
-            'er_period': int(params['er_period']),
-            'max_percentile_length': 300,
-            'min_percentile_length': 10,
+            'period': int(params['period']),
+            'max_percentile_length': 250,
+            'min_percentile_length': 13,
             'max_atr_period': 130,
             'min_atr_period': 5,
             'max_multiplier': 3,
-            'min_multiplier': 1,
-            'chop_period': 55,
-            'chop_threshold': 50,
+            'min_multiplier': 0.5,
+            'max_period': 100,
+            'min_period': 20,
+            'max_threshold': 55,
+            'min_threshold': 45
         } 
