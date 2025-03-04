@@ -12,7 +12,7 @@ from strategies.base.strategy import BaseStrategy
 from analytics.analytics import Analytics
 from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
-
+from data.binance_data_source import BinanceDataSource
 class BayesianOptimizer(BaseOptimizer):
     """Bayesian最適化を行うクラス"""
     
@@ -41,32 +41,33 @@ class BayesianOptimizer(BaseOptimizer):
     
     def _load_and_process_data(self) -> None:
         """データの読み込みと前処理"""
-        data_config = self.config.get('data', {})
-        data_dir = data_config.get('data_dir', 'data')
-        symbol = data_config.get('symbol', 'BTCUSDT')
-        timeframe = data_config.get('timeframe', '1h')
-        start_date = data_config.get('start')
-        end_date = data_config.get('end')
+        # データの準備
+        binance_config = self.config.get('binance_data', {})
+        data_dir = binance_config.get('data_dir', 'data/binance')
+        binance_data_source = BinanceDataSource(data_dir)
         
-        # 日付文字列をdatetimeオブジェクトに変換
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
-        
-        # データの読み込みと処理
-        data_loader = DataLoader(CSVDataSource(data_dir))
+        # CSVデータソースはダミーとして渡す（Binanceデータソースのみを使用）
+        dummy_csv_source = CSVDataSource("dummy")
+        data_loader = DataLoader(
+            data_source=dummy_csv_source,
+            binance_data_source=binance_data_source
+        )
         data_processor = DataProcessor()
         
+        # データの読み込みと処理
+        print("\nLoading and processing data...")
         raw_data = data_loader.load_data_from_config(self.config)
         processed_data = {
             symbol: data_processor.process(df)
             for symbol, df in raw_data.items()
         }
 
-                # 最初の銘柄の終値データを取得
+        # 最初の銘柄の終値データを取得
         first_symbol = next(iter(processed_data))
         close_prices = processed_data[first_symbol]['close'].values
         
-        self.data = processed_data[symbol]
+        # first_symbolを使用してデータを保存
+        self.data = processed_data[first_symbol]
         self._data_dict = processed_data
         self._close_prices = close_prices
     
@@ -103,11 +104,11 @@ class BayesianOptimizer(BaseOptimizer):
         strategy = self._create_strategy(trial)
         trades = self._run_backtest(strategy)
         
-        if len(trades) < 30:  # 最小トレード数の閾値
+        if len(trades) < 50:  # 最小トレード数の閾値
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
-        score = analytics.calculate_calmar_ratio()
+        score = analytics.calculate_alpha_score()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score

@@ -7,30 +7,35 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import GVIDYAKeltnerSingleLongSignalGenerator
+from .signal_generator import KAMACirculationLongShortSignalGenerator
 
 
-class GVIDYAKeltnerSingleLongStrategy(BaseStrategy):
+class KAMACirculationLongShortStrategy(BaseStrategy):
     """
-    G-VIDYAケルトナーチャネル戦略（単一チャネル・買い専用）
+    KAMAサーキュレーション戦略（ロング・ショート両対応）
     
     エントリー条件:
-    - G-VIDYAケルトナーチャネルのアッパーブレイクアウトで買いシグナル
+    [ロング]
+    - KAMAサーキュレーションが上昇相場を示している
+    - チョピネスフィルターがレンジ相場を示している
+    
+    [ショート]
+    - KAMAサーキュレーションが下降相場を示している
     - チョピネスフィルターがレンジ相場を示している
     
     エグジット条件:
-    - G-VIDYAケルトナーチャネルの売りシグナル
+    [ロング]
+    - KAMAサーキュレーションが下降相場を示している
+    
+    [ショート]
+    - KAMAサーキュレーションが上昇相場を示している
     """
     
     def __init__(
         self,
-        vidya_period: int = 46,
-        sd_period: int = 28,
-        gaussian_length: int = 4,
-        gaussian_sigma: float = 2.0,
-        atr_period: int = 14,
-        upper_multiplier: float = 1.3,
-        lower_multiplier: float = 1.3,
+        short_period: int = 9,
+        middle_period: int = 21,
+        long_period: int = 55,
         chop_period: int = 14,
         chop_solid: float = 50.0,
     ):
@@ -38,40 +43,28 @@ class GVIDYAKeltnerSingleLongStrategy(BaseStrategy):
         初期化
         
         Args:
-            vidya_period: VIDYA期間
-            sd_period: 標準偏差の計算期間
-            gaussian_length: ガウシアンフィルターの長さ
-            gaussian_sigma: ガウシアンフィルターのシグマ
-            atr_period: ATRの期間
-            upper_multiplier: アッパーバンドのATR乗数
-            lower_multiplier: ロワーバンドのATR乗数
+            short_period: 短期KAMAの期間
+            middle_period: 中期KAMAの期間
+            long_period: 長期KAMAの期間
             chop_period: チョピネスインデックスの期間
             chop_solid: チョピネスインデックスのしきい値
         """
-        super().__init__("GVIDYAKeltnerSingleLong")
+        super().__init__("KAMACirculationLongShort")
         
         # パラメータの設定
         self._parameters = {
-            'vidya_period': vidya_period,
-            'sd_period': sd_period,
-            'gaussian_length': gaussian_length,
-            'gaussian_sigma': gaussian_sigma,
-            'atr_period': atr_period,
-            'upper_multiplier': upper_multiplier,
-            'lower_multiplier': lower_multiplier,
+            'short_period': short_period,
+            'middle_period': middle_period,
+            'long_period': long_period,
             'chop_period': chop_period,
             'chop_solid': chop_solid,
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = GVIDYAKeltnerSingleLongSignalGenerator(
-            vidya_period=vidya_period,
-            sd_period=sd_period,
-            gaussian_length=gaussian_length,
-            gaussian_sigma=gaussian_sigma,
-            atr_period=atr_period,
-            upper_multiplier=upper_multiplier,
-            lower_multiplier=lower_multiplier,
+        self.signal_generator = KAMACirculationLongShortSignalGenerator(
+            short_period=short_period,
+            middle_period=middle_period,
+            long_period=long_period,
             chop_period=chop_period,
             chop_solid=chop_solid,
         )
@@ -114,13 +107,9 @@ class GVIDYAKeltnerSingleLongStrategy(BaseStrategy):
             Dict[str, Any]: 最適化パラメータ
         """
         params = {
-            'vidya_period': trial.suggest_int('vidya_period', 5, 120),
-            'sd_period': trial.suggest_int('sd_period', 3, 150),
-            'gaussian_length': 4,
-            'gaussian_sigma': 2,
-            'atr_period': trial.suggest_int('atr_period', 5, 150),
-            'upper_multiplier': trial.suggest_float('upper_multiplier', 0.5, 3.0, step=0.1),
-            'lower_multiplier': trial.suggest_float('lower_multiplier', 0.5, 3.0, step=0.1),
+            'short_period': trial.suggest_int('short_period', 5, 34),
+            'middle_period': trial.suggest_int('middle_period', 35, 100),
+            'long_period': trial.suggest_int('long_period', 101, 250),
             'chop_period': 55,
             'chop_solid': 50,
         }
@@ -138,13 +127,9 @@ class GVIDYAKeltnerSingleLongStrategy(BaseStrategy):
             Dict[str, Any]: 戦略パラメータ
         """
         return {
-            'vidya_period': int(params['vidya_period']),
-            'sd_period': int(params['sd_period']),
-            'gaussian_length': 4,
-            'gaussian_sigma': 2,
-            'atr_period': int(params['atr_period']),
-            'upper_multiplier': float(params['upper_multiplier']),
-            'lower_multiplier': float(params['lower_multiplier']),
+            'short_period': int(params['short_period']),
+            'middle_period': int(params['middle_period']),
+            'long_period': int(params['long_period']),
             'chop_period': 55,
             'chop_solid': 50,
         } 

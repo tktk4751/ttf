@@ -7,30 +7,32 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import KAMAKeltnerSingleChopLongSignalGenerator
+from .signal_generator import TFCChopSingleShortSignalGenerator
 
 
-class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
+class TFCChopSingleShortStrategy(BaseStrategy):
     """
-    KAMAケルトナーチャネル+チョピネスフィルター戦略（単一チャネル・買い専用）
+    TFC+チョピネスフィルター戦略（ショート専用）
     
     エントリー条件:
-    - KAMAケルトナーチャネルのアッパーブレイクアウトで買いシグナル
+    [ショート]
+    - TFCのダウントレンドへの転換で売りシグナル
     - チョピネスインデックスがトレンド相場を示している
     
     エグジット条件:
-    - KAMAケルトナーチャネルの売りシグナル
+    [ショート]
+    - TFCのアップトレンドへの転換
     """
     
     def __init__(
         self,
-        kama_period: int = 175,
-        kama_fast: int = 3,
-        kama_slow: int = 144,
-        atr_period: int = 65,
-        upper_multiplier: float = 4.8,
-        lower_multiplier: float = 2.9,
-        chop_period: int = 55,
+        kama_period: int = 10,
+        kama_fast: int = 2,
+        kama_slow: int = 30,
+        atr_period: int = 10,
+        upper_multiplier: float = 2.0,
+        lower_multiplier: float = 2.0,
+        chop_period: int = 14,
         chop_threshold: float = 50.0,
     ):
         """
@@ -46,7 +48,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
             chop_period: チョピネスインデックスの期間
             chop_threshold: チョピネスインデックスのしきい値
         """
-        super().__init__("KAMAKeltnerSingleChopLong")
+        super().__init__("TFCChopSingleShort")
         
         # パラメータの設定
         self._parameters = {
@@ -61,7 +63,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = KAMAKeltnerSingleChopLongSignalGenerator(
+        self.signal_generator = TFCChopSingleShortSignalGenerator(
             kama_period=kama_period,
             kama_fast=kama_fast,
             kama_slow=kama_slow,
@@ -111,13 +113,13 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         """
         params = {
             'kama_period': trial.suggest_int('kama_period', 5, 300),
-            'kama_fast': 2,
-            'kama_slow':  30,
+            'kama_fast': trial.suggest_int('kama_fast', 2, 10),
+            'kama_slow': trial.suggest_int('kama_slow', 20, 300),
             'atr_period': trial.suggest_int('atr_period', 3, 150),
             'upper_multiplier': trial.suggest_float('upper_multiplier', 0.0, 4.0, step=0.1),
             'lower_multiplier': trial.suggest_float('lower_multiplier', 0.0, 3.0, step=0.1),
-            'chop_period': 55,
-            'chop_threshold': 50.0,
+            'chop_period': trial.suggest_int('chop_period', 10, 100),
+            'chop_threshold': trial.suggest_float('chop_threshold', 30.0, 70.0, step=1.0),
         }
         return params
     
@@ -134,11 +136,11 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         """
         return {
             'kama_period': int(params['kama_period']),
-            'kama_fast': 2,
-            'kama_slow': 30,
+            'kama_fast': int(params['kama_fast']),
+            'kama_slow': int(params['kama_slow']),
             'atr_period': int(params['atr_period']),
             'upper_multiplier': float(params['upper_multiplier']),
             'lower_multiplier': float(params['lower_multiplier']),
-            'chop_period': 55,
-            'chop_threshold': 50.0,
+            'chop_period': int(params['chop_period']),
+            'chop_threshold': float(params['chop_threshold']),
         } 

@@ -114,15 +114,15 @@ class GVIDYAKeltnerSingleShortStrategy(BaseStrategy):
             Dict[str, Any]: 最適化パラメータ
         """
         params = {
-            'vidya_period': trial.suggest_int('vidya_period', 20, 300),
-            'sd_period': trial.suggest_int('sd_period', 10, 100),
-            'gaussian_length': trial.suggest_int('gaussian_length', 2, 10),
-            'gaussian_sigma': trial.suggest_float('gaussian_sigma', 0.5, 5.0),
+            'vidya_period': trial.suggest_int('vidya_period', 10, 120),
+            'sd_period': trial.suggest_int('sd_period', 5, 75),
+            'gaussian_length': 4,
+            'gaussian_sigma': 2,
             'atr_period': trial.suggest_int('atr_period', 5, 50),
             'upper_multiplier': trial.suggest_float('upper_multiplier', 0.5, 3.0, step=0.1),
             'lower_multiplier': trial.suggest_float('lower_multiplier', 0.5, 3.0, step=0.1),
-            'chop_period': trial.suggest_int('chop_period', 5, 50),
-            'chop_solid': trial.suggest_float('chop_solid', 30.0, 70.0, step=1.0),
+            'chop_period': 55,
+            'chop_solid': 50,
         }
         return params
     
@@ -145,6 +145,6 @@ class GVIDYAKeltnerSingleShortStrategy(BaseStrategy):
             'atr_period': int(params['atr_period']),
             'upper_multiplier': float(params['upper_multiplier']),
             'lower_multiplier': float(params['lower_multiplier']),
-            'chop_period': int(params['chop_period']),
-            'chop_solid': float(params['chop_solid']),
+            'chop_period': 55,
+            'chop_solid': 50,
         } 

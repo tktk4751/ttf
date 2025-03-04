@@ -7,19 +7,19 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import KAMAKeltnerSingleChopLongSignalGenerator
+from .signal_generator import AlphaChopShortSignalGenerator
 
 
-class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
+class AlphaChopShortStrategy(BaseStrategy):
     """
-    KAMAケルトナーチャネル+チョピネスフィルター戦略（単一チャネル・買い専用）
+    Alphaチャネル+チョピネスフィルター戦略（ショート専用）
     
     エントリー条件:
-    - KAMAケルトナーチャネルのアッパーブレイクアウトで買いシグナル
-    - チョピネスインデックスがトレンド相場を示している
+    - Alphaチャネルのブレイクアウトで売りシグナル（ERに基づいて動的に調整）
+    - チョピネスインデックスが非トレンド相場を示している
     
     エグジット条件:
-    - KAMAケルトナーチャネルの売りシグナル
+    - Alphaチャネルの買いシグナル
     """
     
     def __init__(
@@ -28,8 +28,8 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         kama_fast: int = 3,
         kama_slow: int = 144,
         atr_period: int = 65,
-        upper_multiplier: float = 4.8,
-        lower_multiplier: float = 2.9,
+        max_multiplier: float = 4.8,
+        min_multiplier: float = 2.9,
         chop_period: int = 55,
         chop_threshold: float = 50.0,
     ):
@@ -41,12 +41,12 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
             kama_fast: KAMAの速い移動平均の期間
             kama_slow: KAMAの遅い移動平均の期間
             atr_period: ATRの期間
-            upper_multiplier: アッパーバンドのATR乗数
-            lower_multiplier: ロワーバンドのATR乗数
+            max_multiplier: ATR乗数の最大値
+            min_multiplier: ATR乗数の最小値
             chop_period: チョピネスインデックスの期間
             chop_threshold: チョピネスインデックスのしきい値
         """
-        super().__init__("KAMAKeltnerSingleChopLong")
+        super().__init__("AlphaChopShort")
         
         # パラメータの設定
         self._parameters = {
@@ -54,20 +54,20 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
             'kama_fast': kama_fast,
             'kama_slow': kama_slow,
             'atr_period': atr_period,
-            'upper_multiplier': upper_multiplier,
-            'lower_multiplier': lower_multiplier,
+            'max_multiplier': max_multiplier,
+            'min_multiplier': min_multiplier,
             'chop_period': chop_period,
             'chop_threshold': chop_threshold,
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = KAMAKeltnerSingleChopLongSignalGenerator(
+        self.signal_generator = AlphaChopShortSignalGenerator(
             kama_period=kama_period,
             kama_fast=kama_fast,
             kama_slow=kama_slow,
             atr_period=atr_period,
-            upper_multiplier=upper_multiplier,
-            lower_multiplier=lower_multiplier,
+            max_multiplier=max_multiplier,
+            min_multiplier=min_multiplier,
             chop_period=chop_period,
             chop_threshold=chop_threshold,
         )
@@ -112,12 +112,12 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         params = {
             'kama_period': trial.suggest_int('kama_period', 5, 300),
             'kama_fast': 2,
-            'kama_slow':  30,
+            'kama_slow': 30,
             'atr_period': trial.suggest_int('atr_period', 3, 150),
-            'upper_multiplier': trial.suggest_float('upper_multiplier', 0.0, 4.0, step=0.1),
-            'lower_multiplier': trial.suggest_float('lower_multiplier', 0.0, 3.0, step=0.1),
+            'max_multiplier': 3,
+            'min_multiplier': 1,
             'chop_period': 55,
-            'chop_threshold': 50.0,
+            'chop_threshold': 50,
         }
         return params
     
@@ -137,8 +137,8 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
             'kama_fast': 2,
             'kama_slow': 30,
             'atr_period': int(params['atr_period']),
-            'upper_multiplier': float(params['upper_multiplier']),
-            'lower_multiplier': float(params['lower_multiplier']),
+            'max_multiplier': 3,
+            'min_multiplier': 1,
             'chop_period': 55,
-            'chop_threshold': 50.0,
+            'chop_threshold': 50,
         } 

@@ -168,12 +168,12 @@ class KAMACirculationSignal(BaseSignal, IEntrySignal):
             stage = self._determine_stage(short_kama[i], middle_kama[i], long_kama[i])
             stages[i] = stage
             
-            # ステージ2または3でショートエントリー
-            if stage in [2, 3, 4]:
-                signals[i] = -1
             # ステージ5、6、または1でロングエントリー
-            elif stage in [5, 6, 1]:
+            if stage in [5, 6, 1]:
                 signals[i] = 1
+            # ステージ2、3、または4でショートエントリー
+            elif stage in [2, 3, 4]:
+                signals[i] = -1
         
         # 最後のステージを保存
         self._current_stage = stages[-1]

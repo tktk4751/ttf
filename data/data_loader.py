@@ -164,12 +164,14 @@ class CSVDataSource(IDataSource):
 class DataLoader:
     """データ読み込みのファサードクラス"""
     
-    def __init__(self, data_source: IDataSource):
+    def __init__(self, data_source: IDataSource, binance_data_source: Optional[IDataSource] = None):
         """
         Args:
-            data_source: データソース
+            data_source: 従来のデータソース
+            binance_data_source: Binanceデータソース（オプション）
         """
         self.data_source = data_source
+        self.binance_data_source = binance_data_source
         self.logger = get_logger(__name__)
         self._cache: Dict[str, pd.DataFrame] = {}
 
@@ -179,7 +181,8 @@ class DataLoader:
         timeframe: str,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        market_type: Optional[str] = None  # Binanceデータ用
     ) -> pd.DataFrame:
         """市場データを読み込む
         
@@ -189,11 +192,14 @@ class DataLoader:
             start_date: 開始日
             end_date: 終了日
             use_cache: キャッシュを使用するかどうか
+            market_type: 市場タイプ（"spot" or "future"）- Binanceデータ用
         
         Returns:
             pd.DataFrame: 読み込まれたデータ
         """
         cache_key = f"{symbol}_{timeframe}"
+        if market_type:
+            cache_key = f"{cache_key}_{market_type}"
         
         # キャッシュチェック
         if use_cache and cache_key in self._cache:
@@ -205,12 +211,21 @@ class DataLoader:
             return df
         
         # データの読み込み
-        df = self.data_source.load_data(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date
-        )
+        if market_type and self.binance_data_source:
+            df = self.binance_data_source.load_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date,
+                market_type=market_type
+            )
+        else:
+            df = self.data_source.load_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_date,
+                end_date=end_date
+            )
         
         # キャッシュの更新
         if use_cache:
@@ -228,38 +243,80 @@ class DataLoader:
                         'data_dir': 'data',
                         'symbol': 'BTCUSDT',
                         'timeframe': '1h',
-                        'start': '2024-01-01',  # オプション
-                        'end': '2024-12-31'     # オプション
+                        'start': '2024-01-01',
+                        'end': '2024-12-31'
+                    },
+                    'binance_data': {
+                        'enabled': true,
+                        'symbol': 'BTC',
+                        'market_type': 'future',
+                        'timeframe': '4h',
+                        'start': '2019-01-01',
+                        'end': '2024-12-31'
                     }
                 }
         
         Returns:
             Dict[str, pd.DataFrame]: 銘柄をキーとするデータフレームの辞書
         """
+        result = {}
+        
+        # Binanceデータ設定を処理
+        binance_config = config.get('binance_data', {})
+        if binance_config and binance_config.get('enabled', False) and self.binance_data_source:
+            symbol = binance_config.get('symbol', 'BTC')
+            market_type = binance_config.get('market_type', 'spot')
+            timeframe = binance_config.get('timeframe', '4h')
+            start_date = binance_config.get('start')
+            end_date = binance_config.get('end')
+            
+            # 日付文字列をdatetimeオブジェクトに変換
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+            
+            # データの読み込み
+            data = self.load_market_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_dt,
+                end_date=end_dt,
+                market_type=market_type
+            )
+            result[f"{symbol}_{market_type}"] = data
+            
+            self.logger.info(
+                f"Binance設定からデータを読み込みました: {symbol}/{market_type}/{timeframe} "
+                f"(期間: {start_date or '全期間'} - {end_date or '全期間'})"
+            )
+            return result
+        
+        # 従来のデータ設定を処理（Binanceデータが無効な場合のみ）
         data_config = config.get('data', {})
-        symbol = data_config.get('symbol', 'BTCUSDT')
-        timeframe = data_config.get('timeframe', '1h')
-        start_date = data_config.get('start')
-        end_date = data_config.get('end')
+        if data_config:
+            symbol = data_config.get('symbol', 'BTCUSDT')
+            timeframe = data_config.get('timeframe', '1h')
+            start_date = data_config.get('start')
+            end_date = data_config.get('end')
+            
+            # 日付文字列をdatetimeオブジェクトに変換
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+            
+            # データの読み込み
+            data = self.load_market_data(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date=start_dt,
+                end_date=end_dt
+            )
+            result[symbol] = data
+            
+            self.logger.info(
+                f"従来の設定からデータを読み込みました: {symbol}/{timeframe} "
+                f"(期間: {start_date or '全期間'} - {end_date or '全期間'})"
+            )
         
-        # 日付文字列をdatetimeオブジェクトに変換
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
-        end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
-        
-        # データの読み込み
-        data = self.load_market_data(
-            symbol=symbol,
-            timeframe=timeframe,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-        
-        self.logger.info(
-            f"設定ファイルからデータを読み込みました: {symbol}/{timeframe} "
-            f"(期間: {start_date or '全期間'} - {end_date or '全期間'})"
-        )
-        
-        return {symbol: data}
+        return result
 
     def get_available_symbols(self) -> List[str]:
         """利用可能な銘柄のリストを取得"""

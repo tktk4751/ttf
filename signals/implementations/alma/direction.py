@@ -149,15 +149,13 @@ class ALMACirculationSignal(BaseSignal, IDirectionSignal):
         # ステージ6: 短期 > 長期 > 中期
         stage6 = (short_alma > long_alma) & (long_alma > middle_alma)
         
-        # エントリーシグナル（ステージ2または3）
-        entry_signal = stage2 | stage3
-        
-        # エグジットシグナル（ステージ5、6、または1）
-        exit_signal = stage5 | stage6 | stage1
+        # エントリーシグナル（ステージ5、6、または1でロング、ステージ2、3、または4でショート）
+        long_signal = stage5 | stage6 | stage1
+        short_signal = stage2 | stage3 | stage4
         
         # シグナルの設定
-        signals = np.where(entry_signal, -1, signals)  # 売りシグナル
-        signals = np.where(exit_signal, 1, signals)    # 買いシグナル（エグジット）
+        signals = np.where(long_signal, 1, signals)    # ロングシグナル
+        signals = np.where(short_signal, -1, signals)  # ショートシグナル
         
         return signals 
     

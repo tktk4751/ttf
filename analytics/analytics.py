@@ -447,7 +447,7 @@ class Analytics:
         以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
 
         1. CAGR (30%): 50%を基準とし、それ以上であればより高いスコア
-        2. 最大ドローダウン (40%): 3%以下で1、20%以上で0
+        2. 最大ドローダウン (40%): 小さいほど高スコア
         3. ソルティノレシオ (30%): 7以上は1に丸める
 
         Returns:
@@ -459,15 +459,8 @@ class Analytics:
         # CAGRのスコア化（50%を0.5とし、それ以上は比例的に高くなる）
         cagr = min(max(self.calculate_cagr() / 100, 0), 1)  # 100%以上は1に丸める
 
-        # 最大ドローダウンのスコア化（3%以下で1、20%以上で0）
-        max_dd = self.calculate_max_drawdown()[0]
-        if max_dd <= 5:
-            max_dd_score = 1.0
-        elif max_dd >= 20:
-            max_dd_score = 0.0
-        else:
-            # 3%から20%の間で線形補間
-            max_dd_score = 1.0 - ((max_dd - 3) / (20 - 3))
+        # 最大ドローダウンのスコア化（小さいほど高スコア）
+        max_dd = max(0, 1 - (self.calculate_max_drawdown()[0] / 100))  # ドローダウンが小さいほど高スコア
 
         # ソルティノレシオのスコア化（大きいほど高スコア）
         sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 7以上は1に丸める
@@ -475,13 +468,13 @@ class Analytics:
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
         cagr = cagr if cagr > 0 else replacement_value
-        max_dd_score = max_dd_score if max_dd_score > 0 else replacement_value
+        max_dd = max_dd if max_dd > 0 else replacement_value
         sortino = sortino if sortino > 0 else replacement_value
 
         # 各指標の重要度に応じて指数を設定
         score = (
             cagr ** 0.30 *          # CAGR (30%)
-            max_dd_score ** 0.40 *  # 最大ドローダウン (40%)
+            max_dd ** 0.40 *        # 最大ドローダウン (40%)
             sortino ** 0.30         # ソルティノレシオ (30%)
         )
 

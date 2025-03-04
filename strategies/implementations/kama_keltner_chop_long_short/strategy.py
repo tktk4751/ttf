@@ -7,19 +7,28 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import KAMAKeltnerSingleChopLongSignalGenerator
+from .signal_generator import KAMAKeltnerChopLongShortSignalGenerator
 
 
-class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
+class KAMAKeltnerChopLongShortStrategy(BaseStrategy):
     """
-    KAMAケルトナーチャネル+チョピネスフィルター戦略（単一チャネル・買い専用）
+    KAMAケルトナーチャネル+チョピネスフィルター戦略（ロング・ショート両対応）
     
     エントリー条件:
+    [ロング]
     - KAMAケルトナーチャネルのアッパーブレイクアウトで買いシグナル
     - チョピネスインデックスがトレンド相場を示している
     
+    [ショート]
+    - KAMAケルトナーチャネルのロワーブレイクアウトで売りシグナル
+    - チョピネスインデックスがトレンド相場を示している
+    
     エグジット条件:
+    [ロング]
     - KAMAケルトナーチャネルの売りシグナル
+    
+    [ショート]
+    - KAMAケルトナーチャネルの買いシグナル
     """
     
     def __init__(
@@ -46,7 +55,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
             chop_period: チョピネスインデックスの期間
             chop_threshold: チョピネスインデックスのしきい値
         """
-        super().__init__("KAMAKeltnerSingleChopLong")
+        super().__init__("KAMAKeltnerChopLongShort")
         
         # パラメータの設定
         self._parameters = {
@@ -61,7 +70,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = KAMAKeltnerSingleChopLongSignalGenerator(
+        self.signal_generator = KAMAKeltnerChopLongShortSignalGenerator(
             kama_period=kama_period,
             kama_fast=kama_fast,
             kama_slow=kama_slow,
@@ -112,7 +121,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         params = {
             'kama_period': trial.suggest_int('kama_period', 5, 300),
             'kama_fast': 2,
-            'kama_slow':  30,
+            'kama_slow': 144,
             'atr_period': trial.suggest_int('atr_period', 3, 150),
             'upper_multiplier': trial.suggest_float('upper_multiplier', 0.0, 4.0, step=0.1),
             'lower_multiplier': trial.suggest_float('lower_multiplier', 0.0, 3.0, step=0.1),
@@ -135,7 +144,7 @@ class KAMAKeltnerSingleChopLongStrategy(BaseStrategy):
         return {
             'kama_period': int(params['kama_period']),
             'kama_fast': 2,
-            'kama_slow': 30,
+            'kama_slow': 144,
             'atr_period': int(params['atr_period']),
             'upper_multiplier': float(params['upper_multiplier']),
             'lower_multiplier': float(params['lower_multiplier']),

@@ -38,62 +38,11 @@ from strategies.implementations.supertrend_adx_rsi_long.strategy import Supertre
 from strategies.implementations.supertrend_chop_rsi_long.strategy import SupertrendChopRSILongStrategy
 from strategies.implementations.supertrend_adx_rsi_short.strategy import SupertrendADXRSIShortStrategy
 from strategies.implementations.supertrend_chop_rsi_short.strategy import SupertrendChopRSIShortStrategy
-
-from strategies.implementations.chop_rsi_donchian_long.strategy import ChopRSIDonchianLongStrategy
-from strategies.implementations.chop_rsi_donchian_short.strategy import ChopRSIDonchianShortStrategy
-
-from strategies.implementations.supertrend_chop_roc_long.strategy import SupertrendChopROCLongStrategy
-from strategies.implementations.supertrend_chop_roc_short.strategy import SupertrendChopROCShortStrategy
-
-
-from strategies.implementations.donchian_chop_long.strategy import DonchianChopLongStrategy
-from strategies.implementations.donchian_chop_short.strategy import DonchianChopShortStrategy
-
-from strategies.implementations.donchian_adx_long.strategy import DonchianADXLongStrategy
-from strategies.implementations.donchian_adx_short.strategy import DonchianADXShortStrategy
-
-from strategies.implementations.supertrend_chop_long.strategy import SupertrendChopLongStrategy
-from strategies.implementations.supertrend_chop_short.strategy import SupertrendChopShortStrategy
-
-from strategies.implementations.supertrend_adx_long.strategy import SupertrendADXLongStrategy
-from strategies.implementations.supertrend_adx_short.strategy import SupertrendADXShortStrategy
-
 from strategies.implementations.supertrend_chop_adx_long.strategy import SupertrendChopADXLongStrategy
 from strategies.implementations.supertrend_chop_adx_short.strategy import SupertrendChopADXShortStrategy
 
 from strategies.implementations.supertrend_long.strategy import SupertrendLongStrategy
 from strategies.implementations.supertrend_short.strategy import SupertrendShortStrategy
-
-from strategies.implementations.supertrend_donchian_long.strategy import SupertrendDonchianLongStrategy
-from strategies.implementations.supertrend_donchian_short.strategy import SupertrendDonchianShortStrategy
-
-from strategies.implementations.supertrend_donchian_chop_long.strategy import SupertrendDonchianChopLongStrategy
-
-from strategies.implementations.keltner_chop_long.strategy import KeltnerChopLongStrategy
-from strategies.implementations.keltner_chop_short.strategy import KeltnerChopShortStrategy
-
-from strategies.implementations.keltner_half_chop_long.strategy import KeltnerHalfChopLongStrategy
-
-
-from strategies.implementations.squeeze_donchian_long.strategy import SqueezeDonchianLongStrategy
-
-from strategies.implementations.supertrend2_chop_long.strategy import Supertrend2ChopLongStrategy
-from strategies.implementations.supertrend2_chop_short.strategy import Supertrend2ChopShortStrategy
-
-from strategies.implementations.supertrend2_adx_long.strategy import Supertrend2ADXLongStrategy
-
-from strategies.implementations.supertrend2_long.strategy import Supertrend2LongStrategy
-
-from strategies.implementations.donchian2_chop_long.strategy import Donchian2ChopLongStrategy
-from strategies.implementations.donchian2_chop_short.strategy import Donchian2ChopShortStrategy
-
-from strategies.implementations.keltner2_chop_long.strategy import Keltner2ChopLongStrategy
-
-from strategies.implementations.keltner2_adx_long.strategy import Keltner2ADXLongStrategy
-
-from strategies.implementations.keltner2_long.strategy import Keltner2LongStrategy
-
-from strategies.implementations.donchian_atr_long.strategy import DonchianATRLongStrategy
 
 from strategies.implementations.donchian_atr_chop_long.strategy import DonchianATRChopLongStrategy
 from strategies.implementations.donchian_atr_chop_short.strategy import DonchianATRChopShortStrategy
@@ -113,7 +62,6 @@ from strategies.implementations.kama_keltner_single_adx_long.strategy import KAM
 
 from strategies.implementations.alma_keltner_single_chop_long.strategy import ALMAKeltnerSingleChopLongStrategy
 
-from strategies.implementations.keltner_dual_multiplier_long.strategy import KeltnerDualMultiplierLongStrategy
 from strategies.implementations.kama_keltner_single_long.strategy import KAMAKeltnerSingleLongStrategy
 
 
@@ -145,12 +93,47 @@ from strategies.implementations.rsi_div_roc_long.strategy import RSIDivROCLongSt
 from strategies.implementations.roc_rsi_divergence_long.strategy import ROCDivergenceLongStrategy
 
 from strategies.implementations.gvidya_keltner_single_long.strategy import GVIDYAKeltnerSingleLongStrategy
+from strategies.implementations.gvidya_keltner_single_short.strategy import GVIDYAKeltnerSingleShortStrategy
+
+from strategies.implementations.alma_circulation_single_long.strategy import ALMACirculationSingleLongStrategy
+from strategies.implementations.alma_circulation_single_short.strategy import ALMACirculationSingleShortStrategy
+from strategies.implementations.kama_circulation_single_long.strategy import KAMACirculationSingleLongStrategy
+from strategies.implementations.kama_circulation_single_short.strategy import KAMACirculationSingleShortStrategy
+from strategies.implementations.kama_circulation_long_short.strategy import KAMACirculationLongShortStrategy
+
+
+from strategies.implementations.kama_keltner_chop_long_short.strategy import KAMAKeltnerChopLongShortStrategy    
+from strategies.implementations.gvidya_circulation_long_short.strategy import GVIDYACirculationLongShortStrategy
+
+from strategies.implementations.tfc_chop_single_long.strategy import TFCChopSingleLongStrategy
+from strategies.implementations.tfc_chop_long_short.strategy import TFCChopLongShortStrategy
+
+from data.binance_data_source import BinanceDataSource
+
+from strategies.implementations.alpha_chop_long.strategy import AlphaChopLongStrategy
+from strategies.implementations.alpha_chop_short.strategy import AlphaChopShortStrategy
+from strategies.implementations.alpha_chop_long_short.strategy import AlphaChopLongShortStrategy
+
+from strategies.implementations.trend_alpha_chop_long.strategy import TrendAlphaChopLongStrategy
+from strategies.implementations.trend_alpha_chop_short.strategy import TrendAlphaChopShortStrategy
+from strategies.implementations.trend_alpha_chop_both.strategy import TrendAlphaChopBothStrategy
+
+from strategies.implementations.hyper_trend_chop_dual.strategy import HyperTrendChopDualStrategy
+
 
 def run_backtest(config: dict):
     """バックテストを実行"""
     # データの準備
-    data_dir = config['data']['data_dir']
-    data_loader = DataLoader(CSVDataSource(data_dir))
+    binance_config = config.get('binance_data', {})
+    data_dir = binance_config.get('data_dir', 'data/binance')
+    binance_data_source = BinanceDataSource(data_dir)
+    
+    # CSVデータソースはダミーとして渡す（Binanceデータソースのみを使用）
+    dummy_csv_source = CSVDataSource("dummy")
+    data_loader = DataLoader(
+        data_source=dummy_csv_source,
+        binance_data_source=binance_data_source
+    )
     data_processor = DataProcessor()
     
     # データの読み込みと処理
@@ -162,7 +145,7 @@ def run_backtest(config: dict):
     }
     
     # 戦略の作成
-    strategy = GVIDYAKeltnerSingleLongStrategy()
+    strategy = KAMAKeltnerChopLongShortStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -204,8 +187,8 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=GVIDYAKeltnerSingleLongStrategy,
-        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
+        strategy_class=HyperTrendChopDualStrategy,
+        param_generator=HyperTrendChopDualStrategy.create_optimization_params,
         config=config,
         n_trials=500,
         n_jobs=-1
@@ -273,10 +256,10 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=KAMAKeltnerSingleChopLongStrategy,
-        param_generator=KAMAKeltnerSingleChopLongStrategy.create_optimization_params,
+        strategy_class=GVIDYAKeltnerSingleLongStrategy,
+        param_generator=GVIDYAKeltnerSingleLongStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=500,
         n_jobs=-1
     )
     
@@ -289,7 +272,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         print(f"  {param_name}: {param_value}")
     
     # 最適化されたパラメータを戦略クラスの形式に変換
-    strategy_params = KAMAKeltnerSingleChopLongStrategy.convert_params_to_strategy_format(best_params)
+    strategy_params = GVIDYAKeltnerSingleLongStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
     data_dir = config['data']['data_dir']
@@ -297,7 +280,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     data_processor = DataProcessor()
     
     # 最適化されたパラメータで戦略を作成
-    strategy = KAMAKeltnerSingleChopLongStrategy(**strategy_params)
+    strategy = GVIDYAKeltnerSingleLongStrategy(**strategy_params)
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -371,8 +354,8 @@ def main():
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    run_walkforward_test(config)
-    # run_optimization(config)
+    # run_walkforward_test(config)
+    run_optimization(config)
     # run_montecarlo(config)
 
 
