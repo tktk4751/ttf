@@ -8,124 +8,50 @@ import pandas as pd
 from numba import jit
 
 from .indicator import Indicator
-from .atr import ATR
-from .kama import KaufmanAdaptiveMA, calculate_efficiency_ratio
-from .efficiency_ratio import calculate_efficiency_ratio_for_period
+from .adaptive_atr import calculate_adaptive_atr
+from .kama import calculate_efficiency_ratio_for_period
 
 
 @dataclass
-class TrendAlphaResult:
-    """TrendAlphaの計算結果"""
+class AlphaTrendResult:
+    """AlphaTrendの計算結果"""
     middle: np.ndarray  # 中心線（KAMA）
-    upper: np.ndarray   # 上限線（KAMA + dynamic_multiplier * ATR）
-    lower: np.ndarray   # 下限線（KAMA - dynamic_multiplier * ATR）
-    half_upper: np.ndarray  # 中間上限線（KAMA + dynamic_multiplier * 0.5 * ATR）
-    half_lower: np.ndarray  # 中間下限線（KAMA - lower_multiplier * 0.5 * ATR）
-    atr: np.ndarray     # ATRの値
+    upper: np.ndarray   # 上限線（KAMA + dynamic_multiplier * Adaptive ATR）
+    lower: np.ndarray   # 下限線（KAMA - dynamic_multiplier * Adaptive ATR）
+    half_upper: np.ndarray  # 中間上限線（KAMA + dynamic_multiplier * 0.5 * Adaptive ATR）
+    half_lower: np.ndarray  # 中間下限線（KAMA - dynamic_multiplier * 0.5 * Adaptive ATR）
+    atr: np.ndarray     # アダプティブATRの値
     er: np.ndarray      # Efficiency Ratio
     dynamic_period: np.ndarray  # 動的ATR期間
 
 
 @jit(nopython=True)
-def calculate_tr(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
+def calculate_dynamic_periods(er: np.ndarray, max_slow: int, min_slow: int, max_fast: int, min_fast: int) -> Tuple[np.ndarray, np.ndarray]:
     """
-    True Rangeを計算する（高速化版）
+    効率比に基づいて動的なKAMAのfast/slow期間を計算する（高速化版）
     """
-    tr = np.zeros_like(high)
-    tr[0] = high[0] - low[0]
-    
-    for i in range(1, len(high)):
-        hl = high[i] - low[i]
-        hc = abs(high[i] - close[i-1])
-        lc = abs(low[i] - close[i-1])
-        tr[i] = max(hl, hc, lc)
-    
-    return tr
+    fast_periods = min_fast + (1.0 - er) * (max_fast - min_fast)
+    slow_periods = min_slow + (1.0 - er) * (max_slow - min_slow)
+    return np.round(fast_periods).astype(np.int32), np.round(slow_periods).astype(np.int32)
 
-@jit(nopython=True)
-def calculate_dynamic_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, 
-                         periods: np.ndarray, max_period: int) -> np.ndarray:
-    """
-    動的なATRを計算する（高速化版）
-    """
-    length = len(high)
-    tr = calculate_tr(high, low, close)
-    atr = np.full(length, np.nan)
-    
-    for i in range(max_period, length):
-        if np.isnan(periods[i]):
-            continue
-        period = int(periods[i])
-        if period < 1:
-            continue
-        atr[i] = np.mean(tr[i-period+1:i+1])
-    
-    return atr
 
 @jit(nopython=True)
 def calculate_dynamic_multiplier(er: np.ndarray, max_multiplier: float, min_multiplier: float) -> np.ndarray:
     """
     効率比に基づいて動的な乗数を計算する（高速化版）
-    
-    Args:
-        er: 効率比の配列
-        max_multiplier: 最大乗数
-        min_multiplier: 最小乗数
-    
-    Returns:
-        動的な乗数の配列
     """
     return min_multiplier + (1.0 - er) * (max_multiplier - min_multiplier)
 
 
-@jit(nopython=True)
-def calculate_dynamic_period(er: np.ndarray, max_period: int, min_period: int) -> np.ndarray:
+class AlphaTrend(Indicator):
     """
-    効率比に基づいて動的なATR期間を計算する（高速化版）
+    AlphaTrend インジケーター
     
-    Args:
-        er: 効率比の配列
-        max_period: 最大期間
-        min_period: 最小期間
-    
-    Returns:
-        動的な期間の配列
-    """
-    # ERが高い（トレンドが強い）ほど期間は短く、
-    # ERが低い（トレンドが弱い）ほど期間は長くなる
-    periods = min_period + (1.0 - er) * (max_period - min_period)
-    return np.round(periods).astype(np.int32)
-
-
-@jit(nopython=True)
-def calculate_dynamic_kama_periods(er: np.ndarray, max_slow: int, min_slow: int, max_fast: int, min_fast: int) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    効率比に基づいて動的なKAMAのfast/slow期間を計算する（高速化版）
-    
-    Args:
-        er: 効率比の配列
-        max_slow: 遅い移動平均の最大期間
-        min_slow: 遅い移動平均の最小期間
-        max_fast: 速い移動平均の最大期間
-        min_fast: 速い移動平均の最小期間
-    
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: 動的なfast期間とslow期間の配列
-    """
-    # ERが高い（トレンドが強い）ほど期間は短く、
-    # ERが低い（トレンドが弱い）ほど期間は長くなる
-    fast_periods = min_fast + (1.0 - er) * (max_fast - min_fast)
-    slow_periods = min_slow + (1.0 - er) * (max_slow - min_slow)
-    
-    return np.round(fast_periods).astype(np.int32), np.round(slow_periods).astype(np.int32)
-
-
-class TrendAlpha(Indicator):
-    """
-    TrendAlpha インジケーター
-    
+    トレンドアルファをベースに、アダプティブATRを組み込んだ改良版
     KAMAを中心線として使用し、効率比（ER）に基づいて動的に調整される
-    ATRの倍数とATRの期間でバンドを形成する
+    アダプティブATRの倍数とATRの期間でバンドを形成する
+    
+    特徴：
     - ERが高い（トレンドが強い）時：
         - バンドは狭くなる（乗数が小さくなる）
         - ATR期間は短くなる（より敏感に反応）
@@ -134,11 +60,16 @@ class TrendAlpha(Indicator):
         - バンドは広くなる（乗数が大きくなる）
         - ATR期間は長くなる（ノイズを軽減）
         - KAMAのfast/slow期間は長くなる（ノイズを軽減）
+    
+    改良点：
+    - アダプティブATRの採用による適応性の向上
+    - グローバルERとローカルERの組み合わせによる期間調整の改善
+    - より洗練された動的パラメーター調整
     """
     
     def __init__(
         self,
-        kama_period: int = 10,
+        period: int = 10,
         max_kama_slow: int = 55,
         min_kama_slow: int = 30,
         max_kama_fast: int = 13,
@@ -152,7 +83,7 @@ class TrendAlpha(Indicator):
         コンストラクタ
         
         Args:
-            kama_period: KAMAの効率比の計算期間（デフォルト: 10）
+            period: KAMAの効率比の計算期間（デフォルト: 10）
             max_kama_slow: KAMAの遅い移動平均の最大期間（デフォルト: 55）
             min_kama_slow: KAMAの遅い移動平均の最小期間（デフォルト: 30）
             max_kama_fast: KAMAの速い移動平均の最大期間（デフォルト: 13）
@@ -163,11 +94,11 @@ class TrendAlpha(Indicator):
             min_multiplier: ATR乗数の最小値（デフォルト: 1.0）
         """
         super().__init__(
-            f"TrendAlpha({kama_period}, {max_kama_slow}, {min_kama_slow}, "
+            f"AlphaTrend({period}, {max_kama_slow}, {min_kama_slow}, "
             f"{max_kama_fast}, {min_kama_fast}, {max_atr_period}, {min_atr_period}, "
             f"{max_multiplier}, {min_multiplier})"
         )
-        self.kama_period = kama_period
+        self.period = period
         self.max_kama_slow = max_kama_slow
         self.min_kama_slow = min_kama_slow
         self.max_kama_fast = max_kama_fast
@@ -180,7 +111,7 @@ class TrendAlpha(Indicator):
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        TrendAlphaを計算する
+        AlphaTrendを計算する
         
         Args:
             data: 価格データ（DataFrameまたはNumPy配列）
@@ -208,11 +139,10 @@ class TrendAlpha(Indicator):
                     low = close
             
             # 効率比（ER）の計算
-            er = calculate_efficiency_ratio_for_period(close, self.kama_period)
-            
+            er = calculate_efficiency_ratio_for_period(close, self.period)
             
             # 動的なKAMAのfast/slow期間の計算
-            fast_periods, slow_periods = calculate_dynamic_kama_periods(
+            fast_periods, slow_periods = calculate_dynamic_periods(
                 er,
                 self.max_kama_slow,
                 self.min_kama_slow,
@@ -220,15 +150,13 @@ class TrendAlpha(Indicator):
                 self.min_kama_fast
             )
             
-            # 動的なATR期間の計算
-            dynamic_period = calculate_dynamic_period(
-                er,
-                self.max_atr_period,
-                self.min_atr_period
+            # アダプティブATRの計算
+            atr_values = calculate_adaptive_atr(
+                high, low, close,
+                self.period,
+                self.min_atr_period,
+                self.max_atr_period
             )
-            
-            # 動的期間でのATR計算（高速化版）
-            atr_values = calculate_dynamic_atr(high, low, close, dynamic_period, self.max_atr_period)
             
             # 動的な乗数の計算
             multiplier = calculate_dynamic_multiplier(er, self.max_multiplier, self.min_multiplier)
@@ -238,13 +166,13 @@ class TrendAlpha(Indicator):
             kama_values[0] = close[0]
             
             for i in range(1, len(close)):
-                if np.isnan(er[i]) or i < self.kama_period:
+                if np.isnan(er[i]) or i < self.period:
                     kama_values[i] = kama_values[i-1]
                     continue
                 
                 try:
-                    change = float(close[i] - close[i-self.kama_period])
-                    volatility = float(np.sum(np.abs(np.diff(close[i-self.kama_period:i+1]))))
+                    change = float(close[i] - close[i-self.period])
+                    volatility = float(np.sum(np.abs(np.diff(close[i-self.period:i+1]))))
                     current_er = abs(change) / (volatility + 1e-10)
                     
                     fast_constant = 2.0 / (float(fast_periods[i]) + 1.0)
@@ -261,7 +189,7 @@ class TrendAlpha(Indicator):
             half_upper = kama_values + (multiplier * 0.5 * atr_values)
             half_lower = kama_values - (multiplier * 0.5 * atr_values)
             
-            self._result = TrendAlphaResult(
+            self._result = AlphaTrendResult(
                 middle=kama_values,
                 upper=upper,
                 lower=lower,
@@ -269,13 +197,14 @@ class TrendAlpha(Indicator):
                 half_lower=half_lower,
                 atr=atr_values,
                 er=er,
-                dynamic_period=dynamic_period
+                dynamic_period=np.full_like(er, self.period)  # 動的期間は使用しないため固定値を返す
             )
             
             self._values = kama_values
             return kama_values
             
-        except Exception:
+        except Exception as e:
+            print(f"エラーが発生しました: {e}")
             return None
     
     def get_bands(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -298,10 +227,10 @@ class TrendAlpha(Indicator):
     
     def get_atr(self) -> np.ndarray:
         """
-        ATRの値を取得する
+        アダプティブATRの値を取得する
         
         Returns:
-            np.ndarray: ATRの値
+            np.ndarray: アダプティブATRの値
         """
         if self._result is None:
             raise RuntimeError("calculate()を先に呼び出してください")

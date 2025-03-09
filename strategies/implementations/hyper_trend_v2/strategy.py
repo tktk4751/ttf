@@ -7,21 +7,19 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import HyperTrendSignalGenerator
+from .signal_generator import HyperTrendV2SignalGenerator
 
 
-class HyperTrendStrategy(BaseStrategy):
+class HyperTrendV2Strategy(BaseStrategy):
     """
-    HyperTrend+ガーディアンエンジェルフィルター戦略
+    HyperTrend V2戦略 (ガーディアンエンジェルフィルターなし)
     
     エントリー条件:
     [ロング]
     - HyperTrendが上昇トレンドを示している
-    - ガーディアンエンジェルがトレンド相場を示している
     
     [ショート]
     - HyperTrendが下降トレンドを示している
-    - ガーディアンエンジェルがトレンド相場を示している
     
     エグジット条件:
     [ロング]
@@ -34,34 +32,26 @@ class HyperTrendStrategy(BaseStrategy):
     def __init__(
         self,
         period: int = 21,
-        max_percentile_length: int = 100,
+        max_percentile_length: int = 250,
         min_percentile_length: int = 13,
-        max_atr_period: int = 90,
+        max_atr_period: int = 130,
         min_atr_period: int = 5,
         max_multiplier: float = 3,
-        min_multiplier: float = 0.5,
-        max_period: int = 100,
-        min_period: int = 20,
-        max_threshold: float = 55,
-        min_threshold: float = 45
+        min_multiplier: float = 0.5
     ):
         """
         初期化
         
         Args:
-            period: HyperTrendとガーディアンエンジェルの効率比の計算期間
+            period: HyperTrendの効率比の計算期間
             max_percentile_length: パーセンタイル計算の最大期間
             min_percentile_length: パーセンタイル計算の最小期間
             max_atr_period: ATR期間の最大値
             min_atr_period: ATR期間の最小値
             max_multiplier: ATR乗数の最大値
             min_multiplier: ATR乗数の最小値
-            max_period: ガーディアンエンジェルのチョピネス期間の最大値
-            min_period: ガーディアンエンジェルのチョピネス期間の最小値
-            max_threshold: ガーディアンエンジェルのしきい値の最大値
-            min_threshold: ガーディアンエンジェルのしきい値の最小値
         """
-        super().__init__("HyperTrend")
+        super().__init__("HyperTrendV2")
         
         # パラメータの設定
         self._parameters = {
@@ -71,26 +61,18 @@ class HyperTrendStrategy(BaseStrategy):
             'max_atr_period': max_atr_period,
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
-            'min_multiplier': min_multiplier,
-            'max_period': max_period,
-            'min_period': min_period,
-            'max_threshold': max_threshold,
-            'min_threshold': min_threshold
+            'min_multiplier': min_multiplier
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = HyperTrendSignalGenerator(
+        self.signal_generator = HyperTrendV2SignalGenerator(
             period=period,
             max_percentile_length=max_percentile_length,
             min_percentile_length=min_percentile_length,
             max_atr_period=max_atr_period,
             min_atr_period=min_atr_period,
             max_multiplier=max_multiplier,
-            min_multiplier=min_multiplier,
-            max_period=max_period,
-            min_period=min_period,
-            max_threshold=max_threshold,
-            min_threshold=min_threshold
+            min_multiplier=min_multiplier
         )
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -152,9 +134,5 @@ class HyperTrendStrategy(BaseStrategy):
             'max_atr_period': 90,
             'min_atr_period': 5,
             'max_multiplier': 3,
-            'min_multiplier': 0.5,
-            'max_period': 100,
-            'min_period': 20,
-            'max_threshold': 55,
-            'min_threshold': 45
+            'min_multiplier': 0.5
         } 

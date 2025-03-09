@@ -7,21 +7,7 @@ import pandas as pd
 from numba import jit
 
 from .indicator import Indicator
-
-
-@jit(nopython=True)
-def calculate_efficiency_ratio(change: np.ndarray, volatility: np.ndarray) -> np.ndarray:
-    """
-    効率比（Efficiency Ratio）を計算する（高速化版）
-    
-    Args:
-        change: 価格変化（終値の差分）の配列
-        volatility: ボラティリティ（価格変化の絶対値の合計）の配列
-    
-    Returns:
-        効率比の配列
-    """
-    return np.abs(change) / (volatility + 1e-10)  # ゼロ除算を防ぐ
+from .efficiency_ratio import calculate_efficiency_ratio, calculate_efficiency_ratio_for_period
 
 
 @jit(nopython=True)
@@ -66,12 +52,8 @@ def calculate_kama(close: np.ndarray, period: int, fast_period: int, slow_period
     
     # 各時点でのKAMAを計算
     for i in range(period, length):
-        # 価格変化とボラティリティの計算
-        change = close[i] - close[i-period]
-        volatility = np.sum(np.abs(np.diff(close[i-period:i+1])))
-        
         # 効率比の計算
-        er = abs(change) / (volatility + 1e-10)
+        er = calculate_efficiency_ratio_for_period(close[max(0, i-period+1):i+1], period)[0]
         
         # スムージング定数の計算
         sc = (er * (fast - slow) + slow) ** 2

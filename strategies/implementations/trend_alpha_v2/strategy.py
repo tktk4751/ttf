@@ -7,16 +7,16 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import TrendAlphaSignalGenerator
+from .signal_generator import TrendAlphaV2SignalGenerator
 
 
-class TrendAlphaStrategy(BaseStrategy):
+class TrendAlphaV2Strategy(BaseStrategy):
     """
-    TrendAlpha+ガーディアンエンジェルフィルター戦略
+    TrendAlpha V2戦略 (ガーディアンエンジェルフィルターなし)
     
     エントリー条件:
-    - ロング: TrendAlphaのブレイクアウトで買いシグナル + ガーディアンエンジェルがトレンド相場
-    - ショート: TrendAlphaのブレイクアウトで売りシグナル + ガーディアンエンジェルがトレンド相場
+    - ロング: TrendAlphaのブレイクアウトで買いシグナル
+    - ショート: TrendAlphaのブレイクアウトで売りシグナル
     
     エグジット条件:
     - ロング: TrendAlphaの売りシグナル
@@ -34,16 +34,15 @@ class TrendAlphaStrategy(BaseStrategy):
         min_atr_period: int = 13,
         max_multiplier: float = 3,
         min_multiplier: float = 0.5,
-        max_period: int = 100,
-        min_period: int = 20,
-        max_threshold: float = 55,
-        min_threshold: float = 45
+        trend_quality_max_period: int = 50,
+        trend_quality_min_period: int = 5,
+        trend_quality_threshold: float = 0.5
     ):
         """
         初期化
         
         Args:
-            period: KAMAの効率比の計算期間とガーディアンエンジェルのER期間
+            period: KAMAの効率比の計算期間
             max_kama_slow: KAMAの遅い移動平均の最大期間
             min_kama_slow: KAMAの遅い移動平均の最小期間
             max_kama_fast: KAMAの速い移動平均の最大期間
@@ -52,12 +51,12 @@ class TrendAlphaStrategy(BaseStrategy):
             min_atr_period: ATR期間の最小値
             max_multiplier: ATR乗数の最大値
             min_multiplier: ATR乗数の最小値
-            max_period: ガーディアンエンジェルのチョピネス期間の最大値
-            min_period: ガーディアンエンジェルのチョピネス期間の最小値
-            max_threshold: ガーディアンエンジェルのしきい値の最大値
-            min_threshold: ガーディアンエンジェルのしきい値の最小値
+            trend_quality_er_period: トレンドクオリティの効率比計算期間
+            trend_quality_max_period: トレンドクオリティの最大期間
+            trend_quality_min_period: トレンドクオリティの最小期間
+            trend_quality_threshold: トレンドクオリティのしきい値
         """
-        super().__init__("TrendAlpha")
+        super().__init__("TrendAlphaV2")
         
         # パラメータの設定
         self._parameters = {
@@ -70,14 +69,13 @@ class TrendAlphaStrategy(BaseStrategy):
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
             'min_multiplier': min_multiplier,
-            'max_period': max_period,
-            'min_period': min_period,
-            'max_threshold': max_threshold,
-            'min_threshold': min_threshold
+            'trend_quality_max_period': trend_quality_max_period,
+            'trend_quality_min_period': trend_quality_min_period,
+            'trend_quality_threshold': trend_quality_threshold
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = TrendAlphaSignalGenerator(
+        self.signal_generator = TrendAlphaV2SignalGenerator(
             period=period,
             max_kama_slow=max_kama_slow,
             min_kama_slow=min_kama_slow,
@@ -87,10 +85,9 @@ class TrendAlphaStrategy(BaseStrategy):
             min_atr_period=min_atr_period,
             max_multiplier=max_multiplier,
             min_multiplier=min_multiplier,
-            max_period=max_period,
-            min_period=min_period,
-            max_threshold=max_threshold,
-            min_threshold=min_threshold
+            trend_quality_max_period=trend_quality_max_period,
+            trend_quality_min_period=trend_quality_min_period,
+            trend_quality_threshold=trend_quality_threshold
         )
     
     def generate_entry(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -130,9 +127,8 @@ class TrendAlphaStrategy(BaseStrategy):
         Returns:
             Dict[str, Any]: 最適化パラメータ
         """
-        
         params = {
-            'period': trial.suggest_int('period', 5, 300),  
+            'period': trial.suggest_int('period', 5, 300),
             'max_kama_slow': 89,
             'min_kama_slow': 30,
             'max_kama_fast': 15,
@@ -141,10 +137,9 @@ class TrendAlphaStrategy(BaseStrategy):
             'min_atr_period': 13,
             'max_multiplier': 3,
             'min_multiplier': 0.5,
-            'max_period': 100,
-            'min_period': 20,
-            'max_threshold': 55,
-            'min_threshold': 45
+            'trend_quality_max_period': 120,
+            'trend_quality_min_period': 10,
+            'trend_quality_threshold': 0.5
         }
         return params
     
@@ -159,7 +154,6 @@ class TrendAlphaStrategy(BaseStrategy):
         Returns:
             Dict[str, Any]: 戦略パラメータ
         """
-        # periodパラメータをそのまま使用
         return {
             'period': int(params['period']),
             'max_kama_slow': 89,
@@ -170,8 +164,7 @@ class TrendAlphaStrategy(BaseStrategy):
             'min_atr_period': 13,
             'max_multiplier': 3,
             'min_multiplier': 1,
-            'max_period': 100,
-            'min_period': 20,
-            'max_threshold': 55,
-            'min_threshold': 45
+            'trend_quality_max_period': 120,
+            'trend_quality_min_period': 10,
+            'trend_quality_threshold': 0.5
         } 

@@ -10,6 +10,8 @@ from data.data_loader import DataLoader, CSVDataSource
 from data.data_processor import DataProcessor
 
 from position_sizing.fixed_ratio import FixedRatioSizing
+from position_sizing.atr_volatility import ATRVolatilitySizing
+from position_sizing.volatility_std import VolatilityStdSizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
 from walkforward.walkforward_optimizer import WalkForwardOptimizer
@@ -23,6 +25,10 @@ from data.binance_data_source import BinanceDataSource
 from strategies.implementations.trend_alpha.strategy import TrendAlphaStrategy
 from strategies.implementations.hyper_trend.strategy import HyperTrendStrategy
 
+from strategies.implementations.trend_alpha_v2.strategy import TrendAlphaV2Strategy
+from strategies.implementations.hyper_trend_v2.strategy import HyperTrendV2Strategy
+from strategies.implementations.trend_alpha_v3.strategy import TrendAlphaV3Strategy
+from strategies.implementations.alpha_trend.strategy import AlphaTrendStrategy
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -48,14 +54,20 @@ def run_backtest(config: dict):
     }
     
     # 戦略の作成
-    strategy = HyperTrendStrategy()
+    strategy = TrendAlphaV3Strategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
-    position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.2),
-        leverage=position_config.get('leverage', 1.0)
+    position_sizing = VolatilityStdSizing(
+        volatility_period=21,
+        volatility_multiplier=2.0,
+        risk_percent=0.05,
+        leverage=1.0
     )
+    # position_sizing = FixedRatioSizing(
+    #     ratio=position_config.get('ratio', 0.2),
+    #     leverage=position_config.get('leverage', 1.0)
+    # )
         
     # バックテスターの作成
     initial_balance = config.get('backtest', {}).get('initial_balance', 10000)
@@ -90,10 +102,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=HyperTrendStrategy,
-        param_generator=HyperTrendStrategy.create_optimization_params,
+        strategy_class=AlphaTrendStrategy,
+        param_generator=AlphaTrendStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=100,
         n_jobs=-1
     )
     
@@ -132,7 +144,7 @@ def run_walkforward_test(config: dict):
         strategy_class=TrendAlphaStrategy,
         param_generator=TrendAlphaStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=100,
         n_jobs=-1
     )
 
@@ -162,7 +174,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         strategy_class=TrendAlphaStrategy,
         param_generator=TrendAlphaStrategy.create_optimization_params,
         config=config,
-        n_trials=500,
+        n_trials=200,
         n_jobs=-1
     )
     

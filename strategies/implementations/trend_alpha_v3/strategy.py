@@ -7,16 +7,16 @@ import pandas as pd
 import optuna
 
 from ...base.strategy import BaseStrategy
-from .signal_generator import TrendAlphaSignalGenerator
+from .signal_generator import TrendAlphaV3SignalGenerator
 
 
-class TrendAlphaStrategy(BaseStrategy):
+class TrendAlphaV3Strategy(BaseStrategy):
     """
-    TrendAlpha+ガーディアンエンジェルフィルター戦略
+    TrendAlpha+アダプティブチョピネスフィルター戦略
     
     エントリー条件:
-    - ロング: TrendAlphaのブレイクアウトで買いシグナル + ガーディアンエンジェルがトレンド相場
-    - ショート: TrendAlphaのブレイクアウトで売りシグナル + ガーディアンエンジェルがトレンド相場
+    - ロング: TrendAlphaのブレイクアウトで買いシグナル + アダプティブチョピネスがトレンド相場
+    - ショート: TrendAlphaのブレイクアウトで売りシグナル + アダプティブチョピネスがトレンド相場
     
     エグジット条件:
     - ロング: TrendAlphaの売りシグナル
@@ -25,25 +25,25 @@ class TrendAlphaStrategy(BaseStrategy):
     
     def __init__(
         self,
-        period: int = 13,
-        max_kama_slow: int = 89,
-        min_kama_slow: int = 30,
-        max_kama_fast: int = 15,
+        period: int = 20,
+        max_kama_slow: int = 100,
+        min_kama_slow: int = 25,
+        max_kama_fast: int = 20,
         min_kama_fast: int = 2,
         max_atr_period: int = 120,
-        min_atr_period: int = 13,
-        max_multiplier: float = 3,
-        min_multiplier: float = 0.5,
-        max_period: int = 100,
-        min_period: int = 20,
-        max_threshold: float = 55,
-        min_threshold: float = 45
+        min_atr_period: int = 5,
+        max_multiplier: float = 3.5,
+        min_multiplier: float = 0.3,
+        chop_mfast: int = 13,
+        chop_mslow: int = 120,
+        max_threshold: float = 0.6,
+        min_threshold: float = 0.4
     ):
         """
         初期化
         
         Args:
-            period: KAMAの効率比の計算期間とガーディアンエンジェルのER期間
+            period: KAMAの効率比の計算期間とチョピネスの基本期間
             max_kama_slow: KAMAの遅い移動平均の最大期間
             min_kama_slow: KAMAの遅い移動平均の最小期間
             max_kama_fast: KAMAの速い移動平均の最大期間
@@ -52,12 +52,12 @@ class TrendAlphaStrategy(BaseStrategy):
             min_atr_period: ATR期間の最小値
             max_multiplier: ATR乗数の最大値
             min_multiplier: ATR乗数の最小値
-            max_period: ガーディアンエンジェルのチョピネス期間の最大値
-            min_period: ガーディアンエンジェルのチョピネス期間の最小値
-            max_threshold: ガーディアンエンジェルのしきい値の最大値
-            min_threshold: ガーディアンエンジェルのしきい値の最小値
+            chop_mfast: チョピネスの最小期間
+            chop_mslow: チョピネスの最大期間
+            chop_max_threshold: チョピネスのしきい値の最大値（デフォルト: 61.8）
+            chop_min_threshold: チョピネスのしきい値の最小値（デフォルト: 38.2）
         """
-        super().__init__("TrendAlpha")
+        super().__init__("TrendAlphaV3")
         
         # パラメータの設定
         self._parameters = {
@@ -70,15 +70,15 @@ class TrendAlphaStrategy(BaseStrategy):
             'min_atr_period': min_atr_period,
             'max_multiplier': max_multiplier,
             'min_multiplier': min_multiplier,
-            'max_period': max_period,
-            'min_period': min_period,
+            'chop_mfast': chop_mfast,
+            'chop_mslow': chop_mslow,
             'max_threshold': max_threshold,
             'min_threshold': min_threshold
         }
         
         # シグナル生成器の初期化
-        self.signal_generator = TrendAlphaSignalGenerator(
-            period=period,
+        self.signal_generator = TrendAlphaV3SignalGenerator(
+            kama_period=period,
             max_kama_slow=max_kama_slow,
             min_kama_slow=min_kama_slow,
             max_kama_fast=max_kama_fast,
@@ -87,8 +87,8 @@ class TrendAlphaStrategy(BaseStrategy):
             min_atr_period=min_atr_period,
             max_multiplier=max_multiplier,
             min_multiplier=min_multiplier,
-            max_period=max_period,
-            min_period=min_period,
+            chop_mfast=chop_mfast,
+            chop_mslow=chop_mslow,
             max_threshold=max_threshold,
             min_threshold=min_threshold
         )
@@ -132,19 +132,19 @@ class TrendAlphaStrategy(BaseStrategy):
         """
         
         params = {
-            'period': trial.suggest_int('period', 5, 300),  
-            'max_kama_slow': 89,
-            'min_kama_slow': 30,
-            'max_kama_fast': 15,
+            'period': trial.suggest_int('period', 5, 300),
+            'max_kama_slow': 100,
+            'min_kama_slow': 25,
+            'max_kama_fast': 20,
             'min_kama_fast': 2,
             'max_atr_period': 120,
-            'min_atr_period': 13,
-            'max_multiplier': 3,
-            'min_multiplier': 0.5,
-            'max_period': 100,
-            'min_period': 20,
-            'max_threshold': 55,
-            'min_threshold': 45
+            'min_atr_period': 5,
+            'max_multiplier': 3.5,
+            'min_multiplier': 0.3,
+            'chop_mfast': 13,
+            'chop_mslow': 120,
+            'max_threshold': 0.6,
+            'min_threshold': 0.4
         }
         return params
     
@@ -159,7 +159,6 @@ class TrendAlphaStrategy(BaseStrategy):
         Returns:
             Dict[str, Any]: 戦略パラメータ
         """
-        # periodパラメータをそのまま使用
         return {
             'period': int(params['period']),
             'max_kama_slow': 89,
@@ -169,9 +168,9 @@ class TrendAlphaStrategy(BaseStrategy):
             'max_atr_period': 120,
             'min_atr_period': 13,
             'max_multiplier': 3,
-            'min_multiplier': 1,
-            'max_period': 100,
-            'min_period': 20,
-            'max_threshold': 55,
-            'min_threshold': 45
+            'min_multiplier': 0.5,
+            'chop_mfast': 5,
+            'chop_mslow': 120,
+            'max_threshold': 0.6,
+            'min_threshold': 0.4
         } 

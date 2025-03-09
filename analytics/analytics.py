@@ -1004,9 +1004,9 @@ class Analytics:
 
         以下の要素を幾何平均で組み合わせた総合的なパフォーマンス指標：
 
-        1. ソルティノレシオ (40%): ダウンサイドリスクに対するリターン
-        2. カルマーレシオ (60%): 最大ドローダウンに対するリターン
-
+        1. カルマーレシオ (40%): 最大ドローダウンに対するリターン
+        2. ソルティノレシオ (30%): ダウンサイドリスクに対するリターン
+        3. 悲観的リターンレシオ (30%): 保守的な収益性評価
 
         Returns:
             float: 0-100のスケールでのスコア。高いほど良い。
@@ -1015,21 +1015,24 @@ class Analytics:
             return 0.0
 
         # 各指標を0-1にスケール
-        calmar = min(max(self.calculate_calmar_ratio(), 0), 5) / 5    # 0-1にスケール
-        sortino = min(max(self.calculate_sortino_ratio(), 0), 6) / 6  # 0-1にスケール     
+        calmar = min(max(self.calculate_calmar_ratio(), 0), 8) / 8    # 0-1にスケール
+        sortino = min(max(self.calculate_sortino_ratio(), 0), 7) / 7  # 0-1にスケール
+        prr = min(max(self.calculate_pessimistic_return_ratio(), 0), 3) / 3  # 0-1にスケール
 
         # ゼロ値置換: 各指標が0の場合、小さな値に置き換え
         replacement_value = 0.01
         calmar = calmar if calmar > 0 else replacement_value
         sortino = sortino if sortino > 0 else replacement_value
+        prr = prr if prr > 0 else replacement_value
 
         # 各指標の重要度に応じて指数を設定
         score = (
-            calmar ** 0.60 *         # カルマーレシオ (60%)
-            sortino ** 0.40       # ソルティノレシオ (40%)
+            calmar ** 0.40 *      # カルマーレシオ (40%)
+            sortino ** 0.30 *     # ソルティノレシオ (30%)
+            prr ** 0.30           # 悲観的リターンレシオ (30%)
         )
 
-        # 0-100のスケールに変換 (補正不要)
+        # 0-100のスケールに変換
         return score * 100
 
     def calculate_balsar_ruin_probability(self, position_size_ratio: float) -> float:

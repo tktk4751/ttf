@@ -9,6 +9,10 @@ from numba import jit
 
 from .indicator import Indicator
 from .atr import ATR
+from .efficiency_ratio import calculate_efficiency_ratio_for_period
+from .normalized_chop import calculate_normalized_chop
+from .normalized_adx import calculate_normalized_adx
+from .trend_quality import TrendQuality
 
 
 @dataclass
@@ -323,7 +327,7 @@ class HyperTrend(Indicator):
             close = data[:, 3] # close
         
         # 効率比の計算
-        er = calculate_efficiency_ratio(close, self.er_period)
+        er = calculate_efficiency_ratio_for_period(close, self.er_period)
         
         # 動的パラメータの計算
         dynamic_period, dynamic_multiplier = calculate_dynamic_parameters(

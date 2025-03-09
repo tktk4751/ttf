@@ -8,6 +8,8 @@ from datetime import datetime
 from optimization.optimizer import BaseOptimizer
 from backtesting.backtester import Backtester
 from position_sizing.fixed_ratio import FixedRatioSizing
+from position_sizing.atr_volatility import ATRVolatilitySizing
+from position_sizing.volatility_std import VolatilityStdSizing
 from strategies.base.strategy import BaseStrategy
 from analytics.analytics import Analytics
 from data.data_loader import DataLoader, CSVDataSource
@@ -82,9 +84,15 @@ class BayesianOptimizer(BaseOptimizer):
         # ポジションサイジングの作成
         position_config = self.config.get('position_sizing', {})
         position_sizing = FixedRatioSizing(
-            ratio=position_config.get('ratio', 0.5),
+            ratio=position_config.get('ratio', 0.2),
             leverage=position_config.get('leverage', 1.0)
         )
+        # position_sizing = VolatilityStdSizing(
+        #     volatility_period=21,
+        #     volatility_multiplier=2.0,
+        #     risk_percent=0.1,
+        #     leverage=1.0
+        # )
         
         # バックテスターの作成
         initial_balance = self.config.get('position_sizing', {}).get('initial_balance', 10000)
@@ -108,7 +116,7 @@ class BayesianOptimizer(BaseOptimizer):
             raise optuna.TrialPruned()
         
         analytics = Analytics(trades, self.config.get('position_sizing', {}).get('initial_balance', 10000))
-        score = analytics.calculate_alpha_score()
+        score = analytics.calculate_alpha_score_v2()
         
         if self.best_score is None or score > self.best_score:
             self.best_score = score

@@ -3,21 +3,13 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from backtesting.trade import Trade
+from position_sizing.position_sizing import PositionSizingParams
+from position_sizing.interfaces import IPositionManager
 import logging
 import matplotlib.pyplot as plt
 
 # ロガーの設定
 logger = logging.getLogger(__name__)
-
-class IPositionManager(Protocol):
-    """ポジション管理のインターフェース"""
-    def can_enter(self) -> bool:
-        """新規ポジションを取れるかどうか"""
-        ...
-    
-    def calculate_position_size(self, price: float, capital: float) -> float:
-        """ポジションサイズを計算"""
-        ...
 
 class IStrategy(Protocol):
     """戦略のインターフェース"""
@@ -38,7 +30,8 @@ class Backtester:
         initial_balance: float,
         commission: float,
         max_positions: int = 1,
-        verbose: bool = True
+        verbose: bool = True,
+        warmup_bars: int = 50  # ウォームアップ期間を追加
     ):
         """
         コンストラクタ
@@ -50,6 +43,7 @@ class Backtester:
             commission: 手数料率
             max_positions: 同時に保有できる最大ポジション数
             verbose: 詳細なログを出力するかどうか
+            warmup_bars: 指標計算用のウォームアップ期間
         """
         self.strategy = strategy
         self.position_manager = position_manager
@@ -58,6 +52,7 @@ class Backtester:
         self.commission = commission
         self.max_positions = max_positions
         self.verbose = verbose
+        self.warmup_bars = warmup_bars
         
         # 口座残高の推移を記録
         self.balance_history = []
@@ -141,7 +136,7 @@ class Backtester:
         dates = data.index
         closes = data['close'].values
         current_position: Optional[Trade] = None
-        pending_entry: Optional[tuple] = None  # (position_type, position_size, entry_index)
+        pending_entry: Optional[tuple] = None
         pending_exit: bool = False
         trades: List[Trade] = []
         
@@ -157,7 +152,7 @@ class Backtester:
             logger.info(f"Initial capital: {self.current_capital:.2f} USD")
         
         # バックテストのメインループ
-        for i in range(1, len(data)):
+        for i in range(self.warmup_bars, len(data)):
             date = dates[i]
             close = closes[i]
             
@@ -198,18 +193,44 @@ class Backtester:
             # 現在のポジションがない場合、エントリーシグナルをチェック
             if current_position is None and not pending_entry:
                 # ポジションサイズの計算
-                position_size = self.position_manager.calculate_position_size(
-                    price=close,  # 現在の終値でポジションサイズを計算
-                    capital=self.current_capital
-                )
-                
-                # LONGエントリー
-                if entry_signals[i] == 1:
-                    pending_entry = ('LONG', position_size, i)
-                
-                # SHORTエントリー
-                elif entry_signals[i] == -1:
-                    pending_entry = ('SHORT', position_size, i)
+                if hasattr(self.position_manager, 'calculate'):
+                    # 詳細なポジションサイズ計算を使用
+                    stop_loss_price = close * 0.95  # デフォルトのストップロス（5%）
+                    if entry_signals[i] == -1:  # ショートの場合
+                        stop_loss_price = close * 1.05  # ショート用のストップロス
+                    
+                    # 過去データの準備（現在のインデックスまでのデータを含む）
+                    lookback_start = max(0, i - self.warmup_bars)
+                    historical_data = data.iloc[lookback_start:i+1].copy()
+                    
+                    # 必要な最小データ量を確保
+                    if len(historical_data) >= self.warmup_bars:
+                        params = PositionSizingParams(
+                            entry_price=close,
+                            stop_loss_price=stop_loss_price,
+                            capital=self.current_capital,
+                            historical_data=historical_data
+                        )
+                        
+                        sizing_result = self.position_manager.calculate(params)
+                        position_size = sizing_result['position_size']
+                        
+                        # LONGエントリー
+                        if entry_signals[i] == 1:
+                            pending_entry = ('LONG', position_size, i)
+                        
+                        # SHORTエントリー
+                        elif entry_signals[i] == -1:
+                            pending_entry = ('SHORT', position_size, i)
+
+                    
+                    # LONGエントリー
+                    if entry_signals[i] == 1:
+                        pending_entry = ('LONG', position_size, i)
+                    
+                    # SHORTエントリー
+                    elif entry_signals[i] == -1:
+                        pending_entry = ('SHORT', position_size, i)
         
         # 最後のポジションがまだオープンの場合、最終価格でクローズ
         if current_position is not None:
