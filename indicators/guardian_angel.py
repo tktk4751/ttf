@@ -79,8 +79,8 @@ class GuardianAngel(Indicator):
         er_period: int = 10,
         max_period: int = 30,
         min_period: int = 10,
-        max_threshold: float = 61.8,
-        min_threshold: float = 38.2
+        max_threshold: float = 55,
+        min_threshold: float = 45
     ):
         """
         コンストラクタ

@@ -24,7 +24,7 @@ class BollingerBreakoutExitSignal(BaseSignal, IExitSignal):
     def __init__(
         self,
         period: int = 21,
-        num_std: float = 3.0,
+        num_std: float = 2.0,
     ):
         """
         コンストラクタ

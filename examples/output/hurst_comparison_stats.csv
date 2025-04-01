@@ -1,0 +1,6 @@
+Metric,Standard Hurst,Z-Hurst,Improvement
+Overall Accuracy,0.2523,0.1532,-0.0991
+Accuracy (中程度トレンド),0.1667,1.0000,0.8333
+Accuracy (レンジ相場),0.0465,0.0698,0.0233
+Accuracy (強いトレンド),0.7500,1.0000,0.2500
+Accuracy (レンジ相場2),0.3793,0.0690,-0.3103

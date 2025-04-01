@@ -31,7 +31,7 @@ class Backtester:
         commission: float,
         max_positions: int = 1,
         verbose: bool = True,
-        warmup_bars: int = 50  # ウォームアップ期間を追加
+        warmup_bars: int = 100  # ウォームアップ期間を追加
     ):
         """
         コンストラクタ

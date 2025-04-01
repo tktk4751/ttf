@@ -5,6 +5,7 @@ from typing import Union, Dict, Any
 import numpy as np
 import pandas as pd
 import optuna
+import logging
 from abc import ABC, abstractmethod
 
 from ..interfaces.strategy import IStrategy
@@ -22,6 +23,15 @@ class BaseStrategy(IStrategy, IOptimization, ABC):
         """
         self.name = name
         self._parameters: Dict[str, Any] = {}
+        
+        # ロガーの設定
+        self.logger = logging.getLogger(f"strategy.{name}")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
     
     def get_parameters(self) -> Dict[str, Any]:
         """現在のパラメータを取得する"""

@@ -144,7 +144,7 @@ class TrendAlpha(Indicator):
         max_kama_fast: int = 13,
         min_kama_fast: int = 2,
         max_atr_period: int = 120,
-        min_atr_period: int = 5,
+        min_atr_period: int = 13,
         max_multiplier: float = 3.0,
         min_multiplier: float = 1.0
     ):

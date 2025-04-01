@@ -11,7 +11,7 @@ from data.data_processor import DataProcessor
 
 from position_sizing.fixed_ratio import FixedRatioSizing
 from position_sizing.atr_volatility import ATRVolatilitySizing
-from position_sizing.volatility_std import VolatilityStdSizing
+from position_sizing.volatility_std import AlphaVolatilitySizing
 from analytics.analytics import Analytics
 from optimization.bayesian_optimizer import BayesianOptimizer
 from walkforward.walkforward_optimizer import WalkForwardOptimizer
@@ -25,10 +25,62 @@ from data.binance_data_source import BinanceDataSource
 from strategies.implementations.trend_alpha.strategy import TrendAlphaStrategy
 from strategies.implementations.hyper_trend.strategy import HyperTrendStrategy
 
+from position_sizing.z_position_sizing import ZPositionSizing
+
 from strategies.implementations.trend_alpha_v2.strategy import TrendAlphaV2Strategy
 from strategies.implementations.hyper_trend_v2.strategy import HyperTrendV2Strategy
 from strategies.implementations.trend_alpha_v3.strategy import TrendAlphaV3Strategy
-from strategies.implementations.alpha_trend.strategy import AlphaTrendStrategy
+from strategies.implementations.true_momentum.strategy import TrueMomentumStrategy
+
+from strategies.implementations.alpha_keltner_filter.strategy import AlphaKeltnerFilterStrategy
+from strategies.implementations.alpha_trend_filter.strategy import AlphaTrendFilterStrategy
+from strategies.implementations.alpha_momentum_filter.strategy import AlphaMomentumFilterStrategy
+
+from strategies.implementations.kernel_ma_filter.strategy import KernelMAFilterStrategy
+from strategies.implementations.alpha_circulation_strategy.strategy import AlphaCirculationStrategy
+
+from strategies.implementations.alpha_roc_divergence_strategy.strategy import AlphaROCDivergenceStrategy
+
+from strategies.implementations.alpha_trend_macd_hidden_divergence_strategy.strategy import AlphaTrendMACDHiddenDivergenceStrategy
+
+from strategies.implementations.alpha_ma_filter.strategy import AlphaMAFilterStrategy
+from strategies.implementations.alpha_mav2_keltner_filter.strategy import AlphaMAV2KeltnerFilterStrategy
+from strategies.implementations.kama_keltner_chop_long_short.strategy import KAMAKeltnerChopLongShortStrategy
+from strategies.implementations.alpha_donchian_filter.strategy import AlphaDonchianFilterStrategy
+
+from strategies.implementations.alpha_band_trend_filter.strategy import AlphaBandTrendFilterStrategy      
+from position_sizing.atr_risk_sizing import AlphaATRRiskSizing
+
+from strategies.implementations.zc_breakout.strategy import ZCBreakoutStrategy
+from strategies.implementations.squeeze_chop_short.strategy import SqueezeChopShortStrategy
+from strategies.implementations.z_trend.strategy import ZTrendStrategy
+from strategies.implementations.z_strategy.strategy import ZStrategy
+from strategies.implementations.z_divergence.strategy import ZDivergenceStrategy
+from strategies.implementations.z_donchian_trend.strategy import ZDonchianTrendStrategy
+from strategies.implementations.z_bollinger_trend.strategy import ZBBTrendStrategy
+
+from strategies.implementations.zc_simple.strategy import ZCSimpleStrategy
+from strategies.implementations.zt_simple.strategy import ZTSimpleStrategy    
+from strategies.implementations.zbb_simple.strategy import ZBBSimpleStrategy
+
+from strategies.implementations.zv_breakout.strategy import ZVBreakoutStrategy
+
+from strategies.implementations.zc_trend.strategy import ZCTrendStrategy
+from strategies.implementations.zma_cross.strategy import ZMACrossStrategy
+from strategies.implementations.zc_rsx_exit.strategy import ZCRSXExitStrategy
+
+from strategies.implementations.simple_z_donchian.strategy import SimpleZDonchianStrategy
+from strategies.implementations.simple_z_trend.strategy import SimpleZTrendStrategy
+
+from strategies.implementations.z_breakout.strategy import ZBreakoutStrategy
+
+from strategies.implementations.z_macd_breakout.strategy import ZMACDBreakoutStrategy
+
+from strategies.implementations.cc_breakout.strategy import CCBreakoutStrategy
+from position_sizing.c_position_sizing import CATRPositionSizing
+
+from strategies.implementations.dual_cc_breakout.strategy import DualCCBreakoutStrategy
+
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -54,16 +106,20 @@ def run_backtest(config: dict):
     }
     
     # 戦略の作成
-    strategy = TrendAlphaV3Strategy()
+
+
+    strategy = CCBreakoutStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
-    position_sizing = VolatilityStdSizing(
-        volatility_period=21,
-        volatility_multiplier=2.0,
-        risk_percent=0.05,
-        leverage=1.0
-    )
+    # position_sizing = AlphaATRRiskSizing(
+    #         risk_ratio=0.01,   # 1%リスク
+    #         unit=1.0,         # 1倍のユニット
+    #         max_position_percent=0.5  # 資金の50%まで
+    #     )
+
+    position_sizing = CATRPositionSizing()
+    # position_sizing = AlphaVolatilitySizing()
     # position_sizing = FixedRatioSizing(
     #     ratio=position_config.get('ratio', 0.2),
     #     leverage=position_config.get('leverage', 1.0)
@@ -102,10 +158,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=AlphaTrendStrategy,
-        param_generator=AlphaTrendStrategy.create_optimization_params,
+        strategy_class=CCBreakoutStrategy,
+        param_generator=CCBreakoutStrategy.create_optimization_params,
         config=config,
-        n_trials=100,
+        n_trials=300,
         n_jobs=-1
     )
     
@@ -122,11 +178,20 @@ def run_walkforward_test(config: dict):
     min_trades = walkforward_config.get('min_trades', 15)
     initial_balance = config.get('position', {}).get('initial_balance', 10000)
 
-    # データの読み込みと前処理
-    data_dir = config['data']['data_dir']
-    data_loader = DataLoader(CSVDataSource(data_dir))
+       # データの準備
+    binance_config = config.get('binance_data', {})
+    data_dir = binance_config.get('data_dir', 'data/binance')
+    binance_data_source = BinanceDataSource(data_dir)
+    
+    # CSVデータソースはダミーとして渡す（Binanceデータソースのみを使用）
+    dummy_csv_source = CSVDataSource("dummy")
+    data_loader = DataLoader(
+        data_source=dummy_csv_source,
+        binance_data_source=binance_data_source
+    )
     data_processor = DataProcessor()
     
+    # データの読み込みと処理
     print("\nLoading and processing data...")
     raw_data = data_loader.load_data_from_config(config)
     processed_data = {
@@ -138,25 +203,19 @@ def run_walkforward_test(config: dict):
     data_splitter = TimeSeriesDataSplitter(training_days, testing_days)
 
     # Bayesian最適化器の作成
-
-
     bayesian_optimizer = BayesianOptimizer(
-        strategy_class=TrendAlphaStrategy,
-        param_generator=TrendAlphaStrategy.create_optimization_params,
+        strategy_class=CCBreakoutStrategy,
+        param_generator=CCBreakoutStrategy.create_optimization_params,
         config=config,
         n_trials=100,
         n_jobs=-1
     )
 
     # ウォークフォワード最適化器の作成と実行
-
-
-
     optimizer = WalkForwardOptimizer(
         optimizer=bayesian_optimizer,
         data_splitter=data_splitter,
         config=config,
-
     )
     result = optimizer.run(processed_data)
 
@@ -171,8 +230,8 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=TrendAlphaStrategy,
-        param_generator=TrendAlphaStrategy.create_optimization_params,
+        strategy_class=CCBreakoutStrategy,
+        param_generator=CCBreakoutStrategy.create_optimization_params,
         config=config,
         n_trials=200,
         n_jobs=-1
@@ -187,23 +246,27 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
         print(f"  {param_name}: {param_value}")
     
     # 最適化されたパラメータを戦略クラスの形式に変換
-    strategy_params = TrendAlphaStrategy.convert_params_to_strategy_format(best_params)
+    strategy_params = CCBreakoutStrategy.convert_params_to_strategy_format(best_params)
     
     # データの準備
-    data_dir = config['data']['data_dir']
-    data_loader = DataLoader(CSVDataSource(data_dir))
+    binance_config = config.get('binance_data', {})
+    data_dir = binance_config.get('data_dir', 'data/binance')
+    binance_data_source = BinanceDataSource(data_dir)
+    
+    # CSVデータソースはダミーとして渡す（Binanceデータソースのみを使用）
+    dummy_csv_source = CSVDataSource("dummy")
+    data_loader = DataLoader(
+        data_source=dummy_csv_source,
+        binance_data_source=binance_data_source
+    )
     data_processor = DataProcessor()
     
+
+    
     # 最適化されたパラメータで戦略を作成
-    strategy = TrendAlphaStrategy(**strategy_params)
+    strategy = CCBreakoutStrategy(**strategy_params)
     
-    # ポジションサイジングの作成
-    position_config = config.get('position_sizing', {})
-    position_sizing = FixedRatioSizing(
-        ratio=position_config.get('ratio', 0.2),
-        leverage=position_config.get('leverage', 1.0)
-    )
-    
+    position_sizing = CATRPositionSizing()
     # バックテスターの作成
     initial_balance = config.get('position_sizing', {}).get('initial_balance', 10000)
     commission_rate = config.get('position_sizing', {}).get('commission_rate', 0.001)
@@ -216,7 +279,7 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     )
     
     # データの読み込みと処理
-    print("\nデータを読み込んでいます...")
+    print("\nLoading and processing data...")
     raw_data = data_loader.load_data_from_config(config)
     processed_data = {
         symbol: data_processor.process(df)
@@ -247,16 +310,13 @@ def main():
         config = yaml.safe_load(f)
     
     # run_walkforward_test(config)
-    run_optimization(config)
+
+    # run_optimization(config)
     # run_montecarlo(config)
-
-
-    # run_backtest(config)  
-
+    run_backtest(config)
 
     
-    
-    # run_signal_combination_optimization(config)
-
 if __name__ == '__main__':
     main()
+
+

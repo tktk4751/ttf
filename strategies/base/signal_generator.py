@@ -4,6 +4,7 @@
 from typing import Dict, Any, Union
 import numpy as np
 import pandas as pd
+import logging
 
 class BaseSignalGenerator:
     """シグナル生成器の基底クラス"""
@@ -17,6 +18,14 @@ class BaseSignalGenerator:
         """
         self.name = name
         self._signals_cache: Dict[str, np.ndarray] = {}
+        # ロガーの設定
+        self.logger = logging.getLogger(f"signal_generator.{name}")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
     
     def calculate_signals(self, data: Union[pd.DataFrame, np.ndarray]) -> None:
         """全てのシグナルを計算してキャッシュする"""

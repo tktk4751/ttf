@@ -132,7 +132,7 @@ class TrendAlphaStrategy(BaseStrategy):
         """
         
         params = {
-            'period': trial.suggest_int('period', 5, 300),  
+            'period': trial.suggest_int('period', 5, 200),  
             'max_kama_slow': 89,
             'min_kama_slow': 30,
             'max_kama_fast': 15,
