@@ -25,7 +25,7 @@ from data.binance_data_source import BinanceDataSource
 from strategies.implementations.trend_alpha.strategy import TrendAlphaStrategy
 from strategies.implementations.hyper_trend.strategy import HyperTrendStrategy
 
-from position_sizing.z_position_sizing import ZPositionSizing
+from position_sizing.z_position_sizing import ZATRPositionSizing
 
 from strategies.implementations.trend_alpha_v2.strategy import TrendAlphaV2Strategy
 from strategies.implementations.hyper_trend_v2.strategy import HyperTrendV2Strategy
@@ -80,6 +80,17 @@ from strategies.implementations.cc_breakout.strategy import CCBreakoutStrategy
 from position_sizing.c_position_sizing import CATRPositionSizing
 
 from strategies.implementations.dual_cc_breakout.strategy import DualCCBreakoutStrategy
+from strategies.implementations.cz_simple.strategy import CZSimpleStrategy
+from strategies.implementations.cc_simple.strategy import CCSimpleStrategy
+from strategies.implementations.supertrend_chop_long.strategy import SupertrendChopLongStrategy
+
+from strategies.implementations.x_trend_simple.strategy import XTrendSimpleStrategy
+from strategies.implementations.xc_simple.strategy import XCSimpleStrategy
+from strategies.implementations.za_simple.strategy import ZASimpleStrategy
+from strategies.implementations.z_adaptive_ma_crossover.strategy import ZAdaptiveMACrossoverStrategy
+from strategies.implementations.kama_cross_chop_long.strategy import KAMACrossChopLongStrategy
+from strategies.implementations.za_fillter.strategy import ZACTIStrategy
+from strategies.implementations.za_chop.strategy import ZACHOPStrategy
 
 
 def run_backtest(config: dict):
@@ -108,7 +119,7 @@ def run_backtest(config: dict):
     # 戦略の作成
 
 
-    strategy = CCBreakoutStrategy()
+    strategy = ZASimpleStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -158,10 +169,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=CCBreakoutStrategy,
-        param_generator=CCBreakoutStrategy.create_optimization_params,
+        strategy_class=ZASimpleStrategy,
+        param_generator=ZASimpleStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=100,
         n_jobs=-1
     )
     
@@ -204,6 +215,9 @@ def run_walkforward_test(config: dict):
 
     # Bayesian最適化器の作成
     bayesian_optimizer = BayesianOptimizer(
+
+
+
         strategy_class=CCBreakoutStrategy,
         param_generator=CCBreakoutStrategy.create_optimization_params,
         config=config,

@@ -29,67 +29,78 @@ class ZCSimpleStrategy(BaseStrategy):
     
     def __init__(
         self,
-        # Zチャネルのパラメータ
+        # 基本パラメータ
         detector_type: str = 'phac_e',
-        cer_detector_type: str = 'phac_e',  # CER用の検出器タイプ（デフォルトではdetector_typeと同じ）
+        cer_detector_type: str = None,  # CER用の検出器タイプ
         lp_period: int = 5,
-        hp_period: int = 144,
-        cycle_part: float = 0.618,
-        smoother_type: str = 'alma',
-        src_type: str = 'hlc3',
-        band_lookback: int = 1,
-        # 動的乗数の範囲パラメータ
-        max_max_multiplier: float = 8.0,    # 最大乗数の最大値
+        hp_period: int = 55,
+        cycle_part: float = 0.7,
+        max_multiplier: float = 7.0,  # 固定乗数を使用する場合
+        min_multiplier: float = 1.0,  # 固定乗数を使用する場合
+        # 動的乗数の範囲パラメータ（固定乗数の代わりに動的乗数を使用する場合）
+        max_max_multiplier: float = 9.0,    # 最大乗数の最大値
         min_max_multiplier: float = 3.0,    # 最大乗数の最小値
         max_min_multiplier: float = 1.5,    # 最小乗数の最大値
         min_min_multiplier: float = 0.5,    # 最小乗数の最小値
+        smoother_type: str = 'alma',  # 'alma' または 'hyper'
+        src_type: str = 'hlc3',       # 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4'
         
         # CER用パラメータ
-        cer_max_cycle: int = 55,       # CER用の最大サイクル期間
+        cer_max_cycle: int = 144,       # CER用の最大サイクル期間
         cer_min_cycle: int = 5,         # CER用の最小サイクル期間
-        cer_max_output: int = 34,       # CER用の最大出力値
+        cer_max_output: int = 89,       # CER用の最大出力値
         cer_min_output: int = 5,        # CER用の最小出力値
         
         # ZMA用パラメータ
-        zma_max_dc_cycle_part: float = 0.618,     # ZMA: 最大期間用ドミナントサイクル計算用
-        zma_max_dc_max_cycle: int = 144,        # ZMA: 最大期間用ドミナントサイクル計算用
+        zma_max_dc_cycle_part: float = 0.5,     # ZMA: 最大期間用ドミナントサイクル計算用
+        zma_max_dc_max_cycle: int = 100,        # ZMA: 最大期間用ドミナントサイクル計算用
         zma_max_dc_min_cycle: int = 5,          # ZMA: 最大期間用ドミナントサイクル計算用
-        zma_max_dc_max_output: int = 89,        # ZMA: 最大期間用ドミナントサイクル計算用
-        zma_max_dc_min_output: int = 34,        # ZMA: 最大期間用ドミナントサイクル計算用
+        zma_max_dc_max_output: int = 120,        # ZMA: 最大期間用ドミナントサイクル計算用
+        zma_max_dc_min_output: int = 22,        # ZMA: 最大期間用ドミナントサイクル計算用
+        zma_max_dc_lp_period: int = 5,          # ZMA: 最大期間用ドミナントサイクル計算用LPピリオド
+        zma_max_dc_hp_period: int = 55,         # ZMA: 最大期間用ドミナントサイクル計算用HPピリオド
         
-        zma_min_dc_cycle_part: float = 0.382,    # ZMA: 最小期間用ドミナントサイクル計算用
+        zma_min_dc_cycle_part: float = 0.25,    # ZMA: 最小期間用ドミナントサイクル計算用
         zma_min_dc_max_cycle: int = 55,         # ZMA: 最小期間用ドミナントサイクル計算用
         zma_min_dc_min_cycle: int = 5,          # ZMA: 最小期間用ドミナントサイクル計算用
-        zma_min_dc_max_output: int = 21,        # ZMA: 最小期間用ドミナントサイクル計算用
-        zma_min_dc_min_output: int = 8,         # ZMA: 最小期間用ドミナントサイクル計算用
+        zma_min_dc_max_output: int = 13,        # ZMA: 最小期間用ドミナントサイクル計算用
+        zma_min_dc_min_output: int = 3,         # ZMA: 最小期間用ドミナントサイクル計算用
+        zma_min_dc_lp_period: int = 5,          # ZMA: 最小期間用ドミナントサイクル計算用LPピリオド
+        zma_min_dc_hp_period: int = 34,         # ZMA: 最小期間用ドミナントサイクル計算用HPピリオド
         
         # ZMA動的Slow最大用パラメータ
-        zma_slow_max_dc_cycle_part: float = 0.618,
+        zma_slow_max_dc_cycle_part: float = 0.5,
         zma_slow_max_dc_max_cycle: int = 144,
         zma_slow_max_dc_min_cycle: int = 5,
-        zma_slow_max_dc_max_output: int = 34,
-        zma_slow_max_dc_min_output: int = 21,
+        zma_slow_max_dc_max_output: int = 89,
+        zma_slow_max_dc_min_output: int = 22,
+        zma_slow_max_dc_lp_period: int = 5,      # ZMA: Slow最大用ドミナントサイクル計算用LPピリオド
+        zma_slow_max_dc_hp_period: int = 55,     # ZMA: Slow最大用ドミナントサイクル計算用HPピリオド
         
         # ZMA動的Slow最小用パラメータ
-        zma_slow_min_dc_cycle_part: float = 0.382,
+        zma_slow_min_dc_cycle_part: float = 0.5,
         zma_slow_min_dc_max_cycle: int = 89,
-        zma_slow_min_dc_min_cycle: int = 3,
-        zma_slow_min_dc_max_output: int = 13,
-        zma_slow_min_dc_min_output: int = 5,
+        zma_slow_min_dc_min_cycle: int = 5,
+        zma_slow_min_dc_max_output: int = 21,
+        zma_slow_min_dc_min_output: int = 8,
+        zma_slow_min_dc_lp_period: int = 5,      # ZMA: Slow最小用ドミナントサイクル計算用LPピリオド
+        zma_slow_min_dc_hp_period: int = 34,     # ZMA: Slow最小用ドミナントサイクル計算用HPピリオド
         
         # ZMA動的Fast最大用パラメータ
-        zma_fast_max_dc_cycle_part: float = 0.25,
-        zma_fast_max_dc_max_cycle: int = 75,
+        zma_fast_max_dc_cycle_part: float = 0.5,
+        zma_fast_max_dc_max_cycle: int = 55,
         zma_fast_max_dc_min_cycle: int = 5,
         zma_fast_max_dc_max_output: int = 15,
-        zma_fast_max_dc_min_output: int = 8,
-
+        zma_fast_max_dc_min_output: int = 3,
+        zma_fast_max_dc_lp_period: int = 5,      # ZMA: Fast最大用ドミナントサイクル計算用LPピリオド
+        zma_fast_max_dc_hp_period: int = 21,     # ZMA: Fast最大用ドミナントサイクル計算用HPピリオド
+        
         zma_min_fast_period: int = 2,           # ZMA: 速い移動平均の最小期間（常に2で固定）
         zma_hyper_smooth_period: int = 0,       # ZMA: ハイパースムーサーの平滑化期間
         
         # ZATR用パラメータ
-        zatr_max_dc_cycle_part: float = 0.618,    # ZATR: 最大期間用ドミナントサイクル計算用
-        zatr_max_dc_max_cycle: int = 89,        # ZATR: 最大期間用ドミナントサイクル計算用
+        zatr_max_dc_cycle_part: float = 0.7,    # ZATR: 最大期間用ドミナントサイクル計算用
+        zatr_max_dc_max_cycle: int = 77,        # ZATR: 最大期間用ドミナントサイクル計算用
         zatr_max_dc_min_cycle: int = 5,         # ZATR: 最大期間用ドミナントサイクル計算用
         zatr_max_dc_max_output: int = 35,       # ZATR: 最大期間用ドミナントサイクル計算用
         zatr_max_dc_min_output: int = 5,        # ZATR: 最大期間用ドミナントサイクル計算用
@@ -98,8 +109,10 @@ class ZCSimpleStrategy(BaseStrategy):
         zatr_min_dc_max_cycle: int = 34,        # ZATR: 最小期間用ドミナントサイクル計算用
         zatr_min_dc_min_cycle: int = 3,         # ZATR: 最小期間用ドミナントサイクル計算用
         zatr_min_dc_max_output: int = 13,       # ZATR: 最小期間用ドミナントサイクル計算用
-        zatr_min_dc_min_output: int = 3         # ZATR: 最小期間用ドミナントサイクル計算用
+        zatr_min_dc_min_output: int = 3,        # ZATR: 最小期間用ドミナントサイクル計算用
+        band_lookback: int = 1
     ):
+
         """
         初期化
         

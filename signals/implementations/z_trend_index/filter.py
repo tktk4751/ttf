@@ -8,7 +8,7 @@ from numba import jit, njit, prange
 
 from ...base_signal import BaseSignal
 from ...interfaces.filter import IFilterSignal
-from indicators.z_trend_index import ZTrendIndex
+from indicators.z_trend_index import XTrendIndex
 
 
 @njit(fastmath=True, parallel=True)
@@ -152,7 +152,7 @@ class ZTrendIndexSignal(BaseSignal, IFilterSignal):
         )
         
         # Zトレンドインデックスインジケーターの初期化
-        self._index = ZTrendIndex(
+        self._index = XTrendIndex(
             # 最大チョピネス期間用ドミナントサイクル設定
             max_chop_dc_cycle_part=max_chop_dc_cycle_part,
             max_chop_dc_max_cycle=max_chop_dc_max_cycle,

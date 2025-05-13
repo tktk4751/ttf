@@ -12,7 +12,6 @@ from .choppiness import ChoppinessIndex
 from .alpha_ma import AlphaMA
 from .alpha_ma_v2 import AlphaMAV2
 from .alpha_atr import AlphaATR
-from .omega_ma import OmegaMA
 from .alpha_choppiness import AlphaChoppiness
 from .alpha_adx import AlphaADX
 from .alpha_keltner_channel import AlphaKeltnerChannel
@@ -25,11 +24,12 @@ from .alpha_macd import AlphaMACD
 from .alpha_squeeze import AlphaSqueeze
 from .alpha_rsx import AlphaRSX
 from .rsx import RSX
+from .hma import HMA
+from .hyper_ma import HyperMA
 from .alpha_donchian import AlphaDonchian
 from .alpha_volatility import AlphaVolatility
 from .alpha_vix import AlphaVIX
 from .alpha_er import AlphaER
-from .alpha_xma import AlphaXMA
 from .alpha_vol_band import AlphaVolBand
 from .alpha_trend_index import AlphaTrendIndex
 from .alpha_trend_filter import AlphaTrendFilter
@@ -42,7 +42,7 @@ from .z_atr import ZATR
 from .z_adx import ZADX
 from .z_rsx import ZRSX
 from .z_channel import ZChannel
-from .z_trend_index import ZTrendIndex
+from .z_trend_index import XTrendIndex
 from .z_trend_filter import ZTrendFilter
 from .z_donchian import ZDonchian
 from .z_long_reversal_index import ZLongReversalIndex
@@ -51,6 +51,10 @@ from .z_bollinger_bands import ZBollingerBands
 from .z_v_channel import ZVChannel
 from .c_ma import CMA
 from .c_atr import CATR
+from .kalman_hull_supertrend import KalmanHullSupertrend
+from .kalman_filter import KalmanFilter
+from .x_trend import XTrend # Added
+from .alma import calculate_alma_numba as calculate_alma
 
 # エーラーズのドミナントサイクル検出クラス
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
@@ -67,11 +71,16 @@ from .ehlers_unified_dc import EhlersUnifiedDC
 __all__ = [
     'Indicator',
     'Supertrend',
+    'KalmanHullSupertrend',
+    'KalmanFilter',
+    'XTrend', # Added
     'RSI',
     'ChoppinessIndex',
     'AlphaMA',
     'AlphaMAV2',
     'AlphaATR',
+    'HMA',
+    'HyperMA',
     'OmegaMA',
     'AlphaChoppiness',
     'AlphaADX',

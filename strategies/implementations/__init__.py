@@ -12,6 +12,7 @@ from .z_breakout import ZBreakoutStrategy
 from .simple_z_donchian import SimpleZDonchianStrategy
 from .z_macd_breakout import ZMACDBreakoutStrategy
 from .zt_simple import ZTSimpleStrategy
+from .z_adaptive_ma_crossover import ZAdaptiveMACrossoverStrategy
 
 # 公開する戦略のリスト
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     'ZBreakoutStrategy',
     'SimpleZDonchianStrategy',
     'ZMACDBreakoutStrategy',
-    'ZTSimpleStrategy'
+    'ZTSimpleStrategy',
+    'ZAdaptiveMACrossoverStrategy'
 ] 

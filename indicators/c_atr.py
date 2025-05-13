@@ -6,9 +6,14 @@ from typing import Union, Tuple, Dict, Optional, List
 import numpy as np
 import pandas as pd
 from numba import jit, prange, vectorize, njit
+import traceback # エラーハンドリング用にインポート
+
+# --- 依存関係のインポート ---
 
 from .indicator import Indicator
-from .alma import calculate_alma
+from .price_source import PriceSource
+from .kalman_filter import KalmanFilter
+from .alma import calculate_alma_numba as calculate_alma
 from .hyper_smoother import hyper_smoother, calculate_hyper_smoother_numba
 from .ehlers_unified_dc import EhlersUnifiedDC
 
@@ -22,6 +27,15 @@ class CATRResult:
     er: np.ndarray           # サイクル効率比（CER）
     atr_period: np.ndarray  # ドミナントサイクルから決定されたATR期間
     dc_values: np.ndarray    # ドミナントサイクル値
+    max_output: int = 34,                    # 最大出力値
+    min_output: int = 5,                     # 最小出力値
+    smoother_type: str = 'alma',              # 'alma'または'hyper'
+    # --- 追加: XMA風パラメータ ---
+    src_type: str = 'close',                 # 価格ソース ('close', 'hlc3', etc.)
+    use_kalman_filter: bool = False,         # カルマンフィルターを使用するか
+    kalman_measurement_noise: float = 1.0,   # カルマン: 測定ノイズ
+    kalman_process_noise: float = 0.01,      # カルマン: プロセスノイズ
+    kalman_n_states: int = 5                 # カルマン: 状態数
 
 
 @vectorize(['float64(float64, float64)'], nopython=True, fastmath=True, cache=True)
@@ -180,15 +194,21 @@ class CATR(Indicator):
     
     def __init__(
         self,
-        detector_type: str = 'hody',             # 検出器タイプ
+        detector_type: str = 'phac_e',             # 検出器タイプ
         cycle_part: float = 0.5,                 # サイクル部分の倍率
-        lp_period: int = 5,
-        hp_period: int = 55,
+        lp_period: int = 13,
+        hp_period: int = 50,
         max_cycle: int = 55,                     # 最大サイクル期間
         min_cycle: int = 5,                      # 最小サイクル期間
         max_output: int = 34,                    # 最大出力値
         min_output: int = 5,                     # 最小出力値
-        smoother_type: str = 'alma'              # 'alma'または'hyper'
+        smoother_type: str = 'alma',              # 'alma'または'hyper'
+        # --- 追加: XMA風パラメータ ---
+        src_type: str = 'hlc3',                 # 価格ソース ('close', 'hlc3', etc.)
+        use_kalman_filter: bool = False,         # カルマンフィルターを使用するか
+        kalman_measurement_noise: float = 1.0,   # カルマン: 測定ノイズ
+        kalman_process_noise: float = 0.01,      # カルマン: プロセスノイズ
+        kalman_n_states: int = 5                 # カルマン: 状態数
     ):
         """
         コンストラクタ
@@ -209,8 +229,16 @@ class CATR(Indicator):
             smoother_type: 平滑化アルゴリズムのタイプ（デフォルト: 'alma'）
                 'alma' - ALMA（Arnaud Legoux Moving Average）
                 'hyper' - ハイパースムーサー
+            src_type: 計算に使用する価格ソース（デフォルト: 'close'）
+            use_kalman_filter: ソース価格にカルマンフィルターを適用するか（デフォルト: False）
+            kalman_measurement_noise: カルマンフィルターの測定ノイズ（デフォルト: 1.0）
+            kalman_process_noise: カルマンフィルターのプロセスノイズ（デフォルト: 0.01）
+            kalman_n_states: カルマンフィルターの状態数（デフォルト: 5）
         """
-        super().__init__(f"CATR({detector_type}, {max_output}, {min_output}, {smoother_type})")
+        kalman_str = f"_kalman={'Y' if use_kalman_filter else 'N'}" if use_kalman_filter else ""
+        super().__init__(
+            f"CATR({detector_type},{max_output},{min_output},{smoother_type},src={src_type}{kalman_str})"
+        )
         
         # パラメータの保存
         self.detector_type = detector_type
@@ -222,6 +250,12 @@ class CATR(Indicator):
         self.max_output = max_output
         self.min_output = min_output
         self.smoother_type = smoother_type
+        # --- 追加パラメータ保存 ---
+        self.src_type = src_type.lower()
+        self.use_kalman_filter = use_kalman_filter
+        self.kalman_measurement_noise = kalman_measurement_noise
+        self.kalman_process_noise = kalman_process_noise
+        self.kalman_n_states = kalman_n_states
         
         # ドミナントサイクル検出器を初期化
         self.dc_detector = EhlersUnifiedDC(
@@ -234,6 +268,20 @@ class CATR(Indicator):
             max_output=self.max_output,
             min_output=self.min_output
         )
+        
+        # --- 追加: 依存ツールの初期化 ---
+        self.price_source_extractor = PriceSource()
+        self.kalman_filter = None
+        if self.use_kalman_filter:
+            self.kalman_filter = KalmanFilter(
+                # KalmanFilterは価格ソース自体を内部で扱う場合があるため、
+                # src_typeを渡すか、calculate時に価格データを渡すかは実装による
+                # ここではXMAに合わせてパラメータを渡す
+                measurement_noise=self.kalman_measurement_noise,
+                process_noise=self.kalman_process_noise,
+                n_states=self.kalman_n_states
+                # 注意: KalmanFilterの実装によっては、price_source='close'のような引数が必要かも
+            )
         
         # 結果キャッシュ
         self._result = None
@@ -256,7 +304,9 @@ class CATR(Indicator):
         
         # パラメータから文字列を作成
         param_str = f"{self.detector_type}_{self.cycle_part}_{self.max_cycle}_{self.min_cycle}_" \
-                    f"{self.max_output}_{self.min_output}_{self.smoother_type}"
+                    f"{self.max_output}_{self.min_output}_{self.smoother_type}_" \
+                    f"{self.src_type}_{self.use_kalman_filter}_" \
+                    f"{self.kalman_measurement_noise}_{self.kalman_process_noise}_{self.kalman_n_states}"
         
         # データとパラメータのハッシュ値を組み合わせて返す
         return str(hash(data_bytes + er_bytes + param_str.encode()))
@@ -279,51 +329,124 @@ class CATR(Indicator):
             if external_er is None:
                 raise ValueError("サイクル効率比（CER）は必須です。external_erパラメータを指定してください")
             
-            # キャッシュチェック - 同じデータの場合は計算をスキップ
+            current_data_len = len(data) if hasattr(data, '__len__') else 0
+            if current_data_len == 0:
+                self.logger.warning("入力データが空です。")
+                return np.array([])
+
+            # キャッシュチェック
             data_hash = self._get_data_hash(data, external_er)
             if data_hash == self._data_hash and self._result is not None:
                 return self._result.values
-            
+
+            # --- データ検証とソース価格取得 (PriceSource.calculate を使用) ---
+            # 必要なOHLCデータを取得
+            # Note: TR計算には high, low, close が必要
+            high_prices = PriceSource.calculate_source(data, 'high')
+            low_prices = PriceSource.calculate_source(data, 'low')
+            close_prices = PriceSource.calculate_source(data, 'close')
+
+            # --- Optional Kalman Filtering (適用するのは終値のみで良いか？ TR計算に影響)
+            #     一旦、TR計算前の価格を使う（kalman適用は必要に応じて再考）
+            # effective_close_prices = close_prices
+            # if self.use_kalman_filter and self.kalman_filter:
+            #     filtered_prices = self.kalman_filter.calculate(data)
+            #     if filtered_prices is not None and len(filtered_prices) == len(effective_close_prices):
+            #         effective_close_prices = filtered_prices
+            #     else:
+            #         self.logger.warning("カルマンフィルター計算失敗。元の終値を使用。")
+
+            # データ長の検証
+            data_length = len(close_prices)
+            if data_length == 0:
+                self.logger.warning("価格データが空です。空の配列を返します。")
+                self._reset_results() # 結果をリセット
+                self._data_hash = data_hash
+                return np.array([])
+
             self._data_hash = data_hash  # 新しいハッシュを保存
-            
-            # データの検証と変換（効率化）
-            if isinstance(data, pd.DataFrame):
-                if not all(col in data.columns for col in ['high', 'low', 'close']):
-                    raise ValueError("DataFrameには'high'と'low'と'close'カラムが必要です")
-                # NumPyに一度で変換して計算を効率化
-                high = np.asarray(data['high'].values, dtype=np.float64)
-                low = np.asarray(data['low'].values, dtype=np.float64)
-                close = np.asarray(data['close'].values, dtype=np.float64)
-            else:
-                if data.ndim == 2 and data.shape[1] >= 4:
-                    # 一度にNumPy配列に変換して計算効率化
-                    high = np.asarray(data[:, 1], dtype=np.float64)  # high
-                    low = np.asarray(data[:, 2], dtype=np.float64)   # low
-                    close = np.asarray(data[:, 3], dtype=np.float64) # close
-                else:
-                    raise ValueError("NumPy配列は2次元で、少なくとも4列（OHLC）が必要です")
-            
+
+            # --- データ準備 (修正) ---
+            # PriceSource.calculate_source で取得したデータを使用
+            # 以下の ensure_dataframe, get_price 呼び出しは不要
+            # prices_df = self.price_source_extractor.ensure_dataframe(data)
+            # if prices_df is None or prices_df.empty:
+            #      self.logger.warning("DataFrame変換失敗。")
+            #      return np.full(current_data_len, np.nan)
+
+            # TR計算に必要な high, low, close は既に取得済み
+            # if not all(col in prices_df.columns for col in ['high', 'low', 'close']):
+            #     raise ValueError("DataFrameには'high'と'low'と'close'カラムが必要です")
+            high = np.asarray(high_prices, dtype=np.float64)
+            low = np.asarray(low_prices, dtype=np.float64)
+            close = np.asarray(close_prices, dtype=np.float64)
+
+            # %ATR計算用のソース価格 (Kalman適用前)
+            # src_prices = self.price_source_extractor.get_price(prices_df, self.src_type)
+            src_prices = PriceSource.calculate_source(data, self.src_type) # 再度取得
+            if src_prices is None or len(src_prices) == 0:
+                 self.logger.warning(f"価格ソース '{self.src_type}' 取得失敗/空。")
+                 return np.full(current_data_len, np.nan)
+            if not isinstance(src_prices, np.ndarray): src_prices = np.array(src_prices)
+            if src_prices.dtype != np.float64:
+                 try: src_prices = src_prices.astype(np.float64)
+                 except ValueError:
+                      self.logger.error(f"価格ソース '{self.src_type}' をfloat64に変換できませんでした。")
+                      return np.full(current_data_len, np.nan)
+
+            # --- カルマンフィルター適用 (Optional) ---
+            effective_src_prices = src_prices
+            if self.use_kalman_filter and self.kalman_filter:
+                self.logger.debug("カルマンフィルター適用中...")
+                try:
+                    # KalmanFilterのcalculateにソース価格を渡す
+                    # 実装によってはDataFrameを渡す必要があるかもしれない
+                    filtered_prices = self.kalman_filter.calculate(effective_src_prices)
+                    if filtered_prices is not None and len(filtered_prices) == current_data_len:
+                        if not isinstance(filtered_prices, np.ndarray): filtered_prices = np.array(filtered_prices)
+                        try:
+                             if filtered_prices.dtype != np.float64: filtered_prices = filtered_prices.astype(np.float64)
+                             effective_src_prices = filtered_prices
+                             self.logger.debug("カルマンフィルター適用完了。")
+                        except ValueError:
+                             self.logger.error("カルマンフィルター結果をfloat64に変換できませんでした。元のソース価格を使用。")
+                    else:
+                         self.logger.warning("カルマンフィルター計算失敗/結果長不一致。元のソース価格を使用。")
+                except Exception as kf_e:
+                     self.logger.error(f"カルマンフィルター計算エラー: {kf_e}", exc_info=False)
+                     self.logger.warning("エラーのため、元のソース価格を使用。")
+
             # ドミナントサイクルの計算 - 直接ATR期間として使用
+            # dc_detectorには元のDataFrameを渡す（内部で必要な価格を使う想定）
             dc_values = self.dc_detector.calculate(data)
             atr_period = np.asarray(dc_values, dtype=np.float64)
-            
+
             # 最大ATR期間の最大値を取得（計算開始位置用）
-            max_period_value = int(np.nanmax(atr_period))
-            if np.isnan(max_period_value) or max_period_value < 10:
-                max_period_value = 34  # デフォルト値
-            
+            # NaNを除外して最大値を取得し、整数に変換。NaNのみの場合は0になる
+            max_period_value_float = np.nanmax(atr_period)
+            if np.isnan(max_period_value_float):
+                 max_period_value = 10 # デフォルト最小期間 (例)
+                 self.logger.warning("ATR期間が全てNaNです。デフォルトの最大期間を使用します。")
+            else:
+                 max_period_value = int(max_period_value_float)
+                 if max_period_value < 1:
+                     max_period_value = 10 # 最小期間制限
+
             # データ長の検証
             data_length = len(high)
             if data_length < max_period_value:
-                raise ValueError(f"データ長({data_length})が必要な期間よりも短いです")
-            
+                 # データ長が足りない場合は警告し、空の結果を返す
+                 self.logger.warning(f"データ長({data_length})が必要な最大期間({max_period_value})より短いため、計算できません。")
+                 self._reset_results()
+                 return np.full(current_data_len, np.nan)
+
             # サイクル効率比（CER）を使用（高速化）
             er = np.asarray(external_er, dtype=np.float64)
             # 外部CERの長さが一致するか確認
             if len(er) != data_length:
                 raise ValueError(f"サイクル効率比の長さ({len(er)})がデータ長({data_length})と一致しません")
-            
-            # CATRの計算（並列版 - 高速化）
+
+            # CATRの計算（並列版 - 高速化） - 元のhigh, low, closeを使用
             c_atr_values = calculate_c_atr(
                 high,
                 low,
@@ -336,18 +459,23 @@ class CATR(Indicator):
             
             # 金額ベースのATR値を保存
             absolute_atr_values = c_atr_values
-            
-            # %ベースのATR値に変換（終値に対する比率）（並列版 - 高速化）
-            percent_atr_values = calculate_percent_atr(absolute_atr_values, close)
-            
+
+            # %ベースのATR値に変換（指定されたソース価格に対する比率）（並列版 - 高速化）
+            percent_atr_values = calculate_percent_atr(absolute_atr_values, effective_src_prices)
+
+            # True Rangeを計算 (calculate_true_rangeは既に元のhigh,low,closeで計算済みなのでそれを流用)
+            # tr_values = calculate_true_range(high, low, close) # 再計算は不要かも？
+            # c_atr内で計算されたTRを直接使うことはできないため、ここで計算する
+            tr_values = calculate_true_range(high, low, close)
+
             # 結果の保存（参照問題を避けるためコピーを作成）
             self._result = CATRResult(
-                values=np.copy(percent_atr_values),  # %ベースのATR
-                absolute_values=np.copy(absolute_atr_values),  # 金額ベースのATR
-                tr=np.copy(calculate_true_range(high, low, close)),  # TRを再計算（高速版）
+                values=np.copy(percent_atr_values),           # %ベースのATR
+                absolute_values=np.copy(absolute_atr_values), # 金額ベースのATR
+                tr=np.copy(tr_values),                        # True Range
                 er=np.copy(er),
                 atr_period=np.copy(atr_period),
-                dc_values=np.copy(dc_values)  # ドミナントサイクル値を保存
+                dc_values=np.copy(dc_values)                  # ドミナントサイクル値を保存
             )
             
             self._values = percent_atr_values  # 標準インジケーターインターフェース用
@@ -358,11 +486,17 @@ class CATR(Indicator):
             error_msg = str(e)
             stack_trace = traceback.format_exc()
             self.logger.error(f"CATR計算中にエラー: {error_msg}\n{stack_trace}")
-            # エラー時は前回の結果を維持
-            if self._result is None:
-                return np.array([])
-            return self._result.values
-    
+            # エラー時は前回の結果を維持せず、リセットして空配列を返す
+            self._reset_results()
+            return np.array([])
+
+    def _reset_results(self):
+        """内部結果とキャッシュをリセットする"""
+        self._result = None
+        self._data_hash = None
+        # _values もリセットする (Indicatorクラスのキャッシュかもしれないため)
+        self._values = None
+
     def get_dc_values(self) -> np.ndarray:
         """
         ドミナントサイクルの値を取得する
@@ -460,6 +594,10 @@ class CATR(Indicator):
         インディケーターの状態をリセットする
         """
         super().reset()
-        self._result = None
-        self._data_hash = None
-        self.dc_detector.reset() 
+        self._reset_results() # 内部結果とキャッシュをリセット
+        if self.dc_detector and hasattr(self.dc_detector, 'reset'):
+            self.dc_detector.reset()
+        # --- 追加: カルマンフィルターのリセット ---
+        if self.kalman_filter and hasattr(self.kalman_filter, 'reset'):
+            self.kalman_filter.reset()
+        self.logger.debug(f"インジケータ '{self.name}' がリセットされました。") 

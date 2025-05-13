@@ -8,7 +8,7 @@ import pandas as pd
 from numba import jit, prange, vectorize, njit
 
 from .indicator import Indicator
-from .alma import calculate_alma
+from .alma import calculate_alma_numba as calculate_alma
 from .hyper_smoother import hyper_smoother, calculate_hyper_smoother_numba
 from .ehlers_unified_dc import EhlersUnifiedDC
 

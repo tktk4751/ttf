@@ -184,21 +184,21 @@ class ZChannel(Indicator):
         cer_detector_type: str = None,  # CER用の検出器タイプ
         lp_period: int = 5,
         hp_period: int = 55,
-        cycle_part: float = 0.7,
+        cycle_part: float = 0.382,
         max_multiplier: float = 7.0,  # 固定乗数を使用する場合
         min_multiplier: float = 1.0,  # 固定乗数を使用する場合
         # 動的乗数の範囲パラメータ（固定乗数の代わりに動的乗数を使用する場合）
         max_max_multiplier: float = 8.0,    # 最大乗数の最大値
-        min_max_multiplier: float = 6.0,    # 最大乗数の最小値
+        min_max_multiplier: float = 3.0,    # 最大乗数の最小値
         max_min_multiplier: float = 1.5,    # 最小乗数の最大値
         min_min_multiplier: float = 0.5,    # 最小乗数の最小値
         smoother_type: str = 'alma',  # 'alma' または 'hyper'
         src_type: str = 'hlc3',       # 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4'
         
         # CER用パラメータ
-        cer_max_cycle: int = 144,       # CER用の最大サイクル期間
+        cer_max_cycle: int = 62,       # CER用の最大サイクル期間
         cer_min_cycle: int = 5,         # CER用の最小サイクル期間
-        cer_max_output: int = 89,       # CER用の最大出力値
+        cer_max_output: int = 34,       # CER用の最大出力値
         cer_min_output: int = 5,        # CER用の最小出力値
         
         # ZMA用パラメータ
@@ -419,11 +419,37 @@ class ZChannel(Indicator):
             lp_period=lp_period,
             hp_period=hp_period,
             cycle_part=cycle_part,
-            max_cycle=cer_max_cycle,  # CER用の最大サイクル期間
-            min_cycle=cer_min_cycle,  # CER用の最小サイクル期間
-            max_output=cer_max_output,  # CER用の最大出力値
-            min_output=cer_min_output,  # CER用の最小出力値
-            src_type=src_type     # ソースタイプを渡す
+            max_cycle=cer_max_cycle,
+            min_cycle=cer_min_cycle,
+            max_output=cer_max_output,
+            min_output=cer_min_output,
+            src_type=src_type
+        )
+        
+        # ZMA専用のCER
+        self.zma_cer = CycleEfficiencyRatio(
+            detector_type='hody_e',
+            lp_period=5,
+            hp_period=55,
+            cycle_part=0.55,
+            max_cycle=55,
+            min_cycle=3,
+            max_output=55,
+            min_output=5,
+            src_type=src_type
+        )
+        
+        # ZATR専用のCER
+        self.zatr_cer = CycleEfficiencyRatio(
+            detector_type='phac_e',
+            lp_period=5,
+            hp_period=55,
+            cycle_part=0.55,
+            max_cycle=100,
+            min_cycle=3,
+            max_output=55,
+            min_output=13,
+            src_type=src_type
         )
         
         # ZMAの初期化
@@ -549,19 +575,27 @@ class ZChannel(Indicator):
             elif data.ndim != 2 or data.shape[1] < 4:
                 raise ValueError("NumPy配列は2次元で、少なくとも4列（OHLC）が必要です")
             
-            # サイクル効率比（CER）の計算
-            cer = self.cer.calculate(data)
-            if cer is None or len(cer) == 0:
-                raise ValueError("サイクル効率比（CER）の計算に失敗しました")
+            # ZMA用のサイクル効率比（CER）の計算
+            zma_cer = self.zma_cer.calculate(data)
+            if zma_cer is None or len(zma_cer) == 0:
+                raise ValueError("ZMA用のサイクル効率比（CER）の計算に失敗しました")
             
-            # ZMAの計算（サイクル効率比を使用）
-            z_ma_values = self.zma.calculate(data, external_er=cer)
+            # ZATR用のサイクル効率比（CER）の計算
+            zatr_cer = self.zatr_cer.calculate(data)
+            if zatr_cer is None or len(zatr_cer) == 0:
+                raise ValueError("ZATR用のサイクル効率比（CER）の計算に失敗しました")
+            
+            # メインのCER（表示・計算用）も計算しておく
+            cer = self.cer.calculate(data)
+            
+            # ZMAの計算（ZMA専用のサイクル効率比を使用）
+            z_ma_values = self.zma.calculate(data, external_er=zma_cer)
             if z_ma_values is None:
                 raise ValueError("ZMAの計算に失敗しました")
             
-            # ZATRの計算（サイクル効率比を使用）
+            # ZATRの計算（ZATR専用のサイクル効率比を使用）
             # 注: calculate()メソッドは%ベースのATRを返します
-            z_atr_values = self.zatr.calculate(data, external_er=cer)
+            z_atr_values = self.zatr.calculate(data, external_er=zatr_cer)
             if z_atr_values is None:
                 raise ValueError("ZATRの計算に失敗しました")
             
@@ -764,6 +798,13 @@ class ZChannel(Indicator):
         super().reset()
         self._result = None
         self._data_hash = None
-        self.cycle_er.reset() if hasattr(self.cycle_er, 'reset') else None
-        self.z_ma.reset() if hasattr(self.z_ma, 'reset') else None
-        self.z_atr.reset() if hasattr(self.z_atr, 'reset') else None 
+        self._cache = {}
+        # メインCERのリセット
+        self.cer.reset() if hasattr(self.cer, 'reset') else None
+        # ZMA用CERのリセット
+        self.zma_cer.reset() if hasattr(self.zma_cer, 'reset') else None
+        # ZATR用CERのリセット
+        self.zatr_cer.reset() if hasattr(self.zatr_cer, 'reset') else None
+        # ZMAとZATRのリセット
+        self.zma.reset() if hasattr(self.zma, 'reset') else None
+        self.zatr.reset() if hasattr(self.zatr, 'reset') else None 

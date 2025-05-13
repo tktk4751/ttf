@@ -38,8 +38,8 @@ class CCBreakoutStrategy(BaseStrategy):
         src_type: str = 'hlc3',
         band_lookback: int = 1,
         # 動的乗数の範囲パラメータ
-        max_max_multiplier: float = 8.0,    # 最大乗数の最大値
-        min_max_multiplier: float = 3.0,    # 最大乗数の最小値
+        max_max_multiplier: float = 7.0,    # 最大乗数の最大値
+        min_max_multiplier: float = 5.0,    # 最大乗数の最小値
         max_min_multiplier: float = 1.5,    # 最小乗数の最大値
         min_min_multiplier: float = 0.5,    # 最小乗数の最小値
         

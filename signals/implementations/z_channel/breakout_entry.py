@@ -29,17 +29,19 @@ def calculate_breakout_signals(close: np.ndarray, upper: np.ndarray, lower: np.n
     signals = np.zeros(length, dtype=np.int8)
     
     # ブレイクアウトの判定（並列処理化）
-    for i in prange(lookback, length):
+    for i in prange(lookback + 1, length):
         # 終値とバンドの値が有効かチェック
-        if np.isnan(close[i]) or np.isnan(upper[i-lookback]) or np.isnan(lower[i-lookback]):
+        if (np.isnan(close[i]) or np.isnan(close[i-1]) or 
+            np.isnan(upper[i]) or np.isnan(upper[i-1]) or 
+            np.isnan(lower[i]) or np.isnan(lower[i-1])):
             signals[i] = 0
             continue
             
-        # ロングエントリー: 終値がアッパーバンドを上回る
-        if close[i] > upper[i-lookback]:
+        # ロングエントリー: 前回の終値が前回のアッパーバンドを上回っていないかつ現在の終値が現在のアッパーバンドを上回る
+        if close[i-1] <= upper[i-1] and close[i] > upper[i]:
             signals[i] = 1
-        # ショートエントリー: 終値がロワーバンドを下回る
-        elif close[i] < lower[i-lookback]:
+        # ショートエントリー: 前回の終値が前回のロワーバンドを下回っていないかつ現在の終値が現在のロワーバンドを下回る
+        elif close[i-1] >= lower[i-1] and close[i] < lower[i]:
             signals[i] = -1
     
     return signals

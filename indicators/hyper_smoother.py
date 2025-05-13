@@ -64,7 +64,6 @@ def calculate_hyper_smoother_numba(data: np.ndarray, length: int) -> np.ndarray:
 def hyper_smoother(data: Union[pd.Series, np.ndarray], length: int = 14) -> np.ndarray:
     """
     ハイパースムーサーアルゴリズムを使用して時系列データを平滑化します。
-    RSXインディケーターで使用されている3段階フィルタリングロジックを実装しています。
     
     Args:
         data: 平滑化する時系列データ（pandas.SeriesまたはNumPy配列）

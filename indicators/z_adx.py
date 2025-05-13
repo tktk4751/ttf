@@ -10,7 +10,7 @@ from numba import jit, njit, vectorize, float64, prange
 from .indicator import Indicator
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
 from .hyper_smoother import calculate_hyper_smoother_numba
-from .alma import calculate_alma
+from .alma import calculate_alma_numba as calculate_alma
 from .ehlers_hody_dc import EhlersHoDyDC
 
 

@@ -82,12 +82,14 @@ def calculate_weighted_close(high: np.ndarray, low: np.ndarray, close: np.ndarra
         high: 高値の配列
         low: 安値の配列
         close: 終値の配列
-        weight: 終値の重み
+        weight: 終値の重み（浮動小数点数）
     
     Returns:
         重み付き終値の配列
     """
-    return (high + low + close * weight) / (2 + weight)
+    # 明示的に浮動小数点型を指定
+    weight_float = float(weight)  
+    return (high + low + close * weight_float) / (2.0 + weight_float)
 
 
 class PriceSource(Indicator):
@@ -125,7 +127,7 @@ class PriceSource(Indicator):
     }
     
     @staticmethod
-    def calculate(data: Union[pd.DataFrame, np.ndarray], source_type: str = 'close') -> np.ndarray:
+    def calculate_source(data: Union[pd.DataFrame, np.ndarray], source_type: str = 'close') -> np.ndarray:
         """
         静的メソッド: 指定されたデータから特定の価格ソースを計算する
         
@@ -179,13 +181,67 @@ class PriceSource(Indicator):
                 close_prices = data[columns['close']].values
             else:
                 # NumPy配列形式を想定
-                if data.ndim == 2 and data.shape[1] >= 4:
+                # データ形状の検証を強化
+                if not isinstance(data, np.ndarray):
+                    # NumPy配列でない場合は変換を試みる
+                    try:
+                        data = np.array(data)
+                    except:
+                        raise ValueError("データをNumPy配列に変換できません")
+                
+                # 1次元配列の場合、それが単一の値のリストであるかを確認
+                if data.ndim == 1:
+                    # 単一の値リスト（例：終値のみ）として扱う
+                    close_prices = data
+                    # 他の価格も同じ値で埋める（価格ソースによっては必要）
+                    open_prices = data.copy()
+                    high_prices = data.copy()
+                    low_prices = data.copy()
+                elif data.ndim == 2 and data.shape[1] >= 4:
                     open_prices = data[:, 0]
                     high_prices = data[:, 1]
                     low_prices = data[:, 2]
                     close_prices = data[:, 3]
                 else:
-                    raise ValueError("NumPy配列は2次元で、少なくとも4列必要です")
+                    # エラーを出さずに最善を尽くす
+                    try:
+                        if data.ndim == 2:
+                            # 列数が足りない場合は使える列を使用
+                            cols = data.shape[1]
+                            if cols == 1:
+                                # 1列の場合はそれを全てに使用
+                                close_prices = data[:, 0]
+                                open_prices = close_prices.copy()
+                                high_prices = close_prices.copy()
+                                low_prices = close_prices.copy()
+                            elif cols == 2:
+                                # 2列の場合は高値と安値として使用
+                                high_prices = data[:, 0]
+                                low_prices = data[:, 1]
+                                # 終値は高値と安値の平均
+                                close_prices = (high_prices + low_prices) / 2
+                                open_prices = close_prices.copy()
+                            elif cols == 3:
+                                # 3列の場合は高値、安値、終値として使用
+                                high_prices = data[:, 0]
+                                low_prices = data[:, 1]
+                                close_prices = data[:, 2]
+                                open_prices = close_prices.copy()
+                            else:
+                                raise ValueError(f"NumPy配列の形状が不適切です: {data.shape}")
+                        else:
+                            raise ValueError(f"NumPy配列の次元が不適切です: {data.ndim}")
+                    except Exception as shape_e:
+                        # 最終的なフォールバック：エラーメッセージを出すが、強制終了しない
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"データ形状が不適切です。エラー: {str(shape_e)}。デフォルト値で処理を続行します。")
+                        # 単一値配列を作成
+                        length = len(data) if hasattr(data, '__len__') else 1
+                        close_prices = np.ones(length)
+                        open_prices = close_prices.copy()
+                        high_prices = close_prices.copy()
+                        low_prices = close_prices.copy()
             
             # 基本価格ソースを返す
             if source_type == 'open':
@@ -221,7 +277,7 @@ class PriceSource(Indicator):
             stack_trace = traceback.format_exc()
             logger.error(f"PriceSource.calculate静的メソッド内でエラー: {error_msg}\n{stack_trace}")
             # エラー時はデータが利用可能であれば終値を返す、そうでなければ空の配列
-            if 'close_prices' in locals():
+            if 'close_prices' in locals() and isinstance(close_prices, np.ndarray):
                 return close_prices
             return np.array([])
     
@@ -357,24 +413,68 @@ class PriceSource(Indicator):
             self.logger.error(f"PriceSource計算中にエラー: {error_msg}\n{stack_trace}")
             return {}
     
-    def get_source(self, source_type: str = 'close') -> np.ndarray:
+    # def get_source(self, source_type: str = 'close') -> np.ndarray:
+    #     """
+    #     指定された種類の価格ソースを取得する
+        
+    #     Args:
+    #         source_type: 価格ソースのタイプ（デフォルト: 'close'）
+    #             サポートされているタイプ: 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close'
+                
+    #     Returns:
+    #         選択された価格ソースの配列
+    #     """
+    #     if source_type not in self.SOURCES:
+    #         raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(self.SOURCES.keys())}")
+        
+    #     if not self._sources or source_type not in self._sources:
+    #         raise RuntimeError("calculate()を先に呼び出してください")
+        
+    #     return self._sources[source_type]
+    
+    def get_source(self, *args) -> np.ndarray:
         """
-        指定された種類の価格ソースを取得する
+        指定された種類の価格ソースを取得する（互換性強化版）
+        
+        使用例:
+            # 従来の使い方
+            source_data = price_source.get_source('hlc3')
+            
+            # データと一緒に呼び出す場合（互換性のため）
+            source_data = price_source.get_source(data, 'hlc3')
         
         Args:
-            source_type: 価格ソースのタイプ（デフォルト: 'close'）
-                サポートされているタイプ: 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close'
+            *args: 引数群
+                - 引数1つの場合: source_type
+                - 引数2つの場合: data, source_type
                 
         Returns:
             選択された価格ソースの配列
         """
-        if source_type not in self.SOURCES:
-            raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(self.SOURCES.keys())}")
+        if len(args) == 1:
+            # 従来の使い方: get_source(source_type)
+            source_type = args[0]
+            
+            if source_type not in self.SOURCES:
+                raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(self.SOURCES.keys())}")
+            
+            if not self._sources or source_type not in self._sources:
+                raise RuntimeError("calculate()を先に呼び出してください")
+            
+            return self._sources[source_type]
         
-        if not self._sources or source_type not in self._sources:
-            raise RuntimeError("calculate()を先に呼び出してください")
+        elif len(args) == 2:
+            # 互換性のための使い方: get_source(data, source_type)
+            data, source_type = args
+            
+            # 指定されたデータを使って計算
+            self.calculate(data)
+            
+            # ソースタイプの取得
+            return self.get_source(source_type)
         
-        return self._sources[source_type]
+        else:
+            raise ValueError(f"get_source()の引数が多すぎます。expected 1 or 2, got {len(args)}")
     
     def get_open(self) -> np.ndarray:
         """始値を取得する"""

@@ -212,17 +212,23 @@ class ZMA(Indicator):
     
     def __init__(
         self,
-        max_dc_cycle_part: float = 0.5,          # 最大期間用ドミナントサイクル計算用
+        max_dc_cycle_part: float = 0.5,      
+        
+            # 最大期間用ドミナントサイクル計算用
         max_dc_max_cycle: int = 144,              # 最大期間用ドミナントサイクル計算用
         max_dc_min_cycle: int = 5,               # 最大期間用ドミナントサイクル計算用
         max_dc_max_output: int = 89,             # 最大期間用ドミナントサイクル計算用
         max_dc_min_output: int = 22,              # 最大期間用ドミナントサイクル計算用
+        max_dc_lp_period: int = 5,               # 最大期間用ドミナントサイクル計算用LPピリオド
+        max_dc_hp_period: int = 55,              # 最大期間用ドミナントサイクル計算用HPピリオド
         
         min_dc_cycle_part: float = 0.25,          # 最小期間用ドミナントサイクル計算用
         min_dc_max_cycle: int = 55,               # 最小期間用ドミナントサイクル計算用
         min_dc_min_cycle: int = 5,                # 最小期間用ドミナントサイクル計算用
         min_dc_max_output: int = 13,              # 最小期間用ドミナントサイクル計算用
         min_dc_min_output: int = 3,               # 最小期間用ドミナントサイクル計算用
+        min_dc_lp_period: int = 5,               # 最小期間用ドミナントサイクル計算用LPピリオド
+        min_dc_hp_period: int = 34,              # 最小期間用ドミナントサイクル計算用HPピリオド
         
         # 動的Slow最大用パラメータ
         slow_max_dc_cycle_part: float = 0.5,
@@ -230,6 +236,8 @@ class ZMA(Indicator):
         slow_max_dc_min_cycle: int = 5,
         slow_max_dc_max_output: int = 89,
         slow_max_dc_min_output: int = 22,
+        slow_max_dc_lp_period: int = 5,          # Slow最大用ドミナントサイクル計算用LPピリオド
+        slow_max_dc_hp_period: int = 55,         # Slow最大用ドミナントサイクル計算用HPピリオド
         
         # 動的Slow最小用パラメータ
         slow_min_dc_cycle_part: float = 0.5,
@@ -237,6 +245,8 @@ class ZMA(Indicator):
         slow_min_dc_min_cycle: int = 5,
         slow_min_dc_max_output: int = 21,
         slow_min_dc_min_output: int = 8,
+        slow_min_dc_lp_period: int = 5,          # Slow最小用ドミナントサイクル計算用LPピリオド
+        slow_min_dc_hp_period: int = 34,         # Slow最小用ドミナントサイクル計算用HPピリオド
         
         # 動的Fast最大用パラメータ
         fast_max_dc_cycle_part: float = 0.5,
@@ -244,6 +254,8 @@ class ZMA(Indicator):
         fast_max_dc_min_cycle: int = 5,
         fast_max_dc_max_output: int = 15,
         fast_max_dc_min_output: int = 3,
+        fast_max_dc_lp_period: int = 5,          # Fast最大用ドミナントサイクル計算用LPピリオド
+        fast_max_dc_hp_period: int = 21,         # Fast最大用ドミナントサイクル計算用HPピリオド
         
         min_fast_period: int = 2,
         hyper_smooth_period: int = 0,
@@ -265,11 +277,17 @@ class ZMA(Indicator):
             max_dc_max_output: 最大期間用ドミナントサイクル計算用の最大出力値（デフォルト: 89）
             max_dc_min_output: 最大期間用ドミナントサイクル計算用の最小出力値（デフォルト: 22）
             
+            max_dc_lp_period: 最大期間用ドミナントサイクル計算用LPピリオド（デフォルト: 5）
+            max_dc_hp_period: 最大期間用ドミナントサイクル計算用HPピリオド（デフォルト: 55）
+            
             min_dc_cycle_part: 最小期間用ドミナントサイクル計算用のサイクル部分（デフォルト: 0.25）
             min_dc_max_cycle: 最小期間用ドミナントサイクル計算用の最大サイクル期間（デフォルト: 55）
             min_dc_min_cycle: 最小期間用ドミナントサイクル計算用の最小サイクル期間（デフォルト: 5）
             min_dc_max_output: 最小期間用ドミナントサイクル計算用の最大出力値（デフォルト: 13）
             min_dc_min_output: 最小期間用ドミナントサイクル計算用の最小出力値（デフォルト: 3）
+            
+            min_dc_lp_period: 最小期間用ドミナントサイクル計算用LPピリオド（デフォルト: 5）
+            min_dc_hp_period: 最小期間用ドミナントサイクル計算用HPピリオド（デフォルト: 34）
             
             # 動的Slow最大用パラメータ
             slow_max_dc_cycle_part: 動的Slow最大用サイクル部分（デフォルト: 0.5）
@@ -278,6 +296,9 @@ class ZMA(Indicator):
             slow_max_dc_max_output: 動的Slow最大用の最大出力値（デフォルト: 89）
             slow_max_dc_min_output: 動的Slow最大用の最小出力値（デフォルト: 22）
             
+            slow_max_dc_lp_period: 動的Slow最大用ドミナントサイクル計算用LPピリオド（デフォルト: 5）
+            slow_max_dc_hp_period: 動的Slow最大用ドミナントサイクル計算用HPピリオド（デフォルト: 55）
+            
             # 動的Slow最小用パラメータ
             slow_min_dc_cycle_part: 動的Slow最小用サイクル部分（デフォルト: 0.5）
             slow_min_dc_max_cycle: 動的Slow最小用の最大サイクル期間（デフォルト: 89）
@@ -285,12 +306,18 @@ class ZMA(Indicator):
             slow_min_dc_max_output: 動的Slow最小用の最大出力値（デフォルト: 21）
             slow_min_dc_min_output: 動的Slow最小用の最小出力値（デフォルト: 8）
             
+            slow_min_dc_lp_period: 動的Slow最小用ドミナントサイクル計算用LPピリオド（デフォルト: 5）
+            slow_min_dc_hp_period: 動的Slow最小用ドミナントサイクル計算用HPピリオド（デフォルト: 34）
+            
             # 動的Fast最大用パラメータ
             fast_max_dc_cycle_part: 動的Fast最大用サイクル部分（デフォルト: 0.5）
             fast_max_dc_max_cycle: 動的Fast最大用の最大サイクル期間（デフォルト: 55）
             fast_max_dc_min_cycle: 動的Fast最大用の最小サイクル期間（デフォルト: 5）
             fast_max_dc_max_output: 動的Fast最大用の最大出力値（デフォルト: 15）
             fast_max_dc_min_output: 動的Fast最大用の最小出力値（デフォルト: 3）
+            
+            fast_max_dc_lp_period: 動的Fast最大用ドミナントサイクル計算用LPピリオド（デフォルト: 5）
+            fast_max_dc_hp_period: 動的Fast最大用ドミナントサイクル計算用HPピリオド（デフォルト: 21）
             
             min_fast_period: 速い移動平均の最小期間（デフォルト: 2、常に固定）
             hyper_smooth_period: ハイパースムーサーの平滑化期間（デフォルト: 0、0以下の場合は平滑化しない）
@@ -327,6 +354,8 @@ class ZMA(Indicator):
         self.max_dc_min_cycle = max_dc_min_cycle
         self.max_dc_max_output = max_dc_max_output
         self.max_dc_min_output = max_dc_min_output
+        self.max_dc_lp_period = max_dc_lp_period
+        self.max_dc_hp_period = max_dc_hp_period
         
         # 最小期間用パラメータ
         self.min_dc_cycle_part = min_dc_cycle_part
@@ -334,6 +363,8 @@ class ZMA(Indicator):
         self.min_dc_min_cycle = min_dc_min_cycle
         self.min_dc_max_output = min_dc_max_output
         self.min_dc_min_output = min_dc_min_output
+        self.min_dc_lp_period = min_dc_lp_period
+        self.min_dc_hp_period = min_dc_hp_period
         
         # 動的Slow最大用パラメータ
         self.slow_max_dc_cycle_part = slow_max_dc_cycle_part
@@ -341,6 +372,8 @@ class ZMA(Indicator):
         self.slow_max_dc_min_cycle = slow_max_dc_min_cycle
         self.slow_max_dc_max_output = slow_max_dc_max_output
         self.slow_max_dc_min_output = slow_max_dc_min_output
+        self.slow_max_dc_lp_period = slow_max_dc_lp_period
+        self.slow_max_dc_hp_period = slow_max_dc_hp_period
         
         # 動的Slow最小用パラメータ
         self.slow_min_dc_cycle_part = slow_min_dc_cycle_part
@@ -348,6 +381,8 @@ class ZMA(Indicator):
         self.slow_min_dc_min_cycle = slow_min_dc_min_cycle
         self.slow_min_dc_max_output = slow_min_dc_max_output
         self.slow_min_dc_min_output = slow_min_dc_min_output
+        self.slow_min_dc_lp_period = slow_min_dc_lp_period
+        self.slow_min_dc_hp_period = slow_min_dc_hp_period
         
         # 動的Fast最大用パラメータ
         self.fast_max_dc_cycle_part = fast_max_dc_cycle_part
@@ -355,6 +390,8 @@ class ZMA(Indicator):
         self.fast_max_dc_min_cycle = fast_max_dc_min_cycle
         self.fast_max_dc_max_output = fast_max_dc_max_output
         self.fast_max_dc_min_output = fast_max_dc_min_output
+        self.fast_max_dc_lp_period = fast_max_dc_lp_period
+        self.fast_max_dc_hp_period = fast_max_dc_hp_period
         
         # KAMAのfast/slow期間
         self.min_fast_period = min_fast_period  # 動的モード時の最小値
@@ -385,7 +422,9 @@ class ZMA(Indicator):
                 min_cycle=self.max_dc_min_cycle,
                 max_output=self.max_dc_max_output,
                 min_output=self.max_dc_min_output,
-                src_type='hlc3'
+                src_type='hlc3',
+                lp_period=self.max_dc_lp_period,
+                hp_period=self.max_dc_hp_period
             )
             
             # 最小期間用ドミナントサイクル検出器を初期化
@@ -396,7 +435,9 @@ class ZMA(Indicator):
                 min_cycle=self.min_dc_min_cycle,
                 max_output=self.min_dc_max_output,
                 min_output=self.min_dc_min_output,
-                src_type='hlc3'
+                src_type='hlc3',
+                lp_period=self.min_dc_lp_period,
+                hp_period=self.min_dc_hp_period
             )
             
             # 動的Slow最大用ドミナントサイクル検出器を初期化
@@ -407,7 +448,9 @@ class ZMA(Indicator):
                 min_cycle=self.slow_max_dc_min_cycle,
                 max_output=self.slow_max_dc_max_output,
                 min_output=self.slow_max_dc_min_output,
-                src_type='hlc3'
+                src_type='hlc3',
+                lp_period=self.slow_max_dc_lp_period,
+                hp_period=self.slow_max_dc_hp_period
             )
             
             # 動的Slow最小用ドミナントサイクル検出器を初期化
@@ -418,7 +461,9 @@ class ZMA(Indicator):
                 min_cycle=self.slow_min_dc_min_cycle,
                 max_output=self.slow_min_dc_max_output,
                 min_output=self.slow_min_dc_min_output,
-                src_type='hlc3'
+                src_type='hlc3',
+                lp_period=self.slow_min_dc_lp_period,
+                hp_period=self.slow_min_dc_hp_period
             )
             
             # 動的Fast最大用ドミナントサイクル検出器を初期化
@@ -429,7 +474,9 @@ class ZMA(Indicator):
                 min_cycle=self.fast_max_dc_min_cycle,
                 max_output=self.fast_max_dc_max_output,
                 min_output=self.fast_max_dc_min_output,
-                src_type='hlc3'
+                src_type='hlc3',
+                lp_period=self.fast_max_dc_lp_period,
+                hp_period=self.fast_max_dc_hp_period
             )
         else:
             # 動的期間を使用しない場合はNoneに設定
@@ -471,14 +518,19 @@ class ZMA(Indicator):
         param_str = (
             f"{self.max_dc_cycle_part}_{self.max_dc_max_cycle}_{self.max_dc_min_cycle}_"
             f"{self.max_dc_max_output}_{self.max_dc_min_output}_"
+            f"{self.max_dc_lp_period}_{self.max_dc_hp_period}_"
             f"{self.min_dc_cycle_part}_{self.min_dc_max_cycle}_{self.min_dc_min_cycle}_"
             f"{self.min_dc_max_output}_{self.min_dc_min_output}_"
+            f"{self.min_dc_lp_period}_{self.min_dc_hp_period}_"
             f"{self.slow_max_dc_cycle_part}_{self.slow_max_dc_max_cycle}_{self.slow_max_dc_min_cycle}_"
             f"{self.slow_max_dc_max_output}_{self.slow_max_dc_min_output}_"
+            f"{self.slow_max_dc_lp_period}_{self.slow_max_dc_hp_period}_"
             f"{self.slow_min_dc_cycle_part}_{self.slow_min_dc_max_cycle}_{self.slow_min_dc_min_cycle}_"
             f"{self.slow_min_dc_max_output}_{self.slow_min_dc_min_output}_"
+            f"{self.slow_min_dc_lp_period}_{self.slow_min_dc_hp_period}_"
             f"{self.fast_max_dc_cycle_part}_{self.fast_max_dc_max_cycle}_{self.fast_max_dc_min_cycle}_"
             f"{self.fast_max_dc_max_output}_{self.fast_max_dc_min_output}_"
+            f"{self.fast_max_dc_lp_period}_{self.fast_max_dc_hp_period}_"
             f"{self.min_fast_period}_"
             f"{self.hyper_smooth_period}_{self.src_type}_{self.detector_type}_{external_er_hash}"
         )

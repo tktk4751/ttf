@@ -80,13 +80,13 @@ class CMA(Indicator):
     def __init__(
         self,
         detector_type: str = 'hody_e',
-        cycle_part: float = 0.5,
+        cycle_part: float = 0.618,
         lp_period: int = 5,
-        hp_period: int = 55,
-        max_cycle: int = 144,
+        hp_period: int = 89,
+        max_cycle: int = 55,
         min_cycle: int = 5,
-        max_output: int = 62,
-        min_output: int = 13,
+        max_output: int = 34,
+        min_output: int = 8,
         fast_period: int = 2,
         slow_period: int = 30,
         src_type: str = 'hlc3'

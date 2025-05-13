@@ -205,7 +205,7 @@ def calculate_batch_position_sizes_numba(
     return position_sizes
 
 
-class ZPositionSizing(PositionSizing, IPositionManager):
+class ZATRPositionSizing(PositionSizing, IPositionManager):
     """
     ZATRベースのポジションサイジング
     
@@ -217,18 +217,19 @@ class ZPositionSizing(PositionSizing, IPositionManager):
         self, 
         base_risk_ratio: float = 0.01,  # 基本リスク比率（デフォルト2%）
         unit: float = 1.0,              # 基本単位係数（デフォルト1.0）
-        max_position_percent: float = 0.618,  # 最大ポジションサイズの比率（デフォルト50%）
+        max_position_percent: float = 0.5,  # 最大ポジションサイズの比率（デフォルト50%）
         leverage: float = 1.0,          # レバレッジ（デフォルト1倍）
-        zatr_detector_type: str = 'hody_e',  # ZATRの検出器タイプ
+        zatr_detector_type: str = 'phac_e',  # ZATRの検出器タイプ
         zatr_max_period: int = 55,      # ZATR最大期間
         zatr_min_period: int = 5,       # ZATR最小期間
         apply_er_adjustment: bool = True,  # 効率比による調整を適用するか
+        fixed_risk_percent: float = 0.01,  # 固定リスク率（資金の1%）
         
         # 動的ATR乗数のパラメータ
-        max_max_multiplier: float = 3.0,  # 最大乗数の最大値
-        min_max_multiplier: float = 1.5,  # 最大乗数の最小値
-        max_min_multiplier: float = 1.0,  # 最小乗数の最大値
-        min_min_multiplier: float = 0.3,  # 最小乗数の最小値
+        max_max_multiplier: float = 4.0,  # 最大乗数の最大値
+        min_max_multiplier: float = 3.0,  # 最大乗数の最小値
+        max_min_multiplier: float = 2.0,  # 最小乗数の最大値
+        min_min_multiplier: float = 1.0,  # 最小乗数の最小値
         
         # 動的リスク比率のパラメータ
         max_risk_ratio: float = 0.03,   # 最大リスク比率（3%）
@@ -246,6 +247,7 @@ class ZPositionSizing(PositionSizing, IPositionManager):
             zatr_max_period: ZATR最大期間
             zatr_min_period: ZATR最小期間
             apply_er_adjustment: 効率比による調整を適用するか
+            fixed_risk_percent: 固定リスク率（資金の何%をリスクとするか）
             
             max_max_multiplier: 最大乗数の最大値
             min_max_multiplier: 最大乗数の最小値
@@ -261,6 +263,7 @@ class ZPositionSizing(PositionSizing, IPositionManager):
         self.max_position_percent = max_position_percent
         self.leverage = leverage
         self.apply_er_adjustment = apply_er_adjustment
+        self.fixed_risk_percent = fixed_risk_percent
         
         # 動的乗数のパラメータ
         self.max_max_multiplier = max_max_multiplier
@@ -278,19 +281,33 @@ class ZPositionSizing(PositionSizing, IPositionManager):
         # ZATR インスタンスを作成
         self.zatr = ZATR(
             detector_type=zatr_detector_type,
-            max_dc_max_cycle=zatr_max_period,
-            max_dc_min_cycle=zatr_min_period,
-            smoother_type='alma'  # デフォルトのスムーサータイプ
+            max_dc_cycle_part=0.618,                     # サイクル部分の倍率
+            max_dc_max_cycle=89,          # 最大サイクル期間
+            max_dc_min_cycle=13,          # 最小サイクル期間
+            max_dc_max_output=55,                      # 最大出力値
+            max_dc_min_output=13,                       # 最小出力値
+            
+            min_dc_cycle_part=0.618,                     # サイクル部分の倍率
+            min_dc_max_cycle=34,          # 最大サイクル期間
+            min_dc_min_cycle=5,          # 最小サイクル期間
+            min_dc_max_output=13,                      # 最大出力値
+            min_dc_min_output=5,                       # 最小出力値
+            
+            smoother_type='alma'                # 平滑化アルゴリズムのタイプ
         )
         
         # サイクル効率比（CER）インスタンスを作成
         self.cycle_er = CycleEfficiencyRatio(
             detector_type=zatr_detector_type,
-            lp_period=5,
-            hp_period=zatr_max_period,
-            cycle_part=0.5
-        )
-    
+            lp_period=5,                        # 低域通過フィルターの期間
+            hp_period=144,          # 高域通過フィルターの期間
+            cycle_part=0.618,                     # サイクル部分の倍率
+            max_cycle=55,          # 最大サイクル期間
+            min_cycle=5,          # 最小サイクル期間
+            max_output=55,                      # 最大出力値
+            min_output=5                       # 最小出力値
+        ) 
+
     def can_enter(self) -> bool:
         """新規ポジションを取れるかどうか"""
         return True
@@ -479,6 +496,206 @@ class ZPositionSizing(PositionSizing, IPositionManager):
         # 効率比 1.0 → 係数 1.5
         return 0.5 + efficiency_ratio  # 0.5〜1.5の範囲 
 
+    def calculate_stop_loss_price(
+        self, 
+        entry_price: float, 
+        zatr_value: float, 
+        atr_multiplier: float, 
+        is_long: bool = True
+    ) -> float:
+        """
+        ATR乗数に基づいてストップロス価格を計算
+        
+        Args:
+            entry_price: エントリー価格
+            zatr_value: ZATR値
+            atr_multiplier: ATR乗数
+            is_long: ロングポジションかどうか（True=ロング、False=ショート）
+            
+        Returns:
+            float: ストップロス価格
+        """
+        # ATRリスク（値幅）を計算
+        atr_risk = zatr_value * atr_multiplier
+        
+        # ポジションタイプに基づいてストップロス価格を計算
+        if is_long:
+            # ロングの場合はエントリー価格からATRリスク分を引く
+            stop_loss = entry_price - atr_risk
+        else:
+            # ショートの場合はエントリー価格にATRリスク分を足す
+            stop_loss = entry_price + atr_risk
+            
+        return stop_loss
+    
+    def calculate_position_size_with_fixed_risk(
+        self, 
+        entry_price: float, 
+        capital: float, 
+        historical_data: pd.DataFrame, 
+        is_long: bool = True,
+        debug: bool = False
+    ) -> Dict[str, Any]:
+        """
+        固定リスク率（資金の1%）に基づいてポジションサイズを計算
+        
+        Args:
+            entry_price: エントリー価格
+            capital: 現在の資金額
+            historical_data: 履歴データ
+            is_long: ロングポジションかどうか（True=ロング、False=ショート）
+            debug: デバッグ情報を出力するかどうか
+            
+        Returns:
+            Dict[str, Any]: 計算結果
+        """
+        # ZATRとATR乗数を直接計算して取得する（calculateメソッドは使わない）
+        # 履歴データを取得
+        history = historical_data
+        
+        # サイクル効率比（CER）を計算
+        try:
+            external_er = self.cycle_er.calculate(history)
+            
+            # 結果がNoneまたは空の配列の場合はフォールバックを使用
+            if external_er is None or len(external_er) == 0:
+                external_er = np.full(len(history), 0.5)
+                self.logger.warning("CER計算結果が空のため、フォールバックCERを使用します")
+                
+        except Exception as e:
+            # CER計算にエラーが発生した場合のフォールバック
+            # すべての値が0.5のCERを作成（中立値）
+            external_er = np.full(len(history), 0.5)
+            self.logger.warning(f"CER計算中にエラー: {str(e)}、フォールバックCERを使用します")
+
+        # ZATRを計算する
+        try:
+            self.zatr.calculate(history, external_er=external_er)
+            zatr_value = self.zatr.get_absolute_atr()[-1]
+            efficiency_ratio = self.zatr.get_efficiency_ratio()[-1]
+            
+            # 値が無効な場合のみフォールバック処理
+            if zatr_value is None or np.isnan(zatr_value):
+                # 価格の0.01%を使用（小さな価格の通貨でも適切に機能するため）
+                zatr_value = entry_price * 0.01
+                self.logger.warning(f"ZATR値が無効（None/NaN）、価格の1%をデフォルト値として使用: {zatr_value}")
+            
+        except IndexError as e:
+            # データが不足している場合のフォールバック
+            zatr_value = entry_price * 0.01  # 価格の1%
+            efficiency_ratio = 0.5  # デフォルト値
+            self.logger.warning(f"ZATR計算中にインデックスエラー: {str(e)}、価格の1%をデフォルト値として使用: {zatr_value}")
+        except Exception as e:
+            # その他のエラー
+            zatr_value = entry_price * 0.01  # 価格の1%
+            efficiency_ratio = 0.5  # デフォルト値
+            self.logger.warning(f"ZATR計算中にエラー: {str(e)}、価格の1%をデフォルト値として使用: {zatr_value}")
+
+        # 効率比による調整
+        er_factor = 1.0
+        
+        if self.apply_er_adjustment:
+            # 効率比による単位係数の動的調整
+            er_factor = self._calculate_er_factor(efficiency_ratio)
+            
+            # 動的な最大・最小乗数の計算
+            max_mult = calculate_dynamic_max_multiplier(
+                efficiency_ratio,
+                self.max_max_multiplier,
+                self.min_max_multiplier
+            )
+            
+            min_mult = calculate_dynamic_min_multiplier(
+                efficiency_ratio,
+                self.max_min_multiplier,
+                self.min_min_multiplier
+            )
+            
+            # 効率比によるATR乗数の動的調整
+            atr_multiplier = calculate_dynamic_multiplier_vec(
+                efficiency_ratio,
+                max_mult,
+                min_mult
+            )
+        else:
+            # 調整なしの場合のデフォルト値
+            atr_multiplier = 1.5  # デフォルト値
+            max_mult = self.max_max_multiplier
+            min_mult = self.min_min_multiplier
+
+        # ストップロス価格の計算
+        stop_loss_price = self.calculate_stop_loss_price(
+            entry_price=entry_price,
+            zatr_value=zatr_value,
+            atr_multiplier=atr_multiplier,
+            is_long=is_long
+        )
+        
+        # ポジションサイズを計算
+        risk_amount = capital * self.fixed_risk_percent
+        
+        # エントリー価格とストップロス価格の差（ストップロス幅）
+        stop_loss_distance = abs(entry_price - stop_loss_price)
+        
+        # デバッグ情報
+        if debug:
+            self.logger.info(f"==== ポジションサイズ計算デバッグ情報 ====")
+            self.logger.info(f"エントリー価格: {entry_price}")
+            self.logger.info(f"資金: {capital}")
+            self.logger.info(f"固定リスク率: {self.fixed_risk_percent}")
+            self.logger.info(f"ZATR値: {zatr_value}")
+            self.logger.info(f"ATR乗数: {atr_multiplier}")
+            self.logger.info(f"ストップロス価格: {stop_loss_price}")
+            self.logger.info(f"ストップロス幅: {stop_loss_distance}")
+            self.logger.info(f"リスク金額: {risk_amount}")
+        
+        # ストップロス幅に基づくポジションサイズ計算
+        if stop_loss_distance > 0:
+            # 正しい計算式: リスク金額 / (ストップロス幅 / エントリー価格)
+            position_size_usd = risk_amount / (stop_loss_distance / entry_price)
+        else:
+            # ストップロス幅がゼロまたは負の場合（エラー状態）
+            position_size_usd = 0
+            self.logger.warning("ストップロス幅が無効です。ポジションサイズはゼロに設定されました。")
+        
+        # 最大ポジションサイズの制限を適用
+        max_position_size = capital * self.max_position_percent * self.leverage
+        
+        if debug:
+            self.logger.info(f"計算されたポジションサイズ: {position_size_usd}")
+            self.logger.info(f"最大ポジションサイズ: {max_position_size}")
+        
+        # 最大値を超える場合は制限を適用
+        if position_size_usd > max_position_size:
+            if debug:
+                self.logger.info(f"ポジションサイズが最大値を超えたため、{max_position_size}に制限されました")
+            position_size_usd = max_position_size
+        
+        # 資産数量を計算（表示用）
+        asset_quantity = position_size_usd / entry_price if entry_price > 0 else 0
+        
+        if debug:
+            self.logger.info(f"最終ポジションサイズ: {position_size_usd}")
+            self.logger.info(f"資産数量: {asset_quantity}")
+            self.logger.info(f"========================================")
+        
+        # 結果の構築
+        result = {
+            'position_size': position_size_usd,
+            'asset_quantity': asset_quantity,
+            'stop_loss_price': stop_loss_price,
+            'risk_amount': risk_amount,
+            'stop_loss_distance': stop_loss_distance,
+            'fixed_risk_percent': self.fixed_risk_percent,
+            'zatr_value': zatr_value,
+            'atr_multiplier': atr_multiplier,
+            'efficiency_ratio': efficiency_ratio,
+            'er_factor': er_factor,
+            'max_position_size': max_position_size,
+        }
+        
+        return result
+
     @staticmethod
     def calculate_batch(
         capitals: np.ndarray,
@@ -603,7 +820,7 @@ class ZPositionSizing(PositionSizing, IPositionManager):
                 dynamic_risk_ratio = calculate_dynamic_risk_ratio(
                     efficiency_ratio,
                     0.03,  # max_risk_ratio
-                    0.01   # min_risk_ratio
+                    0.005   # min_risk_ratio
                 )
             else:
                 atr_multiplier = 1.5  # デフォルト値

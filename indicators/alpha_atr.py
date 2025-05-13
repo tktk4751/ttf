@@ -9,7 +9,7 @@ from numba import jit, prange, vectorize, njit
 
 from .indicator import Indicator
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
-from .alma import calculate_alma
+from .alma import calculate_alma_numba as calculate_alma
 from .hyper_smoother import hyper_smoother, calculate_hyper_smoother_numba
 
 

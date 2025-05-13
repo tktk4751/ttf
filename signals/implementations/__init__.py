@@ -10,6 +10,8 @@ from .z_donchian import ZDonchianBreakoutEntrySignal
 from .z_rsx import ZRSXTriggerSignal
 from .divergence.z_macd_divergence import ZMACDDivergenceSignal
 from .z_trend import ZTrendBreakoutEntrySignal
+from .z_adaptive_ma import ZAdaptiveMACrossoverEntrySignal
+from .cycle_trend_index.fillter import CycleTrendIndexFilterSignal
 
 # 公開するクラスのリスト
 __all__ = [
@@ -18,5 +20,7 @@ __all__ = [
     'ZDonchianBreakoutEntrySignal',
     'ZRSXTriggerSignal',
     'ZMACDDivergenceSignal',
-    'ZTrendBreakoutEntrySignal'
+    'ZTrendBreakoutEntrySignal',
+    'ZAdaptiveMACrossoverEntrySignal',
+    'CycleTrendIndexFilterSignal'
 ] 
