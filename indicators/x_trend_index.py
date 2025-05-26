@@ -9,7 +9,6 @@ from numba import jit, njit, prange
 
 from .indicator import Indicator
 from .hyper_smoother import hyper_smoother
-from .cycle_efficiency_ratio import CycleEfficiencyRatio
 from .c_atr import CATR
 from .ehlers_unified_dc import EhlersUnifiedDC
 
@@ -18,7 +17,6 @@ from .ehlers_unified_dc import EhlersUnifiedDC
 class XTrendIndexResult:
     """Xトレンドインデックスの計算結果"""
     values: np.ndarray          # Xトレンドインデックスの値（0-1の範囲）
-    er: np.ndarray              # サイクル効率比（CER）
     dominant_cycle: np.ndarray  # ドミナントサイクル値（チョピネス期間として使用）
     dynamic_atr_period: np.ndarray   # 動的ATR期間 (CATRから取得)
     choppiness_index: np.ndarray # Choppiness Index（元の値）
@@ -26,7 +24,7 @@ class XTrendIndexResult:
     stddev_factor: np.ndarray   # 標準偏差係数 (固定期間で計算)
     tr: np.ndarray              # True Range (CATR計算時に内部で計算されるが、結果として保持)
     atr: np.ndarray             # Average True Range (CATRの絶対値)
-    dynamic_threshold: np.ndarray  # 動的しきい値
+    fixed_threshold: float      # 固定しきい値
     trend_state: np.ndarray     # トレンド状態 (1=トレンド、0=レンジ、NaN=不明)
 
 
@@ -242,56 +240,46 @@ def calculate_x_trend_index_batch(
 
 
 @njit(fastmath=True)
-def calculate_dynamic_threshold(
-    er: np.ndarray,
-    max_threshold: float,
-    min_threshold: float
+def calculate_fixed_threshold_trend_state(
+    trend_index: np.ndarray,
+    fixed_threshold: float
 ) -> np.ndarray:
     """
-    効率比に基づいて動的なしきい値を計算する
+    固定しきい値に基づいてトレンド状態を計算する
     
     Args:
-        er: 効率比の配列
-        max_threshold: しきい値の最大値
-        min_threshold: しきい値の最小値
+        trend_index: Xトレンドインデックスの配列
+        fixed_threshold: 固定しきい値
     
     Returns:
-        動的なしきい値の配列
+        トレンド状態の配列（1=トレンド、0=レンジ、NaN=不明）
     """
-    length = len(er)
-    threshold = np.zeros(length, dtype=np.float64)
+    length = len(trend_index)
+    trend_state = np.full(length, np.nan)
     
     for i in range(length):
-        if np.isnan(er[i]):
-            threshold[i] = np.nan
+        if np.isnan(trend_index[i]):
             continue
-        
-        # ERの絶対値を使用
-        er_abs = abs(er[i])
-        
-        # ERが高いほど（トレンドが強いほど）しきい値は高く
-        # ERが低いほど（レンジ相場ほど）しきい値は低く
-        threshold[i] = min_threshold + er_abs * (max_threshold - min_threshold)
+        trend_state[i] = 1.0 if trend_index[i] >= fixed_threshold else 0.0
     
-    return threshold
+    return trend_state
 
 
 class XTrendIndex(Indicator):
     """
     Xトレンドインデックス（X Trend Index）インジケーター
     
-    サイクル効率比（CER）とEhlersUnifiedDCを使用してチョピネス期間を動的に決定し、
+    EhlersUnifiedDCを使用してチョピネス期間を動的に決定し、
     CATRと固定期間の標準偏差係数を組み合わせてトレンド/レンジを検出する指標。
     ZTrendIndexをベースに、チョピネス期間の決定方法とATR計算、標準偏差期間を変更。
     
     特徴:
-    - サイクル効率比（CER）を使用して、現在のサイクルに基づいた適応的な計算
     - EhlersUnifiedDCを使用してチョピネス期間を動的に決定
     - CATRを使用したサイクル適応型ボラティリティ測定
     - チョピネスインデックスと固定期間の標準偏差係数を組み合わせて正規化したトレンド指標
     - 市場状態に応じてチョピネス期間とATR期間が自動調整される
     - 0-1の範囲で表示（1に近いほど強いトレンド、0に近いほど強いレンジ）
-    - 動的しきい値によるトレンド/レンジ状態の判定
+    - 固定しきい値によるトレンド/レンジ状態の判定
     """
     
     def __init__(
@@ -299,47 +287,35 @@ class XTrendIndex(Indicator):
         # EhlersUnifiedDC パラメータ
         detector_type: str = 'phac_e',
         cycle_part: float = 0.5,
-        max_cycle: int = 55, # CATRと合わせる例
+        max_cycle: int = 120, # CATRと合わせる例
         min_cycle: int = 5,  # CATRと合わせる例
-        max_output: int = 34, # CATRと合わせる例
-        min_output: int = 5,  # CATRと合わせる例
+        max_output: int = 89, # CATRと合わせる例
+        min_output: int = 8,  # CATRと合わせる例
         src_type: str = 'hlc3', # DC計算ソース
         lp_period: int = 5,    # 拡張DC用
-        hp_period: int = 55,   # 拡張DC用
+        hp_period: int = 120,   # 拡張DC用
 
         # CATR パラメータ (DCパラメータは上記と共有可能)
         smoother_type: str = 'alma', # CATRの平滑化タイプ
 
-        # CycleEfficiencyRatio パラメータ (CATRに必要)
-        cer_detector_type: str = 'phac_e', # CER用DCタイプ
-        cer_lp_period: int = 5,       # CER用LP期間
-        cer_hp_period: int = 144,      # CER用HP期間
-        cer_cycle_part: float = 0.5,   # CER用サイクル部分
-
-        # 動的しきい値のパラメータ
-        max_threshold: float = 0.75,
-        min_threshold: float = 0.55
+        # 固定しきい値のパラメータ
+        fixed_threshold: float = 0.65
     ):
         """
         コンストラクタ
         
         Args:
-            detector_type: EhlersUnifiedDCで使用する検出器タイプ (デフォルト: 'hody')
+            detector_type: EhlersUnifiedDCで使用する検出器タイプ (デフォルト: 'phac_e')
             cycle_part: DCのサイクル部分の倍率 (デフォルト: 0.5)
-            max_cycle: DCの最大サイクル期間 (デフォルト: 55)
+            max_cycle: DCの最大サイクル期間 (デフォルト: 120)
             min_cycle: DCの最小サイクル期間 (デフォルト: 5)
-            max_output: DCの最大出力値 (デフォルト: 34)
-            min_output: DCの最小出力値 (デフォルト: 5)
+            max_output: DCの最大出力値 (デフォルト: 89)
+            min_output: DCの最小出力値 (デフォルト: 8)
             src_type: DC計算に使用する価格ソース ('close', 'hlc3', etc.) (デフォルト: 'hlc3')
             lp_period: 拡張DC用のローパスフィルター期間 (デフォルト: 5)
-            hp_period: 拡張DC用のハイパスフィルター期間 (デフォルト: 55)
+            hp_period: 拡張DC用のハイパスフィルター期間 (デフォルト: 120)
             smoother_type: CATRで使用する平滑化アルゴリズム ('alma' or 'hyper') (デフォルト: 'alma')
-            cer_detector_type: CycleEfficiencyRatioで使用する検出器タイプ (デフォルト: 'hody')
-            cer_lp_period: CER用のローパスフィルター期間 (デフォルト: 5)
-            cer_hp_period: CER用のハイパスフィルター期間 (デフォルト: 144)
-            cer_cycle_part: CER用のサイクル部分の倍率 (デフォルト: 0.5)
-            max_threshold: 動的しきい値の最大値 (デフォルト: 0.75)
-            min_threshold: 動的しきい値の最小値 (デフォルト: 0.55)
+            fixed_threshold: 固定しきい値 (デフォルト: 0.65)
         """
         super().__init__(
             f"XTrendIndex({detector_type}, {max_output}, {min_output}, {smoother_type})"
@@ -359,15 +335,8 @@ class XTrendIndex(Indicator):
         # CATRパラメータ
         self.smoother_type = smoother_type
 
-        # CycleEfficiencyRatio パラメータ (CATRとThresholdに必要)
-        self.cer_detector_type = cer_detector_type
-        self.cer_lp_period = cer_lp_period
-        self.cer_hp_period = cer_hp_period
-        self.cer_cycle_part = cer_cycle_part
-
-        # 動的しきい値のパラメータ
-        self.max_threshold = max_threshold
-        self.min_threshold = min_threshold
+        # 固定しきい値のパラメータ
+        self.fixed_threshold = fixed_threshold
 
         # ドミナントサイクル検出器の初期化 (EhlersUnifiedDCを使用)
         self.dc_detector = EhlersUnifiedDC(
@@ -382,16 +351,7 @@ class XTrendIndex(Indicator):
             hp_period=self.hp_period
         )
 
-        # サイクル効率比(CER)のインスタンス化 (CATRとThresholdに必要)
-        self.cycle_er = CycleEfficiencyRatio(
-            detector_type=self.cer_detector_type,
-            lp_period=self.cer_lp_period,
-            hp_period=self.cer_hp_period,
-            cycle_part=self.cer_cycle_part
-        )
-
-        # CATRのインスタンス化 (DC検出器は別パラメータを持つ可能性があるので注意)
-        # CATR内部のDC検出器は、CATR自身のパラメータで初期化される
+        # CATRのインスタンス化
         self.c_atr_indicator = CATR(
              detector_type=self.detector_type, # XTrendIndexと同じDC設定を使う場合
              cycle_part=self.cycle_part,
@@ -420,8 +380,7 @@ class XTrendIndex(Indicator):
             f"{self.detector_type}_{self.cycle_part}_{self.max_cycle}_{self.min_cycle}_"
             f"{self.max_output}_{self.min_output}_{self.src_type}_{self.lp_period}_{self.hp_period}_"
             f"{self.smoother_type}_"
-            f"{self.cer_detector_type}_{self.cer_lp_period}_{self.cer_hp_period}_{self.cer_cycle_part}_"
-            f"{self.max_threshold}_{self.min_threshold}"
+            f"{self.fixed_threshold}"
         )
         return f"{data_hash_part}_{hash(param_str)}"
     
@@ -470,12 +429,8 @@ class XTrendIndex(Indicator):
             # このDC値がチョピネス期間として使われる
             dominant_cycle = self.dc_detector.calculate(df_data) # UnifiedDCはDataFrame/ndarrayを受け付ける
 
-            # サイクル効率比(CER)の計算 (CATRとThresholdに必要)
-            er = self.cycle_er.calculate(df_data) # CycleEfficiencyRatioはDataFrameを期待
-
-            # CATRの計算 (CERが必要)
-            # CATRは内部で自身のDC設定に基づきATR期間を計算する
-            self.c_atr_indicator.calculate(df_data, external_er=er) # CATRはDataFrameとerを期待
+            # CATRの計算
+            self.c_atr_indicator.calculate(df_data) # CATRはDataFrameを期待
             atr = self.c_atr_indicator.get_absolute_atr() # 金額ベースATR
             dynamic_atr_period = self.c_atr_indicator.get_atr_period() # CATRが計算したATR期間
 
@@ -489,23 +444,14 @@ class XTrendIndex(Indicator):
             # True Rangeの計算 (結果オブジェクト用)
             tr = calculate_tr(h, l, c)
 
-            # 動的しきい値の計算
-            dynamic_threshold = calculate_dynamic_threshold(
-                er, self.max_threshold, self.min_threshold
+            # トレンド状態の計算（固定しきい値使用）
+            trend_state = calculate_fixed_threshold_trend_state(
+                trend_index, self.fixed_threshold
             )
-
-            # トレンド状態の計算
-            length = len(trend_index)
-            trend_state = np.full(length, np.nan)
-            for i in range(length):
-                if np.isnan(trend_index[i]) or np.isnan(dynamic_threshold[i]):
-                    continue
-                trend_state[i] = 1.0 if trend_index[i] >= dynamic_threshold[i] else 0.0
 
             # 結果オブジェクトを作成 (XTrendIndexResult)
             result = XTrendIndexResult(
                 values=trend_index,
-                er=er,
                 dominant_cycle=dominant_cycle, # チョピネスに使ったDC値
                 dynamic_atr_period=dynamic_atr_period, # CATRが計算したATR期間
                 choppiness_index=chop_index,
@@ -513,7 +459,7 @@ class XTrendIndex(Indicator):
                 stddev_factor=stddev_factor,
                 tr=tr,
                 atr=atr, # CATRの絶対値
-                dynamic_threshold=dynamic_threshold,
+                fixed_threshold=self.fixed_threshold,
                 trend_state=trend_state
             )
 
@@ -530,10 +476,10 @@ class XTrendIndex(Indicator):
             # エラー時はNaN配列を返すか、以前の結果を返すか選択。ここでは空配列。
             n = len(data) if hasattr(data, '__len__') else 0
             empty_result = XTrendIndexResult(
-                 values=np.full(n, np.nan), er=np.full(n, np.nan), dominant_cycle=np.full(n, np.nan),
+                 values=np.full(n, np.nan), dominant_cycle=np.full(n, np.nan),
                  dynamic_atr_period=np.full(n, np.nan), choppiness_index=np.full(n, np.nan),
                  range_index=np.full(n, np.nan), stddev_factor=np.full(n, np.nan), tr=np.full(n, np.nan),
-                 atr=np.full(n, np.nan), dynamic_threshold=np.full(n, np.nan), trend_state=np.full(n, np.nan)
+                 atr=np.full(n, np.nan), fixed_threshold=self.fixed_threshold, trend_state=np.full(n, np.nan)
             )
             # エラー発生時はNoneを返し、キャッシュもクリア
             self._result = None
@@ -555,11 +501,6 @@ class XTrendIndex(Indicator):
         """CATRが計算した動的ATR期間を取得する"""
         if self._result is None: return np.array([])
         return self._result.dynamic_atr_period
-
-    def get_efficiency_ratio(self) -> np.ndarray:
-        """サイクル効率比（CER）を取得する"""
-        if self._result is None: return np.array([])
-        return self._result.er
 
     def get_stddev_factor(self) -> np.ndarray:
         """標準偏差係数の値を取得する"""
@@ -586,10 +527,9 @@ class XTrendIndex(Indicator):
         if self._result is None: return np.array([])
         return self._result.atr
 
-    def get_dynamic_threshold(self) -> np.ndarray:
-        """動的しきい値を取得する"""
-        if self._result is None: return np.array([])
-        return self._result.dynamic_threshold
+    def get_fixed_threshold(self) -> float:
+        """固定しきい値を取得する"""
+        return self.fixed_threshold
 
     def get_trend_state(self) -> np.ndarray:
         """トレンド状態を取得する（1=トレンド、0=レンジ、NaN=不明）"""
@@ -600,7 +540,6 @@ class XTrendIndex(Indicator):
         """インジケーターの状態をリセットする"""
         super().reset()
         self.dc_detector.reset()
-        self.cycle_er.reset()
         self.c_atr_indicator.reset()
         self._result = None
         self._data_hash = None 

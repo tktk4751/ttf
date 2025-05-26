@@ -146,12 +146,7 @@ class ZAdaptiveTrendIndex(Indicator):
             lp_period=lp_period,
             hp_period=hp_period,
             smoother_type=smoother_type,
-            cer_detector_type=cer_detector_type,
-            cer_lp_period=cer_lp_period,
-            cer_hp_period=cer_hp_period,
-            cer_cycle_part=cer_cycle_part,
-            max_threshold=max_threshold,
-            min_threshold=min_threshold
+
         )
         
         # サイクル効率比のインスタンス化

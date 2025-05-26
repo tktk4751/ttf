@@ -27,7 +27,7 @@ class XTrendIndexChart:
     - ローソク足と出来高
     - Xトレンドインデックス
     - サイクル効率比（CER）
-    - 動的しきい値
+    - 固定しきい値
     - トレンド/レンジ状態
     """
     
@@ -111,8 +111,8 @@ class XTrendIndexChart:
                             x_lp_period: int = 5,
                             x_hp_period: int = 55,
                             smoother_type: str = 'alma',
-                            max_threshold: float = 0.75,
-                            min_threshold: float = 0.55
+                            max_threshold: float = 0.75,  # 固定しきい値の計算用（平均値）
+                            min_threshold: float = 0.55   # 固定しきい値の計算用（平均値）
                            ) -> None:
         """
         インジケーターを計算する
@@ -180,12 +180,7 @@ class XTrendIndexChart:
             lp_period=x_lp_period,
             hp_period=x_hp_period,
             smoother_type=smoother_type,
-            cer_detector_type=detector_type,
-            cer_lp_period=lp_period,
-            cer_hp_period=hp_period,
-            cer_cycle_part=cycle_part,
-            max_threshold=max_threshold,
-            min_threshold=min_threshold
+            fixed_threshold=(max_threshold + min_threshold) / 2.0  # 固定しきい値として平均値を使用
         )
         
         # インジケーターの計算
@@ -236,7 +231,7 @@ class XTrendIndexChart:
         
         # X Trend Index の値を取得
         x_trend_values = x_trend_result.values
-        dynamic_threshold = x_trend_result.dynamic_threshold
+        fixed_threshold = x_trend_result.fixed_threshold  # 固定しきい値を取得
         trend_state = x_trend_result.trend_state
         
         # 全データの時系列データフレームを作成
@@ -245,7 +240,7 @@ class XTrendIndexChart:
             data={
                 'er': er_values,
                 'x_trend': x_trend_values,
-                'threshold': dynamic_threshold,
+                'threshold': np.full_like(x_trend_values, fixed_threshold),  # 固定しきい値を全データに適用
                 'trend_state': trend_state
             }
         )
@@ -267,7 +262,7 @@ class XTrendIndexChart:
         
         # 動的しきい値をパネル2に追加
         threshold_panel = mpf.make_addplot(df['threshold'], panel=2, color='red', width=1.0, 
-                                          secondary_y=False, label='Threshold')
+                                          secondary_y=False, label='Fixed Threshold')
         
         # トレンド状態をパネル3に配置
         trend_state_panel = mpf.make_addplot(df['trend_state'], panel=3, color='green', type='bar',
@@ -295,7 +290,7 @@ class XTrendIndexChart:
             x_trend_panel = mpf.make_addplot(df['x_trend'], panel=3, color='blue', width=1.2, 
                                             ylabel='X Trend', secondary_y=False, label='X Trend')
             threshold_panel = mpf.make_addplot(df['threshold'], panel=3, color='red', width=1.0, 
-                                              secondary_y=False, label='Threshold')
+                                              secondary_y=False, label='Fixed Threshold')
             trend_state_panel = mpf.make_addplot(df['trend_state'], panel=4, color='green', type='bar',
                                                ylabel='Trend State', secondary_y=False, label='Trend State')
         else:
@@ -322,7 +317,7 @@ class XTrendIndexChart:
             
             # X Trendパネル
             axes[3].axhline(y=0.5, color='black', linestyle='-', alpha=0.3)
-            axes[3].legend(['X Trend', 'Threshold'], loc='upper left')
+            axes[3].legend(['X Trend', 'Fixed Threshold'], loc='upper left')
             
             # Trend Stateパネル
             axes[4].axhline(y=0.5, color='black', linestyle='-', alpha=0.3)
@@ -336,7 +331,7 @@ class XTrendIndexChart:
             
             # X Trendパネル
             axes[2].axhline(y=0.5, color='black', linestyle='-', alpha=0.3)
-            axes[2].legend(['X Trend', 'Threshold'], loc='upper left')
+            axes[2].legend(['X Trend', 'Fixed Threshold'], loc='upper left')
             
             # Trend Stateパネル
             axes[3].axhline(y=0.5, color='black', linestyle='-', alpha=0.3)

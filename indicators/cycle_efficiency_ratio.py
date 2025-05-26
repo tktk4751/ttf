@@ -40,7 +40,7 @@ class CycleEfficiencyRatio(Indicator):
         kalman_process_noise: float = 0.01,
         kalman_n_states: int = 5,
         smooth_er: bool = True,
-        er_alma_period: int = 3,
+        er_alma_period: int = 5,
         er_alma_offset: float = 0.85,
         er_alma_sigma: float = 6,
         self_adaptive: bool = False

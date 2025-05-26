@@ -10,90 +10,84 @@ from position_sizing.position_sizing import PositionSizing, PositionSizingParams
 from position_sizing.interfaces import IPositionManager
 from indicators.c_atr import CATR
 from indicators.cycle_efficiency_ratio import CycleEfficiencyRatio
+from indicators.x_trend_index import XTrendIndex
+from indicators.cycle_chop import CycleChoppiness
 
 
 @vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_multiplier_vec(cer: float, max_mult: float, min_mult: float) -> float:
+def calculate_dynamic_multiplier_vec(trigger_value: float, max_mult: float, min_mult: float) -> float:
     """
-    サイクル効率比に基づいて動的なATR乗数を計算する（ベクトル化版）
+    トリガー値に基づいて動的なATR乗数を計算する（ベクトル化版）
     
     Args:
-        cer: サイクル効率比の値
+        trigger_value: トリガーの値（CER、XTrend、CHOPなど）
         max_mult: 最大乗数
         min_mult: 最小乗数
     
     Returns:
         動的な乗数の値
     """
-    # CERが高い（トレンドが強い）ほど乗数は小さく、
-    # CERが低い（トレンドが弱い）ほど乗数は大きくなる
-    if np.isnan(cer):
+    if np.isnan(trigger_value):
         return (max_mult + min_mult) / 2  # デフォルト値
-    cer_abs = abs(cer)
-    return max_mult - cer_abs * (max_mult - min_mult)
+    trigger_abs = abs(trigger_value)
+    return max_mult - trigger_abs * (max_mult - min_mult)
 
 
 @vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_max_multiplier(cer: float, max_max_mult: float, min_max_mult: float) -> float:
+def calculate_dynamic_max_multiplier(trigger_value: float, max_max_mult: float, min_max_mult: float) -> float:
     """
-    サイクル効率比に基づいて動的な最大ATR乗数を計算する（ベクトル化版）
+    トリガー値に基づいて動的な最大ATR乗数を計算する（ベクトル化版）
     
     Args:
-        cer: サイクル効率比の値
+        trigger_value: トリガーの値
         max_max_mult: 最大乗数の最大値（例：3.0）
         min_max_mult: 最大乗数の最小値（例：2.0）
     
     Returns:
         動的な最大乗数の値
     """
-    if np.isnan(cer):
+    if np.isnan(trigger_value):
         return (max_max_mult + min_max_mult) / 2
-    cer_abs = abs(cer)
-    # CERが低い（トレンドが弱い）ほど最大乗数は大きく、
-    # CERが高い（トレンドが強い）ほど最大乗数は小さくなる
-    return max_max_mult - cer_abs * (max_max_mult - min_max_mult)
+    trigger_abs = abs(trigger_value)
+    return max_max_mult - trigger_abs * (max_max_mult - min_max_mult)
 
 
 @vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_min_multiplier(cer: float, max_min_mult: float, min_min_mult: float) -> float:
+def calculate_dynamic_min_multiplier(trigger_value: float, max_min_mult: float, min_min_mult: float) -> float:
     """
-    サイクル効率比に基づいて動的な最小ATR乗数を計算する（ベクトル化版）
+    トリガー値に基づいて動的な最小ATR乗数を計算する（ベクトル化版）
     
     Args:
-        cer: サイクル効率比の値
+        trigger_value: トリガーの値
         max_min_mult: 最小乗数の最大値（例：1.5）
         min_min_mult: 最小乗数の最小値（例：0.5）
     
     Returns:
         動的な最小乗数の値
     """
-    if np.isnan(cer):
+    if np.isnan(trigger_value):
         return (max_min_mult + min_min_mult) / 2
-    cer_abs = abs(cer)
-    # CERが低い（トレンドが弱い）ほど最小乗数は小さく、
-    # CERが高い（トレンドが強い）ほど最小乗数は大きくなる
-    return min_min_mult + cer_abs * (max_min_mult - min_min_mult)
+    trigger_abs = abs(trigger_value)
+    return min_min_mult + trigger_abs * (max_min_mult - min_min_mult)
 
 
 @vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_risk_ratio(cer: float, max_risk: float, min_risk: float) -> float:
+def calculate_dynamic_risk_ratio(trigger_value: float, max_risk: float, min_risk: float) -> float:
     """
-    サイクル効率比に基づいて動的なリスク比率を計算する（ベクトル化版）
+    トリガー値に基づいて動的なリスク比率を計算する（ベクトル化版）
     
     Args:
-        cer: サイクル効率比の値
+        trigger_value: トリガーの値
         max_risk: 最大リスク比率（例：0.03）
         min_risk: 最小リスク比率（例：0.01）
     
     Returns:
         動的なリスク比率の値
     """
-    if np.isnan(cer):
+    if np.isnan(trigger_value):
         return (max_risk + min_risk) / 2  # デフォルト値
-    cer_abs = abs(cer)
-    # CERが高い（トレンドが強い）ほどリスク比率は大きく、
-    # CERが低い（トレンドが弱い）ほどリスク比率は小さくなる
-    return min_risk + cer_abs * (max_risk - min_risk)
+    trigger_abs = abs(trigger_value)
+    return min_risk + trigger_abs * (max_risk - min_risk)
 
 
 @njit(fastmath=True, cache=True)
@@ -209,7 +203,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
     """
     CATRベースのポジションサイジング
     
-    CATRベースのポジションサイジングで、サイクル効率比（CER）に基づく
+    CATRベースのポジションサイジングで、複数のトリガー（CER、XTrend、CHOP）に基づく
     動的リスク調整と乗数調整が可能
     """
     
@@ -222,8 +216,11 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         catr_detector_type: str = 'phac_e',  # CATRの検出器タイプ
         catr_max_period: int = 55,      # CATR最大期間
         catr_min_period: int = 5,       # CATR最小期間
-        apply_er_adjustment: bool = True,  # 効率比による調整を適用するか
+        apply_dynamic_adjustment: bool = True,  # 動的調整を適用するか
         fixed_risk_percent: float = 0.01,  # 固定リスク率（資金の1%）
+        
+        # 動的適応のトリガータイプ
+        trigger_type: str = 'x_trend',      # 'cer', 'x_trend', 'cycle_chop'
         
         # 動的ATR乗数のパラメータ
         max_max_multiplier: float = 5.0,  # 最大乗数の最大値
@@ -233,7 +230,31 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         
         # 動的リスク比率のパラメータ
         max_risk_ratio: float = 0.015,   # 最大リスク比率（3%）
-        min_risk_ratio: float = 0.005    # 最小リスク比率（0.3%）
+        min_risk_ratio: float = 0.005,    # 最小リスク比率（0.3%）
+        
+        # XTrendIndex固有のパラメータ
+        x_trend_detector_type: str = 'phac_e',
+        x_trend_max_threshold: float = 0.75,
+        x_trend_min_threshold: float = 0.55,
+        x_trend_max_cycle: int = 55,
+        x_trend_min_cycle: int = 5,
+        x_trend_max_output: int = 34,
+        x_trend_min_output: int = 5,
+        x_trend_lp_period: int = 5,
+        x_trend_hp_period: int = 55,
+        
+        # CycleChoppiness固有のパラメータ
+        chop_detector_type: str = 'dudi_e',
+        chop_max_threshold: float = 0.6,
+        chop_min_threshold: float = 0.4,
+        chop_max_cycle: int = 144,
+        chop_min_cycle: int = 5,
+        chop_max_output: int = 55,
+        chop_min_output: int = 5,
+        chop_lp_period: int = 5,
+        chop_hp_period: int = 144,
+        chop_smooth: bool = True,
+        chop_alma_period: int = 3
     ):
         """
         初期化
@@ -246,8 +267,9 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             catr_detector_type: CATRの検出器タイプ（hody, phac, dudi, dudi_e, hody_e, phac_e, dft）
             catr_max_period: CATR最大期間
             catr_min_period: CATR最小期間
-            apply_er_adjustment: 効率比による調整を適用するか
+            apply_dynamic_adjustment: 動的調整を適用するか
             fixed_risk_percent: 固定リスク率（資金の何%をリスクとするか）
+            trigger_type: 動的適応のトリガータイプ（'cer', 'x_trend', 'cycle_chop'）
             
             max_max_multiplier: 最大乗数の最大値
             min_max_multiplier: 最大乗数の最小値
@@ -256,14 +278,23 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             
             max_risk_ratio: 最大リスク比率
             min_risk_ratio: 最小リスク比率
+            
+            x_trend_*: XTrendIndex固有のパラメータ
+            chop_*: CycleChoppiness固有のパラメータ
         """
         super().__init__()
+        
+        # 全パラメータをインスタンス変数として保存
         self.base_risk_ratio = base_risk_ratio
         self.unit = unit
         self.max_position_percent = max_position_percent
         self.leverage = leverage
-        self.apply_er_adjustment = apply_er_adjustment
+        self.catr_detector_type = catr_detector_type
+        self.catr_max_period = catr_max_period
+        self.catr_min_period = catr_min_period
+        self.apply_dynamic_adjustment = apply_dynamic_adjustment
         self.fixed_risk_percent = fixed_risk_percent
+        self.trigger_type = trigger_type
         
         # 動的乗数のパラメータ
         self.max_max_multiplier = max_max_multiplier
@@ -274,6 +305,30 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         # 動的リスク比率のパラメータ
         self.max_risk_ratio = max_risk_ratio
         self.min_risk_ratio = min_risk_ratio
+        
+        # XTrendIndexパラメータ
+        self.x_trend_detector_type = x_trend_detector_type
+        self.x_trend_max_threshold = x_trend_max_threshold
+        self.x_trend_min_threshold = x_trend_min_threshold
+        self.x_trend_max_cycle = x_trend_max_cycle
+        self.x_trend_min_cycle = x_trend_min_cycle
+        self.x_trend_max_output = x_trend_max_output
+        self.x_trend_min_output = x_trend_min_output
+        self.x_trend_lp_period = x_trend_lp_period
+        self.x_trend_hp_period = x_trend_hp_period
+        
+        # CycleChoppinessパラメータ
+        self.chop_detector_type = chop_detector_type
+        self.chop_max_threshold = chop_max_threshold
+        self.chop_min_threshold = chop_min_threshold
+        self.chop_max_cycle = chop_max_cycle
+        self.chop_min_cycle = chop_min_cycle
+        self.chop_max_output = chop_max_output
+        self.chop_min_output = chop_min_output
+        self.chop_lp_period = chop_lp_period
+        self.chop_hp_period = chop_hp_period
+        self.chop_smooth = chop_smooth
+        self.chop_alma_period = chop_alma_period
         
         # ロガーの設定
         self.logger = logging.getLogger(__name__)
@@ -291,18 +346,124 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             smoother_type='alma'                # 平滑化アルゴリズムのタイプ
         )
         
-        # サイクル効率比（CER）インスタンスを作成
-        self.cycle_er = CycleEfficiencyRatio(
-            detector_type=catr_detector_type,
-            lp_period=5,                        # 低域通過フィルターの期間
-            hp_period=144,          # 高域通過フィルターの期間
-            cycle_part=0.618,                     # サイクル部分の倍率
-            max_cycle=55,          # 最大サイクル期間
-            min_cycle=5,          # 最小サイクル期間
-            max_output=55,                      # 最大出力値
-            min_output=5                       # 最小出力値
-        )
+        # トリガーインジケーターの初期化
+        self._init_trigger_indicators()
     
+    def _init_trigger_indicators(self):
+        """トリガータイプに応じてインジケーターを初期化"""
+        if self.trigger_type == 'cer':
+            # サイクル効率比（CER）インスタンスを作成
+            self.cycle_er = CycleEfficiencyRatio(
+                detector_type=self.catr_detector_type,
+                lp_period=5,                        # 低域通過フィルターの期間
+                hp_period=144,          # 高域通過フィルターの期間
+                cycle_part=0.618,                     # サイクル部分の倍率
+                max_cycle=55,          # 最大サイクル期間
+                min_cycle=5,          # 最小サイクル期間
+                max_output=55,                      # 最大出力値
+                min_output=5                       # 最小出力値
+            )
+            self.trigger_indicator = self.cycle_er
+            
+        elif self.trigger_type == 'x_trend':
+            # XTrendIndexインスタンスを作成
+            self.x_trend_index = XTrendIndex(
+                detector_type=self.x_trend_detector_type,
+                max_cycle=self.x_trend_max_cycle,
+                min_cycle=self.x_trend_min_cycle,
+                max_output=self.x_trend_max_output,
+                min_output=self.x_trend_min_output,
+                lp_period=self.x_trend_lp_period,
+                hp_period=self.x_trend_hp_period
+            )
+            self.trigger_indicator = self.x_trend_index
+            
+        elif self.trigger_type == 'cycle_chop':
+            # CycleChoppinessインスタンスを作成
+            self.cycle_chop = CycleChoppiness(
+                detector_type=self.chop_detector_type,
+                max_threshold=self.chop_max_threshold,
+                min_threshold=self.chop_min_threshold,
+                max_cycle=self.chop_max_cycle,
+                min_cycle=self.chop_min_cycle,
+                max_output=self.chop_max_output,
+                min_output=self.chop_min_output,
+                lp_period=self.chop_lp_period,
+                hp_period=self.chop_hp_period,
+                smooth_chop=self.chop_smooth,
+                chop_alma_period=self.chop_alma_period
+            )
+            self.trigger_indicator = self.cycle_chop
+            
+        else:
+            raise ValueError(f"サポートされていないトリガータイプ: {self.trigger_type}")
+    
+    def _get_trigger_value(self, history: pd.DataFrame) -> float:
+        """
+        トリガータイプに応じて適応値を取得
+        
+        Args:
+            history: 履歴データ
+            
+        Returns:
+            float: トリガー値
+        """
+        try:
+            if self.trigger_type == 'cer':
+                # サイクル効率比を計算
+                trigger_values = self.cycle_er.calculate(history)
+                if trigger_values is None or len(trigger_values) == 0:
+                    return 0.5  # デフォルト値
+                return trigger_values[-1]
+                
+            elif self.trigger_type == 'x_trend':
+                # XTrendIndexを計算
+                result = self.x_trend_index.calculate(history)
+                if result is None or len(result.values) == 0:
+                    return 0.5  # デフォルト値
+                return result.values[-1]
+                
+            elif self.trigger_type == 'cycle_chop':
+                # CycleChoppinessを計算
+                chop_values = self.cycle_chop.calculate(history)
+                if chop_values is None or len(chop_values) == 0:
+                    return 0.5  # デフォルト値
+                # CHOPは高い値がチョッピーなので、トレンド指標として使う場合は反転
+                return 1.0 - chop_values[-1]
+                
+            else:
+                return 0.5  # デフォルト値
+                
+        except Exception as e:
+            self.logger.warning(f"トリガー値計算中にエラー: {str(e)}、デフォルト値を使用します")
+            return 0.5
+    
+    def _calculate_trigger_factor(self, trigger_value: float) -> float:
+        """
+        トリガー値から調整係数を計算
+        
+        Args:
+            trigger_value: トリガーの値
+            
+        Returns:
+            float: 調整係数
+        """
+        if self.trigger_type == 'cer':
+            # CERの場合：効率比が高い（トレンドが強い）ほど単位係数を大きくする
+            return 0.5 + trigger_value  # 0.5〜1.5の範囲
+            
+        elif self.trigger_type == 'x_trend':
+            # XTrendの場合：トレンド値が高いほど単位係数を大きくする
+            return 0.5 + trigger_value  # 0.5〜1.5の範囲
+            
+        elif self.trigger_type == 'cycle_chop':
+            # CHOPの場合：低チョピネス（＝高トレンド）ほど単位係数を大きくする
+            # trigger_valueは既に反転済み（1.0 - chop_value）
+            return 0.5 + trigger_value  # 0.5〜1.5の範囲
+            
+        else:
+            return 1.0  # デフォルト値
+
     def can_enter(self) -> bool:
         """新規ポジションを取れるかどうか"""
         return True
@@ -346,26 +507,35 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         # 履歴データを取得
         history = params.historical_data
         
-        # サイクル効率比（CER）を計算
-        try:
-            external_er = self.cycle_er.calculate(history)
-            
-            # 結果がNoneまたは空の配列の場合はフォールバックを使用
-            if external_er is None or len(external_er) == 0:
-                external_er = np.full(len(history), 0.5)
-                self.logger.warning("CER計算結果が空のため、フォールバックCERを使用します")
-                
-        except Exception as e:
-            # CER計算にエラーが発生した場合のフォールバック
-            # すべての値が0.5のCERを作成（中立値）
-            external_er = np.full(len(history), 0.5)
-            self.logger.warning(f"CER計算中にエラー: {str(e)}、フォールバックCERを使用します")
+        # トリガー値を取得
+        trigger_value = self._get_trigger_value(history) if self.apply_dynamic_adjustment else 0.5
 
         # CATRを計算する
         try:
-            self.catr.calculate(history, external_er=external_er)
+            # CATRの計算（external_erは不要になった）
+            self.catr.calculate(history)
             catr_value = self.catr.get_absolute_atr()[-1]
-            efficiency_ratio = self.catr.get_efficiency_ratio()[-1]
+            
+            # 効率比は別途CERインジケーターから取得する（trigger_typeが'cer'の場合のみ）
+            if self.trigger_type == 'cer':
+                efficiency_ratio = trigger_value  # CERのトリガー値をそのまま使用
+            else:
+                # CER以外のトリガーの場合、CERを別途計算
+                try:
+                    cer_indicator = CycleEfficiencyRatio(
+                        detector_type=self.catr_detector_type,
+                        lp_period=5,
+                        hp_period=144,
+                        cycle_part=0.618,
+                        max_cycle=55,
+                        min_cycle=5,
+                        max_output=55,
+                        min_output=5
+                    )
+                    cer_values = cer_indicator.calculate(history)
+                    efficiency_ratio = cer_values[-1] if cer_values is not None and len(cer_values) > 0 else 0.5
+                except Exception:
+                    efficiency_ratio = 0.5
             
             # 値が無効な場合のみフォールバック処理
             if catr_value is None or np.isnan(catr_value):
@@ -387,41 +557,41 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         # 単位係数のベース値
         unit_coefficient = self.unit
         
-        # 効率比による調整
-        er_factor = 1.0
+        # 動的調整
+        trigger_factor = 1.0
         atr_multiplier = 1.5  # デフォルト値
         dynamic_risk_ratio = self.base_risk_ratio
         max_mult = 0.0
         min_mult = 0.0
         
-        if self.apply_er_adjustment:
-            # 効率比による単位係数の動的調整
-            er_factor = self._calculate_er_factor(efficiency_ratio)
-            unit_coefficient *= er_factor
+        if self.apply_dynamic_adjustment:
+            # トリガー値による単位係数の動的調整
+            trigger_factor = self._calculate_trigger_factor(trigger_value)
+            unit_coefficient *= trigger_factor
             
             # 動的な最大・最小乗数の計算
             max_mult = calculate_dynamic_max_multiplier(
-                efficiency_ratio,
+                trigger_value,
                 self.max_max_multiplier,
                 self.min_max_multiplier
             )
             
             min_mult = calculate_dynamic_min_multiplier(
-                efficiency_ratio,
+                trigger_value,
                 self.max_min_multiplier,
                 self.min_min_multiplier
             )
             
-            # 効率比によるATR乗数の動的調整
+            # トリガー値によるATR乗数の動的調整
             atr_multiplier = calculate_dynamic_multiplier_vec(
-                efficiency_ratio,
+                trigger_value,
                 max_mult,
                 min_mult
             )
             
-            # 効率比によるリスク比率の動的調整
+            # トリガー値によるリスク比率の動的調整
             dynamic_risk_ratio = calculate_dynamic_risk_ratio(
-                efficiency_ratio,
+                trigger_value,
                 self.max_risk_ratio,
                 self.min_risk_ratio
             )
@@ -468,28 +638,14 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             'max_multiplier': max_mult,      # 動的最大乗数
             'min_multiplier': min_mult,      # 動的最小乗数
             'efficiency_ratio': efficiency_ratio,
-            'er_factor': er_factor,
+            'trigger_type': self.trigger_type,     # 使用したトリガータイプ
+            'trigger_value': trigger_value,        # トリガー値
+            'trigger_factor': trigger_factor,      # トリガー調整係数
             'unit': self.unit,                     # 元のunit値
-            'unit_with_er': unit_coefficient,      # 効率比調整後のunit値
+            'unit_with_trigger': unit_coefficient, # トリガー調整後のunit値
             'risk_ratio': dynamic_risk_ratio,      # 動的リスク比率
             'max_position_size': max_position_size,
         }
-
-    def _calculate_er_factor(self, efficiency_ratio: float) -> float:
-        """
-        効率比率から調整係数を計算
-        
-        Args:
-            efficiency_ratio: 効率比率（0〜1の範囲）
-            
-        Returns:
-            float: 調整係数
-        """
-        # 効率比が高い（トレンドが強い）ほど単位係数を大きくする
-        # 効率比 0 → 係数 0.5
-        # 効率比 0.5 → 係数 1.0
-        # 効率比 1.0 → 係数 1.5
-        return 0.5 + efficiency_ratio  # 0.5〜1.5の範囲 
 
     def calculate_stop_loss_price(
         self, 
@@ -544,30 +700,38 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         Returns:
             Dict[str, Any]: 計算結果
         """
-        # CATRとATR乗数を直接計算して取得する（calculateメソッドは使わない）
         # 履歴データを取得
         history = historical_data
         
-        # サイクル効率比（CER）を計算
-        try:
-            external_er = self.cycle_er.calculate(history)
-            
-            # 結果がNoneまたは空の配列の場合はフォールバックを使用
-            if external_er is None or len(external_er) == 0:
-                external_er = np.full(len(history), 0.5)
-                self.logger.warning("CER計算結果が空のため、フォールバックCERを使用します")
-                
-        except Exception as e:
-            # CER計算にエラーが発生した場合のフォールバック
-            # すべての値が0.5のCERを作成（中立値）
-            external_er = np.full(len(history), 0.5)
-            self.logger.warning(f"CER計算中にエラー: {str(e)}、フォールバックCERを使用します")
+        # トリガー値を取得
+        trigger_value = self._get_trigger_value(history) if self.apply_dynamic_adjustment else 0.5
 
-        # CATRを計算する
+        # CATRとATR乗数を直接計算して取得する
         try:
-            self.catr.calculate(history, external_er=external_er)
+            # CATRの計算（external_erは不要になった）
+            self.catr.calculate(history)
             catr_value = self.catr.get_absolute_atr()[-1]
-            efficiency_ratio = self.catr.get_efficiency_ratio()[-1]
+            
+            # 効率比は別途CERインジケーターから取得する（trigger_typeが'cer'の場合のみ）
+            if self.trigger_type == 'cer':
+                efficiency_ratio = trigger_value  # CERのトリガー値をそのまま使用
+            else:
+                # CER以外のトリガーの場合、CERを別途計算
+                try:
+                    cer_indicator = CycleEfficiencyRatio(
+                        detector_type=self.catr_detector_type,
+                        lp_period=5,
+                        hp_period=144,
+                        cycle_part=0.618,
+                        max_cycle=55,
+                        min_cycle=5,
+                        max_output=55,
+                        min_output=5
+                    )
+                    cer_values = cer_indicator.calculate(history)
+                    efficiency_ratio = cer_values[-1] if cer_values is not None and len(cer_values) > 0 else 0.5
+                except Exception:
+                    efficiency_ratio = 0.5
             
             # 値が無効な場合のみフォールバック処理
             if catr_value is None or np.isnan(catr_value):
@@ -586,29 +750,29 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             efficiency_ratio = 0.5  # デフォルト値
             self.logger.warning(f"CATR計算中にエラー: {str(e)}、価格の1%をデフォルト値として使用: {catr_value}")
 
-        # 効率比による調整
-        er_factor = 1.0
+        # 動的調整
+        trigger_factor = 1.0
         
-        if self.apply_er_adjustment:
-            # 効率比による単位係数の動的調整
-            er_factor = self._calculate_er_factor(efficiency_ratio)
+        if self.apply_dynamic_adjustment:
+            # トリガー値による調整係数の計算
+            trigger_factor = self._calculate_trigger_factor(trigger_value)
             
             # 動的な最大・最小乗数の計算
             max_mult = calculate_dynamic_max_multiplier(
-                efficiency_ratio,
+                trigger_value,
                 self.max_max_multiplier,
                 self.min_max_multiplier
             )
             
             min_mult = calculate_dynamic_min_multiplier(
-                efficiency_ratio,
+                trigger_value,
                 self.max_min_multiplier,
                 self.min_min_multiplier
             )
             
-            # 効率比によるATR乗数の動的調整
+            # トリガー値によるATR乗数の動的調整
             atr_multiplier = calculate_dynamic_multiplier_vec(
-                efficiency_ratio,
+                trigger_value,
                 max_mult,
                 min_mult
             )
@@ -685,7 +849,9 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             'catr_value': catr_value,
             'atr_multiplier': atr_multiplier,
             'efficiency_ratio': efficiency_ratio,
-            'er_factor': er_factor,
+            'trigger_type': self.trigger_type,        # 使用したトリガータイプ
+            'trigger_value': trigger_value,           # トリガー値
+            'trigger_factor': trigger_factor,         # トリガー調整係数
             'max_position_size': max_position_size,
         }
         
@@ -700,11 +866,11 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         units: np.ndarray = None,
         max_position_percents: np.ndarray = None,
         leverages: np.ndarray = None,
-        apply_er_adjustments: np.ndarray = None,
+        apply_dynamic_adjustments: np.ndarray = None,
         detector_type: str = 'hody'
     ) -> Dict[str, np.ndarray]:
         """
-        バッチでCATRベースのポジションサイズを計算する
+        バッチでCATRベースのポジションサイズを計算する（CERベースのみ）
         
         Args:
             capitals: 資本額の配列
@@ -714,7 +880,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             units: 基本単位係数の配列（省略時は1.0）
             max_position_percents: 最大ポジションサイズの比率の配列（省略時は0.5）
             leverages: レバレッジの配列（省略時は1.0）
-            apply_er_adjustments: 効率比による調整を適用するかの配列（省略時はTrue）
+            apply_dynamic_adjustments: 動的調整を適用するかの配列（省略時はTrue）
             detector_type: CATRの検出器タイプ
             
         Returns:
@@ -733,8 +899,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             max_position_percents = np.full(n, 0.5)
         if leverages is None:
             leverages = np.full(n, 1.0)
-        if apply_er_adjustments is None:
-            apply_er_adjustments = np.full(n, True, dtype=bool)
+        if apply_dynamic_adjustments is None:
+            apply_dynamic_adjustments = np.full(n, True, dtype=bool)
             
         # 結果配列の初期化
         position_sizes = np.zeros(n, dtype=np.float64)
@@ -743,7 +909,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         catr_values = np.zeros(n, dtype=np.float64)
         atr_multipliers = np.zeros(n, dtype=np.float64)
         efficiency_ratios = np.zeros(n, dtype=np.float64)
-        er_factors = np.zeros(n, dtype=np.float64)
+        trigger_factors = np.zeros(n, dtype=np.float64)
         dynamic_risk_ratios = np.zeros(n, dtype=np.float64)
         
         # CATRとCERのインスタンス作成（再利用）
@@ -760,19 +926,17 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         for i in range(n):
             history = historical_data_list[i]
             
-            # サイクル効率比（CER）を計算
+            # サイクル効率比（CER）を計算（CERベースのみサポート）
             try:
-                external_er = cycle_er.calculate(history)
-                if external_er is None or len(external_er) == 0:
-                    external_er = np.full(len(history), 0.5)
+                cer_values = cycle_er.calculate(history)
+                efficiency_ratio = cer_values[-1] if cer_values is not None and len(cer_values) > 0 else 0.5
             except Exception:
-                external_er = np.full(len(history), 0.5)
+                efficiency_ratio = 0.5
                 
-            # CATRを計算
+            # CATRを計算（external_erは不要になった）
             try:
-                catr.calculate(history, external_er=external_er)
+                catr.calculate(history)
                 catr_value = catr.get_absolute_atr()[-1]
-                efficiency_ratio = catr.get_efficiency_ratio()[-1]
                 
                 # 値が無効な場合のみフォールバック処理
                 if catr_value is None or np.isnan(catr_value):
@@ -785,11 +949,11 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
                 efficiency_ratio = 0.5
                 
             # 効率比による調整
-            er_factor = 0.5 + efficiency_ratio  # 0.5〜1.5の範囲
+            trigger_factor = 0.5 + efficiency_ratio  # 0.5〜1.5の範囲
             unit_coefficient = units[i]
             
-            if apply_er_adjustments[i]:
-                unit_coefficient *= er_factor
+            if apply_dynamic_adjustments[i]:
+                unit_coefficient *= trigger_factor
                 
                 # 動的な最大・最小乗数の計算
                 max_mult = calculate_dynamic_max_multiplier(
@@ -831,7 +995,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             catr_values[i] = catr_value
             atr_multipliers[i] = atr_multiplier
             efficiency_ratios[i] = efficiency_ratio
-            er_factors[i] = er_factor
+            trigger_factors[i] = trigger_factor
             dynamic_risk_ratios[i] = dynamic_risk_ratio
             
         # バッチ計算で高速にポジションサイズを計算
@@ -863,6 +1027,6 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             'catr_values': catr_values,
             'atr_multipliers': atr_multipliers,
             'efficiency_ratios': efficiency_ratios,
-            'er_factors': er_factors,
+            'trigger_factors': trigger_factors,
             'dynamic_risk_ratios': dynamic_risk_ratios,
         } 

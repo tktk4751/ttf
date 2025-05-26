@@ -39,7 +39,7 @@ class ZASimpleStrategy(BaseStrategy):
         min_min_multiplier: float = 0.5,    # 最小乗数の最小値
         
         # CERパラメータ
-        detector_type: str = 'dudi_e',     # CER用ドミナントサイクル検出器タイプ
+        detector_type: str = 'phac_e',     # CER用ドミナントサイクル検出器タイプ
         cycle_part: float = 0.4,           # CER用サイクル部分
         lp_period: int = 5,               # CER用ローパスフィルター期間
         hp_period: int = 100,              # CER用ハイパスフィルター期間
@@ -51,7 +51,7 @@ class ZASimpleStrategy(BaseStrategy):
         
         # ZAdaptiveMA用パラメータ
         fast_period: int = 2,             # 速い移動平均の期間（固定値）
-        slow_period: int = 30             # 遅い移動平均の期間（固定値）
+        slow_period: int = 144            # 遅い移動平均の期間（固定値）
     ):
         """
         初期化
