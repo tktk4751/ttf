@@ -449,6 +449,64 @@ def adjust_multipliers_with_x_trend_index(
     return adjusted_upper, adjusted_lower
 
 
+@vectorize(['float64(float64)'], nopython=True, fastmath=True, cache=True, target='parallel')
+def calculate_simple_adjustment_multiplier_vec(trigger: float) -> float:
+    """
+    シンプルアジャストメント動的乗数を計算する（ベクトル化&並列版）
+    
+    Args:
+        trigger: トリガー値（0〜1.0の範囲、トレンドインデックスやCERの絶対値）
+    
+    Returns:
+        動的乗数値 = MAX - trigger * (MAX - MIN)
+        MAX = 8.0, MIN = 0.5
+        トリガー値が0の時は8.0、トリガー値が1の時は0.5
+    """
+    # 定数定義
+    MAX_MULTIPLIER = 6.0
+    MIN_MULTIPLIER = 1.0
+    
+    # トリガー値をクランプ（0-1の範囲に制限）
+    safe_trigger = min(max(trigger if not np.isnan(trigger) else 0.0, 0.0), 1.0)
+    
+    # 線形補間で動的乗数を計算
+    # トリガー値が高いほど乗数が小さくなる（ボラティリティが低下）
+    result = MAX_MULTIPLIER - safe_trigger * (MAX_MULTIPLIER - MIN_MULTIPLIER)
+    
+    return result
+
+
+@njit(float64[:](float64[:]), fastmath=True, parallel=True, cache=True)
+def calculate_simple_adjustment_multiplier_optimized(trigger: np.ndarray) -> np.ndarray:
+    """
+    シンプルアジャストメント動的乗数を計算する（最適化&並列版）
+    
+    Args:
+        trigger: トリガー値の配列（0〜1.0の範囲）
+    
+    Returns:
+        動的乗数値の配列 = MAX - trigger * (MAX - MIN)
+        MAX = 8.0, MIN = 0.5
+        トリガー値が0の時は8.0、トリガー値が1の時は0.5
+    """
+    # 定数定義
+    MAX_MULTIPLIER = 6.0
+    MIN_MULTIPLIER = 1.0
+    DIFF = MAX_MULTIPLIER - MIN_MULTIPLIER  # 7.5
+    
+    result = np.empty_like(trigger)
+    
+    for i in prange(len(trigger)):
+        # トリガー値をクランプ（0-1の範囲に制限）
+        safe_trigger = min(max(trigger[i] if not np.isnan(trigger[i]) else 0.0, 0.0), 1.0)
+        
+        # 線形補間で動的乗数を計算
+        # トリガー値が高いほど乗数が小さくなる（ボラティリティが低下）
+        result[i] = MAX_MULTIPLIER - safe_trigger * DIFF
+    
+    return result
+
+
 class ZAdaptiveChannel(Indicator):
     """
     ZAdaptiveChannel（Zアダプティブチャネル）インディケーター
@@ -459,6 +517,10 @@ class ZAdaptiveChannel(Indicator):
     - ZAdaptiveMAを中心線として使用
     - CATRを使用したボラティリティベースのバンド
     - トレンド強度に応じて自動調整されるATR乗数
+    - 3つの乗数計算方法:
+      * adaptive: 従来の動的乗数計算（パラメータで設定可能な範囲）
+      * simple: シンプルな動的乗数計算（15 - (CER*10) - (XTRENDINDEX*10)）
+      * simple_adjustment: シンプルアジャストメント（MAX=8からMIN=0.5まで線形補間）
     - サイクルRSXベースの動的乗数調整（オプション）
     - 乗数の平滑化（ALMA、HMA、HyperSmoother、EMA）
     
@@ -478,7 +540,7 @@ class ZAdaptiveChannel(Indicator):
         src_type: str = 'hlc3',       # 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4'
         
         # 乗数計算方法選択
-        multiplier_method: str = 'adaptive',  # 'adaptive', 'simple'
+        multiplier_method: str = 'simple_adjustment',  # 'adaptive', 'simple', 'simple_adjustment'
         
         # トリガーソース選択
         multiplier_source: str = 'cer',  # 'cer', 'x_trend', 'z_trend'
@@ -554,7 +616,8 @@ class ZAdaptiveChannel(Indicator):
             
             multiplier_method: 乗数計算方法
                 'adaptive': 従来の動的乗数計算（デフォルト）
-                'simple': シンプルな動的乗数計算（10 - トリガー*10）
+                'simple': シンプルな動的乗数計算（15 - (CER*10) - (XTRENDINDEX*10)）
+                'simple_adjustment': シンプルアジャストメント動的乗数計算（MAX=8からMIN=0.5まで線形補間）
             
             multiplier_source: 乗数計算に使用するトリガーのソース
                 'cer': サイクル効率比（デフォルト）
@@ -628,7 +691,7 @@ class ZAdaptiveChannel(Indicator):
             cycle_rsx_src_type: サイクルRSX用ソースタイプ
         """
         # 有効なmultiplier_methodをチェック
-        if multiplier_method not in ['adaptive', 'simple']:
+        if multiplier_method not in ['adaptive', 'simple', 'simple_adjustment']:
             self.logger.warning(f"無効なmultiplier_method: {multiplier_method}。'adaptive'を使用します。")
             multiplier_method = 'adaptive'
         
@@ -947,7 +1010,7 @@ class ZAdaptiveChannel(Indicator):
             
             # 4. 動的な乗数値の計算（並列化・ベクトル化版）
             if self.multiplier_method == 'simple':
-                # 4. 新しいシンプルな動的乗数の計算: 16 - (CER*8) - (XTRENDINDEX*8)
+                # 4a. 新しいシンプルな動的乗数の計算: 15 - (CER*10) - (XTRENDINDEX*10)
                 if self.x_trend_index is None:
                     raise ValueError("シンプル方式にはXTRENDINDEXが必要ですが、初期化されていません。")
                 
@@ -962,8 +1025,19 @@ class ZAdaptiveChannel(Indicator):
                 # 結果の一貫性のため、動的乗数と同じ値で初期化
                 max_mult_values = dynamic_multiplier.copy()
                 min_mult_values = dynamic_multiplier.copy()
+                
+            elif self.multiplier_method == 'simple_adjustment':
+                # 4b. シンプルアジャストメント動的乗数の計算: MAX=8からMIN=0.5まで線形補間
+                # シンプルアジャストメント計算式を使用
+                dynamic_multiplier = calculate_simple_adjustment_multiplier_vec(trigger_values)
+                
+                # シンプルアジャストメント計算の場合、max_mult_valuesとmin_mult_valuesは使用しないが、
+                # 結果の一貫性のため、動的乗数と同じ値で初期化
+                max_mult_values = dynamic_multiplier.copy()
+                min_mult_values = dynamic_multiplier.copy()
+                
             else:
-                # 4. 従来のアダプティブ動的乗数の計算
+                # 4c. 従来のアダプティブ動的乗数の計算
                 # 4.1. 動的な最大乗数の計算
                 max_mult_values = calculate_dynamic_max_multiplier(
                     trigger_values, 

@@ -72,7 +72,6 @@ from strategies.implementations.zc_rsx_exit.strategy import ZCRSXExitStrategy
 from strategies.implementations.simple_z_donchian.strategy import SimpleZDonchianStrategy
 from strategies.implementations.simple_z_trend.strategy import SimpleZTrendStrategy
 
-from strategies.implementations.z_breakout.strategy import ZBreakoutStrategy
 
 from strategies.implementations.z_macd_breakout.strategy import ZMACDBreakoutStrategy
 

@@ -30,7 +30,7 @@ class ZASimpleStrategy(BaseStrategy):
     def __init__(
         self,
         # 基本パラメータ
-        band_lookback: int = 3,
+        band_lookback: int = 1,
         src_type: str = 'hlc3',
         # 動的乗数の範囲パラメータ
         max_max_multiplier: float = 9.0,    # 最大乗数の最大値
@@ -40,7 +40,7 @@ class ZASimpleStrategy(BaseStrategy):
         
         # CERパラメータ
         detector_type: str = 'phac_e',     # CER用ドミナントサイクル検出器タイプ
-        cycle_part: float = 0.4,           # CER用サイクル部分
+        cycle_part: float = 0.5,           # CER用サイクル部分
         lp_period: int = 5,               # CER用ローパスフィルター期間
         hp_period: int = 100,              # CER用ハイパスフィルター期間
         max_cycle: int = 120,              # CER用最大サイクル期間

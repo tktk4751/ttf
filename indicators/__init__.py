@@ -55,6 +55,7 @@ from .kalman_hull_supertrend import KalmanHullSupertrend
 from .kalman_filter import KalmanFilter
 from .x_trend import XTrend # Added
 from .alma import calculate_alma_numba as calculate_alma
+from .dubuc_hurst_exponent import DubucHurstExponent, DubucHurstResult
 
 # エーラーズのドミナントサイクル検出クラス
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
@@ -118,6 +119,8 @@ __all__ = [
     'ZDonchian',
     'ZBollingerBands',   # Zボリンジャーバンド
     'ZVChannel',         # ZVチャネル（ZBBとZCのハイブリッド）
+    'DubucHurstExponent',    # Dubucハースト指数
+    'DubucHurstResult',      # Dubucハースト指数の結果
     'EhlersDominantCycle',
     'DominantCycleResult',
     'EhlersDFTDC',

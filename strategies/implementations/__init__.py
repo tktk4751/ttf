@@ -8,7 +8,6 @@ from .alpha_trend_macd_hidden_divergence_strategy import AlphaTrendMACDHiddenDiv
 from .z_strategy import ZStrategy
 from .z_trend import ZTrendStrategy
 from .zc_breakout import ZCBreakoutStrategy
-from .z_breakout import ZBreakoutStrategy
 from .simple_z_donchian import SimpleZDonchianStrategy
 from .z_macd_breakout import ZMACDBreakoutStrategy
 from .zt_simple import ZTSimpleStrategy

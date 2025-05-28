@@ -34,44 +34,6 @@ def calculate_dynamic_multiplier_vec(trigger_value: float, max_mult: float, min_
 
 
 @vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_max_multiplier(trigger_value: float, max_max_mult: float, min_max_mult: float) -> float:
-    """
-    トリガー値に基づいて動的な最大ATR乗数を計算する（ベクトル化版）
-    
-    Args:
-        trigger_value: トリガーの値
-        max_max_mult: 最大乗数の最大値（例：3.0）
-        min_max_mult: 最大乗数の最小値（例：2.0）
-    
-    Returns:
-        動的な最大乗数の値
-    """
-    if np.isnan(trigger_value):
-        return (max_max_mult + min_max_mult) / 2
-    trigger_abs = abs(trigger_value)
-    return max_max_mult - trigger_abs * (max_max_mult - min_max_mult)
-
-
-@vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
-def calculate_dynamic_min_multiplier(trigger_value: float, max_min_mult: float, min_min_mult: float) -> float:
-    """
-    トリガー値に基づいて動的な最小ATR乗数を計算する（ベクトル化版）
-    
-    Args:
-        trigger_value: トリガーの値
-        max_min_mult: 最小乗数の最大値（例：1.5）
-        min_min_mult: 最小乗数の最小値（例：0.5）
-    
-    Returns:
-        動的な最小乗数の値
-    """
-    if np.isnan(trigger_value):
-        return (max_min_mult + min_min_mult) / 2
-    trigger_abs = abs(trigger_value)
-    return min_min_mult + trigger_abs * (max_min_mult - min_min_mult)
-
-
-@vectorize(['float64(float64, float64, float64)'], nopython=True, fastmath=True, cache=True)
 def calculate_dynamic_risk_ratio(trigger_value: float, max_risk: float, min_risk: float) -> float:
     """
     トリガー値に基づいて動的なリスク比率を計算する（ベクトル化版）
@@ -214,8 +176,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         max_position_percent: float = 0.3,  # 最大ポジションサイズの比率（デフォルト50%）
         leverage: float = 1.0,          # レバレッジ（デフォルト1倍）
         catr_detector_type: str = 'phac_e',  # CATRの検出器タイプ
-        catr_max_period: int = 55,      # CATR最大期間
-        catr_min_period: int = 5,       # CATR最小期間
+        catr_max_period: int = 89,      # CATR最大期間
+        catr_min_period: int = 13,       # CATR最小期間
         apply_dynamic_adjustment: bool = True,  # 動的調整を適用するか
         fixed_risk_percent: float = 0.01,  # 固定リスク率（資金の1%）
         
@@ -223,22 +185,20 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         trigger_type: str = 'x_trend',      # 'cer', 'x_trend', 'cycle_chop'
         
         # 動的ATR乗数のパラメータ
-        max_max_multiplier: float = 5.0,  # 最大乗数の最大値
-        min_max_multiplier: float = 2.5,  # 最大乗数の最小値
-        max_min_multiplier: float = 2.0,  # 最小乗数の最大値
-        min_min_multiplier: float = 0.5,  # 最小乗数の最小値
+        max_multiplier: float = 5.0,         # 最大ATR乗数
+        min_multiplier: float = 2.0,         # 最小ATR乗数
         
         # 動的リスク比率のパラメータ
-        max_risk_ratio: float = 0.015,   # 最大リスク比率（3%）
-        min_risk_ratio: float = 0.005,    # 最小リスク比率（0.3%）
+        max_risk_ratio: float = 0.02,   # 最大リスク比率（2%）
+        min_risk_ratio: float = 0.005,    # 最小リスク比率（0.5%）
         
         # XTrendIndex固有のパラメータ
         x_trend_detector_type: str = 'phac_e',
         x_trend_max_threshold: float = 0.75,
         x_trend_min_threshold: float = 0.55,
         x_trend_max_cycle: int = 55,
-        x_trend_min_cycle: int = 5,
-        x_trend_max_output: int = 34,
+        x_trend_min_cycle: int = 13,
+        x_trend_max_output: int = 89,
         x_trend_min_output: int = 5,
         x_trend_lp_period: int = 5,
         x_trend_hp_period: int = 55,
@@ -271,10 +231,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             fixed_risk_percent: 固定リスク率（資金の何%をリスクとするか）
             trigger_type: 動的適応のトリガータイプ（'cer', 'x_trend', 'cycle_chop'）
             
-            max_max_multiplier: 最大乗数の最大値
-            min_max_multiplier: 最大乗数の最小値
-            max_min_multiplier: 最小乗数の最大値
-            min_min_multiplier: 最小乗数の最小値
+            max_multiplier: 最大ATR乗数
+            min_multiplier: 最小ATR乗数
             
             max_risk_ratio: 最大リスク比率
             min_risk_ratio: 最小リスク比率
@@ -297,10 +255,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         self.trigger_type = trigger_type
         
         # 動的乗数のパラメータ
-        self.max_max_multiplier = max_max_multiplier
-        self.min_max_multiplier = min_max_multiplier
-        self.max_min_multiplier = max_min_multiplier
-        self.min_min_multiplier = min_min_multiplier
+        self.max_multiplier = max_multiplier
+        self.min_multiplier = min_multiplier
         
         # 動的リスク比率のパラメータ
         self.max_risk_ratio = max_risk_ratio
@@ -341,7 +297,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             hp_period=144,          # 高域通過フィルターの期間
             max_cycle=89,          # 最大サイクル期間
             min_cycle=13,          # 最小サイクル期間
-            max_output=55,                      # 最大出力値
+            max_output=89,                      # 最大出力値
             min_output=13,                       # 最小出力値
             smoother_type='alma'                # 平滑化アルゴリズムのタイプ
         )
@@ -360,8 +316,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
                 cycle_part=0.618,                     # サイクル部分の倍率
                 max_cycle=55,          # 最大サイクル期間
                 min_cycle=5,          # 最小サイクル期間
-                max_output=55,                      # 最大出力値
-                min_output=5                       # 最小出力値
+                max_output=89,                      # 最大出力値
+                min_output=13                       # 最小出力値
             )
             self.trigger_indicator = self.cycle_er
             
@@ -550,57 +506,35 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             self.logger.warning(f"CATR計算中にインデックスエラー: {str(e)}、価格の0.01%をデフォルト値として使用: {catr_value}")
         except Exception as e:
             # その他のエラー
-            catr_value = params.entry_price * 0.0001  # 価格の0.01%
+            catr_value = params.entry_price * 0.5  # 価格の0.5%
             efficiency_ratio = 0.5  # デフォルト値
-            self.logger.warning(f"CATR計算中にエラー: {str(e)}、価格の0.01%をデフォルト値として使用: {catr_value}")
+            self.logger.warning(f"CATR計算中にエラー: {str(e)}、価格の0.5%をデフォルト値として使用: {catr_value}")
 
         # 単位係数のベース値
         unit_coefficient = self.unit
         
         # 動的調整
-        trigger_factor = 1.0
-        atr_multiplier = 1.5  # デフォルト値
-        dynamic_risk_ratio = self.base_risk_ratio
-        max_mult = 0.0
-        min_mult = 0.0
-        
         if self.apply_dynamic_adjustment:
-            # トリガー値による単位係数の動的調整
+            # トリガー値による調整係数の計算
             trigger_factor = self._calculate_trigger_factor(trigger_value)
-            unit_coefficient *= trigger_factor
             
-            # 動的な最大・最小乗数の計算
-            max_mult = calculate_dynamic_max_multiplier(
-                trigger_value,
-                self.max_max_multiplier,
-                self.min_max_multiplier
-            )
-            
-            min_mult = calculate_dynamic_min_multiplier(
-                trigger_value,
-                self.max_min_multiplier,
-                self.min_min_multiplier
-            )
-            
-            # トリガー値によるATR乗数の動的調整
+            # トリガー値によるATR乗数の動的調整（簡素化）
             atr_multiplier = calculate_dynamic_multiplier_vec(
                 trigger_value,
-                max_mult,
-                min_mult
+                self.max_multiplier,  # 最大乗数
+                self.min_multiplier   # 最小乗数
             )
             
             # トリガー値によるリスク比率の動的調整
             dynamic_risk_ratio = calculate_dynamic_risk_ratio(
                 trigger_value,
-                self.max_risk_ratio,
-                self.min_risk_ratio
+                0.03,  # max_risk_ratio
+                0.005   # min_risk_ratio
             )
         else:
             # 調整なしの場合のデフォルト値
-            atr_multiplier = 1.5  
+            atr_multiplier = 1.5  # デフォルト値
             dynamic_risk_ratio = self.base_risk_ratio
-            max_mult = self.max_max_multiplier
-            min_mult = self.min_min_multiplier
 
         # Numba最適化関数を使用してポジションサイズを計算
         position_size_usd = _calculate_position_size_numba(
@@ -635,8 +569,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             'risk_amount': risk_amount,
             'catr_value': catr_value,
             'atr_multiplier': atr_multiplier,
-            'max_multiplier': max_mult,      # 動的最大乗数
-            'min_multiplier': min_mult,      # 動的最小乗数
+            'max_multiplier': self.max_multiplier,      # 動的最大乗数
+            'min_multiplier': self.min_multiplier,      # 動的最小乗数
             'efficiency_ratio': efficiency_ratio,
             'trigger_type': self.trigger_type,     # 使用したトリガータイプ
             'trigger_value': trigger_value,        # トリガー値
@@ -757,30 +691,15 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             # トリガー値による調整係数の計算
             trigger_factor = self._calculate_trigger_factor(trigger_value)
             
-            # 動的な最大・最小乗数の計算
-            max_mult = calculate_dynamic_max_multiplier(
-                trigger_value,
-                self.max_max_multiplier,
-                self.min_max_multiplier
-            )
-            
-            min_mult = calculate_dynamic_min_multiplier(
-                trigger_value,
-                self.max_min_multiplier,
-                self.min_min_multiplier
-            )
-            
-            # トリガー値によるATR乗数の動的調整
+            # トリガー値によるATR乗数の動的調整（簡素化）
             atr_multiplier = calculate_dynamic_multiplier_vec(
                 trigger_value,
-                max_mult,
-                min_mult
+                self.max_multiplier,  # 最大乗数
+                self.min_multiplier   # 最小乗数
             )
         else:
             # 調整なしの場合のデフォルト値
             atr_multiplier = 1.5  # デフォルト値
-            max_mult = self.max_max_multiplier
-            min_mult = self.min_min_multiplier
 
         # ストップロス価格の計算
         stop_loss_price = self.calculate_stop_loss_price(
@@ -955,24 +874,11 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
             if apply_dynamic_adjustments[i]:
                 unit_coefficient *= trigger_factor
                 
-                # 動的な最大・最小乗数の計算
-                max_mult = calculate_dynamic_max_multiplier(
-                    efficiency_ratio,
-                    2.5,  # max_max_multiplier
-                    1.5   # min_max_multiplier
-                )
-                
-                min_mult = calculate_dynamic_min_multiplier(
-                    efficiency_ratio,
-                    1.5,  # max_min_multiplier
-                    0.5   # min_min_multiplier
-                )
-                
-                # 効率比によるATR乗数の動的調整
+                # 効率比によるATR乗数の動的調整（簡素化）
                 atr_multiplier = calculate_dynamic_multiplier_vec(
                     efficiency_ratio,
-                    max_mult,
-                    min_mult
+                    5.0,  # max_multiplier
+                    2.0   # min_multiplier
                 )
                 
                 # 効率比によるリスク比率の動的調整
