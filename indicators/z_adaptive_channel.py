@@ -74,7 +74,7 @@ class ZAdaptiveChannelResult:
     lower: np.ndarray         # 下限バンド
     er: np.ndarray            # Efficiency Ratio (CER)
     dynamic_multiplier: np.ndarray  # 動的乗数
-    z_atr: np.ndarray         # CATR値
+    c_atr: np.ndarray         # CATR値
     max_mult_values: np.ndarray  # 動的に計算されたmax_multiplier値
     min_mult_values: np.ndarray  # 動的に計算されたmin_multiplier値
     multiplier_trigger: np.ndarray  # 乗数計算に使用されたトリガー値
@@ -172,7 +172,7 @@ def calculate_dynamic_multiplier_optimized(trigger: np.ndarray, max_mult: float,
 @njit(fastmath=True, parallel=True, cache=True)
 def calculate_z_adaptive_channel_optimized(
     z_ma: np.ndarray,
-    z_atr: np.ndarray,
+    c_atr: np.ndarray,
     dynamic_multiplier: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -180,7 +180,7 @@ def calculate_z_adaptive_channel_optimized(
     
     Args:
         z_ma: ZAdaptiveMAの配列（中心線）
-        z_atr: CATRの配列（ボラティリティ測定・金額ベース）
+        c_atr: CATRの配列（ボラティリティ測定・金額ベース）
         dynamic_multiplier: 動的乗数の配列
     
     Returns:
@@ -196,12 +196,12 @@ def calculate_z_adaptive_channel_optimized(
     # 並列処理で各時点でのバンドを計算
     for i in prange(length):
         # 動的乗数をATRに適用
-        if np.isnan(z_ma[i]) or np.isnan(z_atr[i]) or np.isnan(dynamic_multiplier[i]):
+        if np.isnan(z_ma[i]) or np.isnan(c_atr[i]) or np.isnan(dynamic_multiplier[i]):
             upper[i] = np.nan
             lower[i] = np.nan
             continue
             
-        band_width = z_atr[i] * dynamic_multiplier[i]
+        band_width = c_atr[i] * dynamic_multiplier[i]
         
         # 金額ベースのATRを使用（絶対値）
         upper[i] = z_ma[i] + band_width
@@ -336,7 +336,7 @@ def adjust_multipliers_with_roc_persistence(
 @njit(fastmath=True, parallel=True, cache=True)
 def calculate_z_adaptive_channel_with_roc_persistence(
     z_ma: np.ndarray,
-    z_atr: np.ndarray,
+    c_atr: np.ndarray,
     upper_multiplier: np.ndarray,
     lower_multiplier: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -345,7 +345,7 @@ def calculate_z_adaptive_channel_with_roc_persistence(
     
     Args:
         z_ma: ZAdaptiveMAの配列（中心線）
-        z_atr: CATRの配列（ボラティリティ測定・金額ベース）
+        c_atr: CATRの配列（ボラティリティ測定・金額ベース）
         upper_multiplier: アッパーバンド用の調整乗数
         lower_multiplier: ロワーバンド用の調整乗数
     
@@ -362,15 +362,15 @@ def calculate_z_adaptive_channel_with_roc_persistence(
     # 並列処理で各時点でのバンドを計算
     for i in prange(length):
         # NaN値チェック
-        if (np.isnan(z_ma[i]) or np.isnan(z_atr[i]) or 
+        if (np.isnan(z_ma[i]) or np.isnan(c_atr[i]) or 
             np.isnan(upper_multiplier[i]) or np.isnan(lower_multiplier[i])):
             upper[i] = np.nan
             lower[i] = np.nan
             continue
         
         # 各バンドで異なる乗数を適用
-        upper_band_width = z_atr[i] * upper_multiplier[i]
-        lower_band_width = z_atr[i] * lower_multiplier[i]
+        upper_band_width = c_atr[i] * upper_multiplier[i]
+        lower_band_width = c_atr[i] * lower_multiplier[i]
         
         # 金額ベースのATRを使用（絶対値）
         upper[i] = z_ma[i] + upper_band_width
@@ -731,24 +731,27 @@ class ZAdaptiveChannel(Indicator):
         self.alma_offset = alma_offset
         self.alma_sigma = alma_sigma
         
-        # 依存オブジェクトの初期化
-        # 1. CycleEfficiencyRatio (常に初期化)
-        self.cycle_er = CycleEfficiencyRatio(
-            detector_type=detector_type,
-            cycle_part=cycle_part,
-            lp_period=lp_period,
-            hp_period=hp_period,
-            max_cycle=max_cycle,
-            min_cycle=min_cycle,
-            max_output=max_output,
-            min_output=min_output,
-            use_kalman_filter=use_kalman_filter,
-            src_type=src_type
-        )
+        # 依存オブジェクトの初期化 - 最適化: 必要な場合のみ初期化
+        # 1. CycleEfficiencyRatio (multiplier_source='cer'またはma_source='cer'の場合のみ)
+        self.cycle_er = None
+        if multiplier_source == 'cer' or ma_source == 'cer':
+            self.cycle_er = CycleEfficiencyRatio(
+                detector_type=detector_type,
+                cycle_part=cycle_part,
+                lp_period=lp_period,
+                hp_period=hp_period,
+                max_cycle=max_cycle,
+                min_cycle=min_cycle,
+                max_output=max_output,
+                min_output=min_output,
+                use_kalman_filter=use_kalman_filter,
+                src_type=src_type
+            )
         
-        # 2. Xトレンドインデックス (multiplier_source='x_trend'またはma_source='x_trend'またはmultiplier_method='simple'またはuse_x_trend_adjustmentの場合)
+        # 2. Xトレンドインデックス (必要な場合のみ初期化)
         self.x_trend_index = None
-        if multiplier_source == 'x_trend' or ma_source == 'x_trend' or multiplier_method == 'simple' or use_x_trend_adjustment:
+        if (multiplier_source == 'x_trend' or ma_source == 'x_trend' or 
+            multiplier_method == 'simple' or use_x_trend_adjustment):
             self.x_trend_index = XTrendIndex(
                 detector_type=x_detector_type,
                 cycle_part=x_cycle_part,
@@ -763,7 +766,7 @@ class ZAdaptiveChannel(Indicator):
                 fixed_threshold=fixed_threshold
             )
         
-        # 3. Zアダプティブトレンドインデックス (multiplier_source='z_trend'の場合)
+        # 3. Zアダプティブトレンドインデックス (multiplier_source='z_trend'の場合のみ)
         self.z_trend_index = None
         if multiplier_source == 'z_trend':
             self.z_trend_index = ZAdaptiveTrendIndex(
@@ -877,7 +880,7 @@ class ZAdaptiveChannel(Indicator):
     
     def _get_data_hash(self, data: Union[pd.DataFrame, np.ndarray]) -> str:
         """
-        データのハッシュ値を生成（高速化版）
+        データのハッシュ値を生成（超高速化版）
         
         Args:
             data: 価格データ
@@ -885,39 +888,45 @@ class ZAdaptiveChannel(Indicator):
         Returns:
             データハッシュ文字列
         """
-        # DataFrameの場合はサイズと最初と最後の値のみを使用
-        if isinstance(data, pd.DataFrame):
-            shape = data.shape
-            # 最初と最後の10行のみ使用（大きなデータセットの場合も高速）
-            if len(data) > 20:
-                first_last = (
-                    tuple(data.iloc[0].values) + 
-                    tuple(data.iloc[-1].values) +
-                    (data.shape[0],)  # データの長さも含める
-                )
-            else:
-                # 小さなデータセットはすべて使用
-                first_last = tuple(data.values.flatten()[-20:])
-        else:
-            shape = data.shape
-            # NumPy配列も同様
-            if len(data) > 20:
-                if data.ndim > 1:
-                    first_last = tuple(data[0]) + tuple(data[-1]) + (data.shape[0],)
+        # 超高速化: データの最小限のサンプリングのみ使用
+        try:
+            if isinstance(data, pd.DataFrame):
+                length = len(data)
+                # データ長と最初・最後の値のみ使用（大幅に高速化）
+                if length > 0:
+                    first_close = float(data.iloc[0].get('close', data.iloc[0, -1]))
+                    last_close = float(data.iloc[-1].get('close', data.iloc[-1, -1]))
+                    data_signature = (length, first_close, last_close)
                 else:
-                    first_last = (data[0], data[-1], data.shape[0])
+                    data_signature = (0, 0.0, 0.0)
             else:
-                first_last = tuple(data.flatten()[-20:])
+                length = len(data)
+                if length > 0:
+                    if data.ndim > 1:
+                        first_val = float(data[0, -1])  # 最後の列（通常close）
+                        last_val = float(data[-1, -1])
+                    else:
+                        first_val = float(data[0])
+                        last_val = float(data[-1])
+                    data_signature = (length, first_val, last_val)
+                else:
+                    data_signature = (0, 0.0, 0.0)
             
-        # パラメータとサイズ、データのサンプルを組み合わせたハッシュを返す
-        params_str = (
-            f"{self.src_type}_{self.max_max_multiplier}_{self.min_max_multiplier}_"
-            f"{self.max_min_multiplier}_{self.min_min_multiplier}_{self.multiplier_method}_"
-            f"{self.multiplier_source}_{self.ma_source}_"
-            f"{self.multiplier_smoothing_method}_{self.multiplier_smoothing_period}"
-        )
-        
-        return f"{params_str}_{hash(first_last + (shape,))}"
+            # パラメータの最小セットのみ使用
+            params_signature = (
+                self.multiplier_method,
+                self.multiplier_source,
+                self.ma_source,
+                self.max_max_multiplier if self.multiplier_method == 'adaptive' else 6.0,
+                self.min_min_multiplier if self.multiplier_method == 'adaptive' else 1.0
+            )
+            
+            # 超高速ハッシュ生成
+            return f"{hash(data_signature)}_{hash(params_signature)}"
+            
+        except Exception:
+            # フォールバック: 最小限のハッシュ
+            return f"{id(data)}_{self.multiplier_method}"
     
     def _calculate_trigger_values(self, data) -> np.ndarray:
         """
@@ -931,22 +940,34 @@ class ZAdaptiveChannel(Indicator):
         """
         if self.multiplier_source == 'cer':
             # CERの場合は絶対値を取って0-1に正規化
+            if self.cycle_er is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             raw_er = self.cycle_er.calculate(data)
             trigger_values = np.abs(raw_er)
             return trigger_values
             
         elif self.multiplier_source == 'x_trend':
             # Xトレンドインデックスは既に0-1の範囲なのでそのまま使用
+            if self.x_trend_index is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             result = self.x_trend_index.calculate(data)
             return result.values
             
         elif self.multiplier_source == 'z_trend':
             # Zアダプティブトレンドインデックスも既に0-1の範囲なのでそのまま使用
+            if self.z_trend_index is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             result = self.z_trend_index.calculate(data)
             return result.values
             
         else:
             # デフォルトはCER
+            if self.cycle_er is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             raw_er = self.cycle_er.calculate(data)
             trigger_values = np.abs(raw_er)
             return trigger_values
@@ -963,20 +984,30 @@ class ZAdaptiveChannel(Indicator):
         """
         if self.ma_source == 'cer':
             # CERの場合はそのまま返す（生の値）
+            if self.cycle_er is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             return self.cycle_er.calculate(data)
             
         elif self.ma_source == 'x_trend':
             # Xトレンドインデックスの場合
             if self.x_trend_index is None:
-                # フォールバックとしてCERを使用
-                self.logger.warning("XTrendIndexが初期化されていません。CERを使用します。")
-                return self.cycle_er.calculate(data)
+                # フォールバックとしてCERを使用（利用可能な場合）
+                if self.cycle_er is not None:
+                    self.logger.warning("XTrendIndexが初期化されていません。CERを使用します。")
+                    return self.cycle_er.calculate(data)
+                else:
+                    # 最後の手段: 固定値
+                    return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             result = self.x_trend_index.calculate(data)
             # XTrendIndexの値は0-1の範囲なので、そのまま返す
             return result.values
             
         else:
             # デフォルトはCER
+            if self.cycle_er is None:
+                # フォールバック: 固定値を返す
+                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
             return self.cycle_er.calculate(data)
 
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
@@ -1097,12 +1128,12 @@ class ZAdaptiveChannel(Indicator):
             self._c_atr.calculate(data)
             
             # 金額ベースのCATRを取得 - 重要: バンド計算には金額ベースのATRを使用する
-            z_atr = self._c_atr.get_absolute_atr()
+            c_atr = self._c_atr.get_absolute_atr()
             
             # 11. Zアダプティブチャネルの計算（平滑化された乗数を使用）
             middle, upper, lower = calculate_z_adaptive_channel_with_roc_persistence(
                 z_ma,
-                z_atr,
+                c_atr,
                 upper_multiplier_smoothed,
                 lower_multiplier_smoothed
             )
@@ -1114,7 +1145,7 @@ class ZAdaptiveChannel(Indicator):
                 lower=lower,
                 er=er,
                 dynamic_multiplier=dynamic_multiplier,
-                z_atr=z_atr,
+                c_atr=c_atr,
                 max_mult_values=max_mult_values,
                 min_mult_values=min_mult_values,
                 multiplier_trigger=trigger_values,
@@ -1428,7 +1459,7 @@ class ZAdaptiveChannel(Indicator):
             self.logger.error(f"動的乗数取得中にエラー: {str(e)}")
             return np.array([])
     
-    def get_z_atr(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def get_c_atr(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         CATR値を取得
         
@@ -1453,7 +1484,7 @@ class ZAdaptiveChannel(Indicator):
                 # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
                 result = next(iter(self._result_cache.values()))
                 
-            return result.z_atr
+            return result.c_atr
         except Exception as e:
             self.logger.error(f"ZATR取得中にエラー: {str(e)}")
             return np.array([])
@@ -1729,18 +1760,15 @@ class ZAdaptiveChannel(Indicator):
         self._result_cache = {}
         self._cache_keys = []
         
-        # 依存オブジェクトもリセット
-        self.cycle_er.reset()
+        # 依存オブジェクトもリセット（存在する場合のみ）
+        if self.cycle_er is not None:
+            self.cycle_er.reset()
         if self.x_trend_index is not None:
             self.x_trend_index.reset()
         if self.z_trend_index is not None:
             self.z_trend_index.reset()
         self._z_adaptive_ma.reset()
         self._c_atr.reset()
-        if self.roc_persistence is not None:
-            self.roc_persistence.reset()
-        if self.cycle_rsx is not None:
-            self.cycle_rsx.reset()
         
         # 乗数平滑化インジケーターもリセット
         if self._multiplier_smoother_upper is not None:

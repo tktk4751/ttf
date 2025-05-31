@@ -150,7 +150,7 @@ class ZAdaptiveChannelBreakoutEntrySignal(BaseSignal, IEntrySignal):
         
     def _get_data_hash(self, ohlcv_data):
         """
-        データハッシュを取得する（最適化版）
+        データハッシュを取得する（超高速化版）
         
         Args:
             ohlcv_data: OHLCVデータ
@@ -158,34 +158,36 @@ class ZAdaptiveChannelBreakoutEntrySignal(BaseSignal, IEntrySignal):
         Returns:
             データのハッシュ値
         """
-        # DataFrameの場合はフレームサイズと先頭・末尾データのみハッシュ化
-        if isinstance(ohlcv_data, pd.DataFrame):
-            shape = ohlcv_data.shape
-            # 最初と最後のデータのみ使用（高速化）
-            if len(ohlcv_data) > 20:
-                sample_data = (
-                    tuple(ohlcv_data.iloc[0].values) + 
-                    tuple(ohlcv_data.iloc[-1].values) +
-                    (ohlcv_data.shape[0],)  # データ長も含める
-                )
-            else:
-                # 小さなデータセットはすべて使用
-                sample_data = tuple(ohlcv_data.values.flatten()[-20:])
-        else:
-            # NumPy配列の場合
-            shape = ohlcv_data.shape
-            if len(ohlcv_data) > 20:
-                if ohlcv_data.ndim > 1:
-                    sample_data = tuple(ohlcv_data[0]) + tuple(ohlcv_data[-1]) + (ohlcv_data.shape[0],)
+        # 超高速化: 最小限のデータサンプリング
+        try:
+            if isinstance(ohlcv_data, pd.DataFrame):
+                length = len(ohlcv_data)
+                if length > 0:
+                    first_close = float(ohlcv_data.iloc[0].get('close', ohlcv_data.iloc[0, -1]))
+                    last_close = float(ohlcv_data.iloc[-1].get('close', ohlcv_data.iloc[-1, -1]))
+                    data_signature = (length, first_close, last_close)
                 else:
-                    sample_data = (ohlcv_data[0], ohlcv_data[-1], ohlcv_data.shape[0])
+                    data_signature = (0, 0.0, 0.0)
             else:
-                sample_data = tuple(ohlcv_data.flatten()[-20:])
-        
-        # データハッシュの計算（事前計算済みのパラメータハッシュを使用）
-        data_hash = hash(str(shape) + str(hash(sample_data)))
-        
-        return hash((self._params_hash, data_hash))
+                # NumPy配列の場合
+                length = len(ohlcv_data)
+                if length > 0:
+                    if ohlcv_data.ndim > 1:
+                        first_val = float(ohlcv_data[0, -1])  # 最後の列（通常close）
+                        last_val = float(ohlcv_data[-1, -1])
+                    else:
+                        first_val = float(ohlcv_data[0])
+                        last_val = float(ohlcv_data[-1])
+                    data_signature = (length, first_val, last_val)
+                else:
+                    data_signature = (0, 0.0, 0.0)
+            
+            # データハッシュの計算（事前計算済みのパラメータハッシュを使用）
+            return hash((self._params_hash, hash(data_signature)))
+            
+        except Exception:
+            # フォールバック: 最小限のハッシュ
+            return hash((self._params_hash, id(ohlcv_data)))
     
     def _extract_close(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """

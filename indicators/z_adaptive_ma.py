@@ -107,40 +107,6 @@ def calculate_z_adaptive_ma(prices: np.ndarray, er: np.ndarray, z_ma: np.ndarray
     return z_ma
 
 
-# 高速なハッシュ計算用の補助関数
-@njit(['int64(float64[:])'], fastmath=True, cache=True)
-def hash_array_simple(arr: np.ndarray) -> int:
-    """
-    数値配列の簡易ハッシュ値を計算（高速化用）
-    
-    Args:
-        arr: ハッシュ化する配列
-    
-    Returns:
-        ハッシュ値
-    """
-    if len(arr) == 0:
-        return 0
-    
-    # 単純な加重平均によるハッシュ
-    result = np.int64(1000000007)  # 大きな素数
-    for i in range(min(3, len(arr))):
-        if not np.isnan(arr[i]):
-            val = np.int64(arr[i] * 1000000.0)
-            result = (result * 31 + val) % 9223372036854775783  # 大きな素数でモジュロ
-    
-    if len(arr) > 3:
-        for i in range(max(3, len(arr) - 3), len(arr)):
-            if not np.isnan(arr[i]):
-                val = np.int64(arr[i] * 1000000.0)
-                result = (result * 31 + val) % 9223372036854775783
-    
-    # データ長も含める
-    result = (result * 31 + len(arr)) % 9223372036854775783
-    
-    return result
-
-
 class ZAdaptiveMA(Indicator):
     """
     ZAdaptiveMA (Z Adaptive Moving Average) インジケーター
@@ -205,41 +171,40 @@ class ZAdaptiveMA(Indicator):
         Returns:
             データハッシュ文字列
         """
-        # 高速化のため直接数値計算
-        data_hash = 0
-        shape = (0, 0)
-        
-        # DataFrameの場合
-        if isinstance(data, pd.DataFrame):
-            shape = data.shape
-            # データの最初と最後だけを使う
-            if len(data) > 0:
-                first_row = data.iloc[0].values.astype(np.float64)
-                last_row = data.iloc[-1].values.astype(np.float64)
-                data_hash = hash_array_simple(first_row) ^ hash_array_simple(last_row)
-        # NumPy配列の場合
-        else:
-            shape = data.shape
-            if len(data) > 0:
-                if data.ndim > 1:
-                    data_hash = hash_array_simple(data[0].astype(np.float64)) ^ hash_array_simple(data[-1].astype(np.float64))
+        # 超高速化のため最小限のサンプリング
+        try:
+            # データ情報の取得
+            if isinstance(data, pd.DataFrame):
+                length = len(data)
+                first_val = float(data.iloc[0].get('close', data.iloc[0, -1])) if length > 0 else 0.0
+                last_val = float(data.iloc[-1].get('close', data.iloc[-1, -1])) if length > 0 else 0.0
+            else:
+                length = len(data)
+                if length > 0:
+                    if data.ndim > 1:
+                        first_val = float(data[0, -1])
+                        last_val = float(data[-1, -1])
+                    else:
+                        first_val = float(data[0])
+                        last_val = float(data[-1])
                 else:
-                    # 一次元配列
-                    first = np.array([data[0]]).astype(np.float64)
-                    last = np.array([data[-1]]).astype(np.float64)
-                    data_hash = hash_array_simple(first) ^ hash_array_simple(last)
-        
-        # 外部ERのハッシュ
-        er_hash = 0
-        if external_er is not None and len(external_er) > 0:
-            er_sample = np.array([external_er[0], external_er[-1]]).astype(np.float64)
-            er_hash = hash_array_simple(er_sample)
-        
-        # パラメータ値を含める
-        param_str = f"{self.fast_period}_{self.slow_period}_{self.src_type}"
-        
-        # データハッシュとパラメータハッシュを組み合わせる
-        return f"{data_hash}_{shape[0]}_{er_hash}_{param_str}"
+                    first_val = last_val = 0.0
+            
+            # 外部ERの情報
+            er_info = (0.0, 0.0)
+            if external_er is not None and len(external_er) > 0:
+                er_info = (float(external_er[0]), float(external_er[-1]))
+            
+            # 最小限のパラメータ情報
+            params_sig = f"{self.fast_period}_{self.slow_period}_{self.src_type}"
+            
+            # 超高速ハッシュ
+            data_sig = (length, first_val, last_val)
+            return f"{hash(data_sig)}_{hash(er_info)}_{hash(params_sig)}"
+            
+        except Exception:
+            # フォールバック
+            return f"{id(data)}_{self.fast_period}_{self.slow_period}"
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray], external_er: Optional[np.ndarray] = None) -> np.ndarray:
         """

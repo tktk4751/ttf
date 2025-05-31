@@ -270,25 +270,37 @@ class CATR(Indicator):
         self._data_hash = None  # データキャッシュ用ハッシュ
         
     def _get_data_hash(self, data: Union[pd.DataFrame, np.ndarray]) -> str:
-        """データのハッシュ値を計算してキャッシュに使用する"""
-        # np.ndarrayの場合はバイト文字列に変換
-        if isinstance(data, np.ndarray):
-            data_bytes = data.tobytes()
-        # pd.DataFrameの場合は必要な列をバイト文字列に変換
-        else:
-            high = data['high'].values
-            low = data['low'].values
-            close = data['close'].values
-            data_bytes = high.tobytes() + low.tobytes() + close.tobytes()
-        
-        # パラメータから文字列を作成
-        param_str = f"{self.detector_type}_{self.cycle_part}_{self.max_cycle}_{self.min_cycle}_" \
-                    f"{self.max_output}_{self.min_output}_{self.smoother_type}_" \
-                    f"{self.src_type}_{self.use_kalman_filter}_" \
-                    f"{self.kalman_measurement_noise}_{self.kalman_process_noise}_{self.kalman_n_states}"
-        
-        # データとパラメータのハッシュ値を組み合わせて返す
-        return str(hash(data_bytes + param_str.encode()))
+        """データのハッシュ値を計算してキャッシュに使用する（超高速版）"""
+        # 超高速化のため最小限のサンプリング
+        try:
+            if isinstance(data, pd.DataFrame):
+                length = len(data)
+                if length > 0:
+                    high_val = float(data.iloc[0].get('high', data.iloc[0, 1]))
+                    low_val = float(data.iloc[0].get('low', data.iloc[0, 2]))
+                    close_val = float(data.iloc[0].get('close', data.iloc[0, 3]))
+                    last_close = float(data.iloc[-1].get('close', data.iloc[-1, 3]))
+                    data_signature = (length, high_val, low_val, close_val, last_close)
+                else:
+                    data_signature = (0, 0.0, 0.0, 0.0, 0.0)
+            else:
+                # NumPy配列の場合
+                length = len(data)
+                if length > 0 and data.ndim > 1 and data.shape[1] >= 4:
+                    data_signature = (length, float(data[0, 1]), float(data[0, 2]), 
+                                    float(data[0, 3]), float(data[-1, 3]))
+                else:
+                    data_signature = (0, 0.0, 0.0, 0.0, 0.0)
+            
+            # パラメータの最小セット
+            params_sig = f"{self.detector_type}_{self.max_output}_{self.min_output}_{self.smoother_type}_{self.src_type}"
+            
+            # 超高速ハッシュ
+            return f"{hash(data_signature)}_{hash(params_sig)}"
+            
+        except Exception:
+            # フォールバック
+            return f"{id(data)}_{self.detector_type}_{self.smoother_type}"
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
