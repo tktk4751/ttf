@@ -35,14 +35,14 @@ def calculate_hody_dce_numba(
     n = len(price)
     pi = 2 * np.arcsin(1.0)
     
-    # 初期化
-    alpha1 = np.zeros(n)
+    # 初期化 - Pineスクリプトと同じ形式
+    alpha1 = 0.0
     hp = np.zeros(n)
-    a1 = np.zeros(n)
-    b1 = np.zeros(n)
-    c1 = np.zeros(n)
-    c2 = np.zeros(n)
-    c3 = np.zeros(n)
+    a1 = 0.0
+    b1 = 0.0
+    c1 = 0.0
+    c2 = 0.0
+    c3 = 0.0
     filt = np.zeros(n)
     i_peak = np.zeros(n)
     q_peak = np.zeros(n)
@@ -53,110 +53,107 @@ def calculate_hody_dce_numba(
     im = np.zeros(n)
     period = np.zeros(n)
     dom_cycle = np.zeros(n)
+    dc = np.zeros(n)
     
     # メインループ
     for i in range(n):
-        # ハイパスフィルターでHPPeriod以下の周期成分を除去
-        if i < 2:
-            hp[i] = price[i]
-            filt[i] = price[i]
+        # Highpass filter cyclic components whose periods are shorter than HPPeriod bars
+        alpha1 = (np.cos(0.707 * 2 * pi / hp_period) + np.sin(0.707 * 2 * pi / hp_period) - 1) / np.cos(0.707 * 2 * pi / hp_period)
+        
+        # HP計算
+        price_1 = price[i-1] if i >= 1 else 0.0
+        price_2 = price[i-2] if i >= 2 else 0.0
+        hp_1 = hp[i-1] if i >= 1 else 0.0
+        hp_2 = hp[i-2] if i >= 2 else 0.0
+        
+        hp[i] = ((1 - alpha1 / 2) * (1 - alpha1 / 2) * (price[i] - 2 * price_1 + price_2) + 
+                 2 * (1 - alpha1) * hp_1 - (1 - alpha1) * (1 - alpha1) * hp_2)
+        
+        # Smooth with a Super Smoother Filter
+        a1 = np.exp(-1.414 * 3.14159 / lp_period)  # PineスクリプトでのpiValue（3.14159）を使用
+        b1 = 2 * a1 * np.cos(1.414 * pi / lp_period)  # ここはpiを使用
+        c2 = b1
+        c3 = -a1 * a1
+        c1 = 1 - c2 - c3
+        
+        # Filt計算
+        hp_1 = hp[i-1] if i >= 1 else 0.0
+        filt_1 = filt[i-1] if i >= 1 else 0.0
+        filt_2 = filt[i-2] if i >= 2 else 0.0
+        
+        filt[i] = c1 * (hp[i] + hp_1) / 2 + c2 * filt_1 + c3 * filt_2
+        
+        # IPeak計算
+        i_peak_1 = i_peak[i-1] if i >= 1 else 0.0
+        i_peak[i] = 0.991 * i_peak_1
+        if abs(filt[i]) > i_peak[i]:
+            i_peak[i] = abs(filt[i])
+        
+        # Real計算
+        if i_peak[i] != 0:
+            real[i] = filt[i] / i_peak[i]
         else:
-            # ハイパスフィルター係数計算
-            alpha1_val = (np.cos(0.707 * 2 * pi / hp_period) + np.sin(0.707 * 2 * pi / hp_period) - 1) / np.cos(0.707 * 2 * pi / hp_period)
-            
-            # ハイパスフィルター適用
-            hp[i] = (1 - alpha1_val / 2) * (1 - alpha1_val / 2) * (price[i] - 2 * price[i-1] + price[i-2])
-            
-            if i > 2:
-                hp[i] = hp[i] + 2 * (1 - alpha1_val) * hp[i-1] - (1 - alpha1_val) * (1 - alpha1_val) * hp[i-2]
-            
-            # スーパースムーサーフィルターの係数計算
-            a1_val = np.exp(-1.414 * pi / lp_period)
-            b1_val = 2 * a1_val * np.cos(1.414 * pi / lp_period)
-            c2_val = b1_val
-            c3_val = -a1_val * a1_val
-            c1_val = 1 - c2_val - c3_val
-            
-            # スーパースムーサーフィルター適用
-            if i == 2:
-                filt[i] = c1_val * (hp[i] + hp[i-1]) / 2
-            elif i > 2:
-                filt[i] = c1_val * (hp[i] + hp[i-1]) / 2 + c2_val * filt[i-1] + c3_val * filt[i-2]
-            
-            # 振幅ピーク値の計算
-            if i == 0:
-                i_peak[i] = 0.0
-            else:
-                i_peak[i] = 0.991 * i_peak[i-1]
-                if np.abs(filt[i]) > i_peak[i]:
-                    i_peak[i] = np.abs(filt[i])
-            
-            # 実部と虚部の計算
-            if i_peak[i] != 0:
-                real[i] = filt[i] / i_peak[i]
-            else:
-                real[i] = 0
-            
-            if i > 0:
-                quad[i] = real[i] - real[i-1]
-            
-                # 虚部のピーク値計算
-                if i == 1:
-                    q_peak[i] = 0.0
-                else:
-                    q_peak[i] = 0.991 * q_peak[i-1]
-                    if np.abs(quad[i]) > q_peak[i]:
-                        q_peak[i] = np.abs(quad[i])
-                
-                if q_peak[i] != 0:
-                    imag[i] = quad[i] / q_peak[i]
-                else:
-                    imag[i] = 0
-                
-                # ホモダイン判別器の実装
-                if i > 1:
-                    re[i] = real[i] * real[i-1] + imag[i] * imag[i-1]
-                    im[i] = real[i-1] * imag[i] - real[i] * imag[i-1]
-                    
-                    # 周期計算
-                    if im[i] != 0 and re[i] != 0:
-                        period[i] = 6.28318 / np.abs(im[i] / re[i])
-                    else:
-                        if i > 0:
-                            period[i] = period[i-1]
-                    
-                    # 周期の制限
-                    if period[i] < lp_period:
-                        period[i] = lp_period
-                    elif period[i] > hp_period:
-                        period[i] = hp_period
-                    
-                    # スーパースムーサーフィルターで周期を平滑化
-                    if i == 2:
-                        dom_cycle[i] = c1_val * (period[i] + period[i-1]) / 2
-                    elif i > 2:
-                        dom_cycle[i] = c1_val * (period[i] + period[i-1]) / 2 + c2_val * dom_cycle[i-1] + c3_val * dom_cycle[i-2]
-                    
-                    # 出力値の計算とリミット
-                    cycle_value = np.ceil(dom_cycle[i] * cycle_part)
-                    
-                    if cycle_value > max_output:
-                        dom_cycle[i] = max_output
-                    elif cycle_value < min_output:
-                        dom_cycle[i] = min_output
-                    else:
-                        dom_cycle[i] = cycle_value
-                elif i > 0:
-                    dom_cycle[i] = dom_cycle[i-1]
-            else:
-                if i > 0:
-                    dom_cycle[i] = dom_cycle[i-1]
+            real[i] = 0.0
+        
+        # Quad計算
+        real_1 = real[i-1] if i >= 1 else 0.0
+        quad[i] = real[i] - real_1
+        
+        # QPeak計算
+        q_peak_1 = q_peak[i-1] if i >= 1 else 0.0
+        q_peak[i] = 0.991 * q_peak_1
+        if abs(quad[i]) > q_peak[i]:
+            q_peak[i] = abs(quad[i])
+        
+        # Imag計算
+        if q_peak[i] != 0:
+            imag[i] = quad[i] / q_peak[i]
+        else:
+            imag[i] = 0.0
+        
+        # ホモダイン判別器の実装 - Pineスクリプトと同じロジック
+        # Re := Real * nz(Real[1]) + Imag * nz(Imag[1])
+        # Im := nz(Real[1]) * Imag - Real * nz(Imag[1])
+        imag_1 = imag[i-1] if i >= 1 else 0.0
+        
+        re[i] = real[i] * real_1 + imag[i] * imag_1
+        im[i] = real_1 * imag[i] - real[i] * imag_1
+        
+        # Period計算 - Pineスクリプトと同じ式
+        # Period := Im != 0 and Re != 0 ? 6.28318 / math.abs(Im / Re) : Period
+        if im[i] != 0 and re[i] != 0:
+            period[i] = 6.28318 / abs(im[i] / re[i])
+        else:
+            # 分母がゼロの場合は前回の値を維持
+            period[i] = period[i-1] if i >= 1 else lp_period
+        
+        # Period制限
+        if period[i] < lp_period:
+            period[i] = lp_period
+        if period[i] > hp_period:
+            period[i] = hp_period
+        
+        # DomCycle計算 - スーパースムーサーフィルター
+        period_1 = period[i-1] if i >= 1 else 0.0
+        dom_cycle_1 = dom_cycle[i-1] if i >= 1 else 0.0
+        dom_cycle_2 = dom_cycle[i-2] if i >= 2 else 0.0
+        
+        dom_cycle[i] = c1 * (period[i] + period_1) / 2 + c2 * dom_cycle_1 + c3 * dom_cycle_2
+        
+        # DC計算 - Pineスクリプトと同じロジック
+        cycle_value = np.ceil(dom_cycle[i] * cycle_part)
+        if cycle_value > max_output:
+            dc[i] = max_output
+        elif cycle_value < min_output:
+            dc[i] = min_output
+        else:
+            dc[i] = cycle_value
     
     # 生の周期値と平滑化周期値を保存
     raw_period = np.copy(period)
     smooth_period = np.copy(dom_cycle)
     
-    return dom_cycle, raw_period, smooth_period
+    return dc, raw_period, smooth_period
 
 
 class EhlersHoDyDCE(EhlersDominantCycle):

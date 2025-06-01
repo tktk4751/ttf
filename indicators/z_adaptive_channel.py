@@ -463,7 +463,7 @@ def calculate_simple_adjustment_multiplier_vec(trigger: float) -> float:
         トリガー値が0の時は8.0、トリガー値が1の時は0.5
     """
     # 定数定義
-    MAX_MULTIPLIER = 6.0
+    MAX_MULTIPLIER = 5.0
     MIN_MULTIPLIER = 1.0
     
     # トリガー値をクランプ（0-1の範囲に制限）
@@ -938,39 +938,46 @@ class ZAdaptiveChannel(Indicator):
         Returns:
             np.ndarray: 0-1の範囲のトリガー値
         """
-        if self.multiplier_source == 'cer':
-            # CERの場合は絶対値を取って0-1に正規化
-            if self.cycle_er is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            raw_er = self.cycle_er.calculate(data)
-            trigger_values = np.abs(raw_er)
-            return trigger_values
+        try:
+            data_length = len(data) if hasattr(data, '__len__') else 100
             
-        elif self.multiplier_source == 'x_trend':
-            # Xトレンドインデックスは既に0-1の範囲なのでそのまま使用
-            if self.x_trend_index is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            result = self.x_trend_index.calculate(data)
-            return result.values
-            
-        elif self.multiplier_source == 'z_trend':
-            # Zアダプティブトレンドインデックスも既に0-1の範囲なのでそのまま使用
-            if self.z_trend_index is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            result = self.z_trend_index.calculate(data)
-            return result.values
-            
-        else:
-            # デフォルトはCER
-            if self.cycle_er is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            raw_er = self.cycle_er.calculate(data)
-            trigger_values = np.abs(raw_er)
-            return trigger_values
+            if self.multiplier_source == 'cer':
+                # CERの場合は絶対値を取って0-1に正規化
+                if self.cycle_er is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                raw_er = self.cycle_er.calculate(data)
+                trigger_values = np.abs(raw_er)
+                return trigger_values
+                
+            elif self.multiplier_source == 'x_trend':
+                # Xトレンドインデックスは既に0-1の範囲なのでそのまま使用
+                if self.x_trend_index is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                result = self.x_trend_index.calculate(data)
+                return result.values
+                
+            elif self.multiplier_source == 'z_trend':
+                # Zアダプティブトレンドインデックスも既に0-1の範囲なのでそのまま使用
+                if self.z_trend_index is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                result = self.z_trend_index.calculate(data)
+                return result.values
+                
+            else:
+                # デフォルトはCER
+                if self.cycle_er is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                raw_er = self.cycle_er.calculate(data)
+                trigger_values = np.abs(raw_er)
+                return trigger_values
+        except Exception as e:
+            self.logger.warning(f"トリガー値計算中にエラー: {str(e)}。デフォルト値を使用します。")
+            data_length = len(data) if hasattr(data, '__len__') else 100
+            return np.full(data_length, 0.5)
     
     def _calculate_ma_source_values(self, data) -> np.ndarray:
         """
@@ -980,35 +987,36 @@ class ZAdaptiveChannel(Indicator):
             data: 価格データ
             
         Returns:
-            np.ndarray: MAソース値
+            np.ndarray: ZAdaptiveMAのソース値
         """
-        if self.ma_source == 'cer':
-            # CERの場合はそのまま返す（生の値）
-            if self.cycle_er is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            return self.cycle_er.calculate(data)
+        try:
+            data_length = len(data) if hasattr(data, '__len__') else 100
             
-        elif self.ma_source == 'x_trend':
-            # Xトレンドインデックスの場合
-            if self.x_trend_index is None:
-                # フォールバックとしてCERを使用（利用可能な場合）
-                if self.cycle_er is not None:
-                    self.logger.warning("XTrendIndexが初期化されていません。CERを使用します。")
-                    return self.cycle_er.calculate(data)
-                else:
-                    # 最後の手段: 固定値
-                    return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            result = self.x_trend_index.calculate(data)
-            # XTrendIndexの値は0-1の範囲なので、そのまま返す
-            return result.values
-            
-        else:
-            # デフォルトはCER
-            if self.cycle_er is None:
-                # フォールバック: 固定値を返す
-                return np.zeros(len(data) if hasattr(data, '__len__') else 100)
-            return self.cycle_er.calculate(data)
+            if self.ma_source == 'cer':
+                # CERを使用
+                if self.cycle_er is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                return self.cycle_er.calculate(data)
+                
+            elif self.ma_source == 'x_trend':
+                # Xトレンドインデックスを使用
+                if self.x_trend_index is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                result = self.x_trend_index.calculate(data)
+                return result.values
+                
+            else:
+                # デフォルトはCER
+                if self.cycle_er is None:
+                    # フォールバック: 固定値を返す
+                    return np.full(data_length, 0.5)
+                return self.cycle_er.calculate(data)
+        except Exception as e:
+            self.logger.warning(f"MAソース値計算中にエラー: {str(e)}。デフォルト値を使用します。")
+            data_length = len(data) if hasattr(data, '__len__') else 100
+            return np.full(data_length, 0.5)
 
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
@@ -1030,8 +1038,22 @@ class ZAdaptiveChannel(Indicator):
                 self._cache_keys.append(data_hash)
                 return self._result_cache[data_hash].middle
             
-            # 1. 効率比の計算（CER）- 常に計算（他の計算で使用される可能性があるため）
-            er = self.cycle_er.calculate(data)
+            # 1. 効率比の計算（CER）- 必要な場合のみ計算
+            er = None  # 初期化
+            
+            # multiplier_method='simple'またはma_source='cer'またはmultiplier_source='cer'の場合のみCERを計算
+            if (self.multiplier_method == 'simple' or self.ma_source == 'cer' or 
+                self.multiplier_source == 'cer'):
+                if self.cycle_er is not None:
+                    er = self.cycle_er.calculate(data)
+                else:
+                    # cycle_erがNoneの場合はフォールバック値を使用
+                    data_length = len(data) if hasattr(data, '__len__') else 100
+                    er = np.full(data_length, 0.5)
+            else:
+                # CERが必要ない場合はフォールバック値を使用
+                data_length = len(data) if hasattr(data, '__len__') else 100
+                er = np.full(data_length, 0.5)
             
             # 2. トリガー値の計算（乗数計算用）
             trigger_values = self._calculate_trigger_values(data)
@@ -1176,165 +1198,15 @@ class ZAdaptiveChannel(Indicator):
             self.logger.error(traceback.format_exc())
             return np.array([])
     
-    def get_cycle_rsx_values(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        サイクルRSXの値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: サイクルRSXの値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.cycle_rsx_values
-        except Exception as e:
-            self.logger.error(f"サイクルRSX値取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_cycle_rsx_upper_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        サイクルRSX調整されたアッパーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: サイクルRSX調整されたアッパーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.cycle_rsx_upper_multiplier
-        except Exception as e:
-            self.logger.error(f"サイクルRSXアッパーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_cycle_rsx_lower_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        サイクルRSX調整されたロワーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: サイクルRSX調整されたロワーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.cycle_rsx_lower_multiplier
-        except Exception as e:
-            self.logger.error(f"サイクルRSXロワーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_x_trend_values(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        X-Trend Indexの値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: X-Trend Indexの値
-        """
-        if data is not None:
-            self.calculate(data)
-        
-        data_hash = self._get_data_hash(data) if data is not None else (list(self._result_cache.keys())[-1] if self._result_cache else None)
-        
-        if data_hash and data_hash in self._result_cache:
-            result = self._result_cache[data_hash]
-            return result.x_trend_values
-        else:
-            return np.array([])
-    
-    def get_x_trend_upper_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        X-Trend Index調整されたアッパーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: X-Trend Index調整されたアッパーバンド乗数
-        """
-        if data is not None:
-            self.calculate(data)
-        
-        data_hash = self._get_data_hash(data) if data is not None else (list(self._result_cache.keys())[-1] if self._result_cache else None)
-        
-        if data_hash and data_hash in self._result_cache:
-            result = self._result_cache[data_hash]
-            return result.x_trend_upper_multiplier
-        else:
-            return np.array([])
-    
-    def get_x_trend_lower_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        X-Trend Index調整されたロワーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: X-Trend Index調整されたロワーバンド乗数
-        """
-        if data is not None:
-            self.calculate(data)
-        
-        data_hash = self._get_data_hash(data) if data is not None else (list(self._result_cache.keys())[-1] if self._result_cache else None)
-        
-        if data_hash and data_hash in self._result_cache:
-            result = self._result_cache[data_hash]
-            return result.x_trend_lower_multiplier
-        else:
-            return np.array([])
-    
     def get_bands(self, data: Union[pd.DataFrame, np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        バンド値を取得
+        チャネルバンドを取得
         
         Args:
             data: オプションの価格データ。指定された場合は計算を実行します。
             
         Returns:
-            Tuple[np.ndarray, np.ndarray, np.ndarray]: (中心線, 上限バンド, 下限バンド)のタプル
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: 中心線、上限バンド、下限バンドのタプル
         """
         try:
             if data is not None:
@@ -1348,23 +1220,22 @@ class ZAdaptiveChannel(Indicator):
             if self._cache_keys:
                 result = self._result_cache[self._cache_keys[-1]]
             else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
                 result = next(iter(self._result_cache.values()))
                 
             return result.middle, result.upper, result.lower
         except Exception as e:
-            self.logger.error(f"バンド値取得中にエラー: {str(e)}")
+            self.logger.error(f"バンド取得中にエラー: {str(e)}")
             return np.array([]), np.array([]), np.array([])
     
-    def get_efficiency_ratio(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def get_detailed_result(self, data: Union[pd.DataFrame, np.ndarray] = None) -> ZAdaptiveChannelResult:
         """
-        効率比（CER）の値を取得
+        詳細な計算結果を取得
         
         Args:
             data: オプションの価格データ。指定された場合は計算を実行します。
             
         Returns:
-            np.ndarray: 効率比の値
+            ZAdaptiveChannelResult: 詳細な計算結果
         """
         try:
             if data is not None:
@@ -1372,200 +1243,24 @@ class ZAdaptiveChannel(Indicator):
             
             # 最新の結果を使用
             if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.er
-        except Exception as e:
-            self.logger.error(f"効率比取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    # 後方互換性のため
-    def get_cycle_er(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        効率比（CER）の値を取得（後方互換性のため）
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 効率比の値
-        """
-        return self.get_efficiency_ratio(data)
-    
-    def get_multiplier_trigger(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        乗数計算に使用されたトリガー値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: トリガー値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.multiplier_trigger
-        except Exception as e:
-            self.logger.error(f"トリガー値取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_dynamic_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        動的乗数の値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 動的乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.dynamic_multiplier
-        except Exception as e:
-            self.logger.error(f"動的乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_c_atr(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        CATR値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: CATR値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.c_atr
-        except Exception as e:
-            self.logger.error(f"ZATR取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_dynamic_max_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        動的最大乗数の値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 動的最大乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.max_mult_values
-        except Exception as e:
-            self.logger.error(f"動的最大乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_dynamic_min_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        動的最小乗数の値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 動的最小乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                # 直近に使用されたキャッシュがない場合は最初のキャッシュを使用
-                result = next(iter(self._result_cache.values()))
-                
-            return result.min_mult_values
-        except Exception as e:
-            self.logger.error(f"動的最小乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_upper_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        調整されたアッパーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 調整されたアッパーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
+                # 空の結果を返す
+                empty_array = np.array([])
+                return ZAdaptiveChannelResult(
+                    middle=empty_array,
+                    upper=empty_array,
+                    lower=empty_array,
+                    er=empty_array,
+                    dynamic_multiplier=empty_array,
+                    c_atr=empty_array,
+                    max_mult_values=empty_array,
+                    min_mult_values=empty_array,
+                    multiplier_trigger=empty_array,
+                    x_trend_values=empty_array,
+                    x_trend_upper_multiplier=empty_array,
+                    x_trend_lower_multiplier=empty_array,
+                    upper_multiplier_smoothed=empty_array,
+                    lower_multiplier_smoothed=empty_array
+                )
                 
             # 最新のキャッシュを使用
             if self._cache_keys:
@@ -1573,69 +1268,28 @@ class ZAdaptiveChannel(Indicator):
             else:
                 result = next(iter(self._result_cache.values()))
                 
-            return result.upper_multiplier
+            return result
         except Exception as e:
-            self.logger.error(f"アッパーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_lower_multiplier(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        調整されたロワーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 調整されたロワーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.lower_multiplier
-        except Exception as e:
-            self.logger.error(f"ロワーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_roc_persistence_values(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        ROC継続性の値を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: ROC継続性の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.roc_persistence_values
-        except Exception as e:
-            self.logger.error(f"ROC継続性値取得中にエラー: {str(e)}")
-            return np.array([])
-    
+            self.logger.error(f"詳細結果取得中にエラー: {str(e)}")
+            # エラー時は空の結果を返す
+            empty_array = np.array([])
+            return ZAdaptiveChannelResult(
+                middle=empty_array,
+                upper=empty_array,
+                lower=empty_array,
+                er=empty_array,
+                dynamic_multiplier=empty_array,
+                c_atr=empty_array,
+                max_mult_values=empty_array,
+                min_mult_values=empty_array,
+                multiplier_trigger=empty_array,
+                x_trend_values=empty_array,
+                x_trend_upper_multiplier=empty_array,
+                x_trend_lower_multiplier=empty_array,
+                upper_multiplier_smoothed=empty_array,
+                lower_multiplier_smoothed=empty_array
+            )
+
     def get_roc_directions(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         ROC方向を取得
@@ -1664,114 +1318,3 @@ class ZAdaptiveChannel(Indicator):
         except Exception as e:
             self.logger.error(f"ROC方向取得中にエラー: {str(e)}")
             return np.array([])
-    
-    def get_smoothed_multipliers(self, data: Union[pd.DataFrame, np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        平滑化された乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            Tuple[np.ndarray, np.ndarray]: (平滑化されたアッパーバンド乗数, 平滑化されたロワーバンド乗数)のタプル
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([]), np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.upper_multiplier_smoothed, result.lower_multiplier_smoothed
-        except Exception as e:
-            self.logger.error(f"平滑化された乗数取得中にエラー: {str(e)}")
-            return np.array([]), np.array([])
-    
-    def get_upper_multiplier_smoothed(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        平滑化されたアッパーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 平滑化されたアッパーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.upper_multiplier_smoothed
-        except Exception as e:
-            self.logger.error(f"平滑化アッパーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def get_lower_multiplier_smoothed(self, data: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
-        """
-        平滑化されたロワーバンド乗数を取得
-        
-        Args:
-            data: オプションの価格データ。指定された場合は計算を実行します。
-            
-        Returns:
-            np.ndarray: 平滑化されたロワーバンド乗数の値
-        """
-        try:
-            if data is not None:
-                self.calculate(data)
-            
-            # 最新の結果を使用
-            if not self._result_cache:
-                return np.array([])
-                
-            # 最新のキャッシュを使用
-            if self._cache_keys:
-                result = self._result_cache[self._cache_keys[-1]]
-            else:
-                result = next(iter(self._result_cache.values()))
-                
-            return result.lower_multiplier_smoothed
-        except Exception as e:
-            self.logger.error(f"平滑化ロワーバンド乗数取得中にエラー: {str(e)}")
-            return np.array([])
-    
-    def reset(self) -> None:
-        """
-        状態をリセット
-        """
-        # キャッシュをクリア
-        self._result_cache = {}
-        self._cache_keys = []
-        
-        # 依存オブジェクトもリセット（存在する場合のみ）
-        if self.cycle_er is not None:
-            self.cycle_er.reset()
-        if self.x_trend_index is not None:
-            self.x_trend_index.reset()
-        if self.z_trend_index is not None:
-            self.z_trend_index.reset()
-        self._z_adaptive_ma.reset()
-        self._c_atr.reset()
-        
-        # 乗数平滑化インジケーターもリセット
-        if self._multiplier_smoother_upper is not None:
-            self._multiplier_smoother_upper.reset()
-        if self._multiplier_smoother_lower is not None:
-            self._multiplier_smoother_lower.reset() 

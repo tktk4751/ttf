@@ -34,6 +34,22 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
         max_min_multiplier: float = 1.5,    # 最小乗数の最大値
         min_min_multiplier: float = 0.5,    # 最小乗数の最小値
         
+        # 乗数計算方法選択
+        multiplier_method: str = 'simple_adjustment',  # 'adaptive', 'simple', 'simple_adjustment'
+        
+        # トリガーソース選択
+        multiplier_source: str = 'cer',  # 'cer', 'x_trend', 'z_trend'
+        ma_source: str = 'x_trend',      # ZAdaptiveMAに渡すソース（'cer', 'x_trend'）
+        
+        # X-Trend Index調整の有効化
+        use_x_trend_adjustment: bool = True,
+        
+        # 乗数平滑化オプション
+        multiplier_smoothing_method: str = 'none',  # 'none', 'alma', 'hma', 'hyper', 'ema'
+        multiplier_smoothing_period: int = 4,        # 平滑化期間
+        alma_offset: float = 0.85,                   # ALMA用オフセット
+        alma_sigma: float = 6,                       # ALMA用シグマ
+        
         # CERパラメータ
         detector_type: str = 'phac_e',     # CER用ドミナントサイクル検出器タイプ
         cycle_part: float = 0.5,           # CER用サイクル部分
@@ -47,7 +63,41 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
         
         # ZAdaptiveMA用パラメータ
         fast_period: int = 2,             # 速い移動平均の期間（固定値）
-        slow_period: int = 30             # 遅い移動平均の期間（固定値）
+        slow_period: int = 30,            # 遅い移動平均の期間（固定値）
+        
+        # Xトレンドインデックスパラメータ
+        x_detector_type: str = 'dudi_e',
+        x_cycle_part: float = 0.7,
+        x_max_cycle: int = 120,
+        x_min_cycle: int = 5,
+        x_max_output: int = 55,
+        x_min_output: int = 8,
+        x_smoother_type: str = 'alma',
+        
+        # 固定しきい値のパラメータ（XTrendIndex用）
+        fixed_threshold: float = 0.65,
+        
+        # ROC Persistenceパラメータ
+        roc_detector_type: str = 'hody_e',
+        roc_max_persistence_periods: int = 89,
+        roc_smooth_persistence: bool = False,
+        roc_persistence_smooth_period: int = 3,
+        roc_smooth_roc: bool = True,
+        roc_alma_period: int = 5,
+        roc_alma_offset: float = 0.85,
+        roc_alma_sigma: float = 6,
+        roc_signal_threshold: float = 0.0,
+        
+        # Cycle RSXパラメータ
+        cycle_rsx_detector_type: str = 'dudi_e',
+        cycle_rsx_lp_period: int = 5,
+        cycle_rsx_hp_period: int = 89,
+        cycle_rsx_cycle_part: float = 0.4,
+        cycle_rsx_max_cycle: int = 55,
+        cycle_rsx_min_cycle: int = 5,
+        cycle_rsx_max_output: int = 34,
+        cycle_rsx_min_output: int = 3,
+        cycle_rsx_src_type: str = 'hlc3'
     ):
         """初期化"""
         super().__init__("ZASimpleSignalGenerator")
@@ -64,6 +114,22 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
             'max_min_multiplier': max_min_multiplier,
             'min_min_multiplier': min_min_multiplier,
             
+            # 乗数計算方法選択
+            'multiplier_method': multiplier_method,
+            
+            # トリガーソース選択
+            'multiplier_source': multiplier_source,
+            'ma_source': ma_source,
+            
+            # X-Trend Index調整の有効化
+            'use_x_trend_adjustment': use_x_trend_adjustment,
+            
+            # 乗数平滑化オプション
+            'multiplier_smoothing_method': multiplier_smoothing_method,
+            'multiplier_smoothing_period': multiplier_smoothing_period,
+            'alma_offset': alma_offset,
+            'alma_sigma': alma_sigma,
+            
             # CERパラメータ
             'detector_type': detector_type,
             'cycle_part': cycle_part,
@@ -77,7 +143,41 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
             
             # ZAdaptiveMA用パラメータ
             'fast_period': fast_period,
-            'slow_period': slow_period
+            'slow_period': slow_period,
+            
+            # Xトレンドインデックスパラメータ
+            'x_detector_type': x_detector_type,
+            'x_cycle_part': x_cycle_part,
+            'x_max_cycle': x_max_cycle,
+            'x_min_cycle': x_min_cycle,
+            'x_max_output': x_max_output,
+            'x_min_output': x_min_output,
+            'x_smoother_type': x_smoother_type,
+            
+            # 固定しきい値のパラメータ（XTrendIndex用）
+            'fixed_threshold': fixed_threshold,
+            
+            # ROC Persistenceパラメータ
+            'roc_detector_type': roc_detector_type,
+            'roc_max_persistence_periods': roc_max_persistence_periods,
+            'roc_smooth_persistence': roc_smooth_persistence,
+            'roc_persistence_smooth_period': roc_persistence_smooth_period,
+            'roc_smooth_roc': roc_smooth_roc,
+            'roc_alma_period': roc_alma_period,
+            'roc_alma_offset': roc_alma_offset,
+            'roc_alma_sigma': roc_alma_sigma,
+            'roc_signal_threshold': roc_signal_threshold,
+            
+            # Cycle RSXパラメータ
+            'cycle_rsx_detector_type': cycle_rsx_detector_type,
+            'cycle_rsx_lp_period': cycle_rsx_lp_period,
+            'cycle_rsx_hp_period': cycle_rsx_hp_period,
+            'cycle_rsx_cycle_part': cycle_rsx_cycle_part,
+            'cycle_rsx_max_cycle': cycle_rsx_max_cycle,
+            'cycle_rsx_min_cycle': cycle_rsx_min_cycle,
+            'cycle_rsx_max_output': cycle_rsx_max_output,
+            'cycle_rsx_min_output': cycle_rsx_min_output,
+            'cycle_rsx_src_type': cycle_rsx_src_type
         }
         
         # ZAdaptiveChannelブレイクアウトシグナルの初期化
@@ -93,6 +193,22 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
                 'max_min_multiplier': max_min_multiplier,
                 'min_min_multiplier': min_min_multiplier,
                 
+                # 乗数計算方法選択
+                'multiplier_method': multiplier_method,
+                
+                # トリガーソース選択
+                'multiplier_source': multiplier_source,
+                'ma_source': ma_source,
+                
+                # X-Trend Index調整の有効化
+                'use_x_trend_adjustment': use_x_trend_adjustment,
+                
+                # 乗数平滑化オプション
+                'multiplier_smoothing_method': multiplier_smoothing_method,
+                'multiplier_smoothing_period': multiplier_smoothing_period,
+                'alma_offset': alma_offset,
+                'alma_sigma': alma_sigma,
+                
                 # CERパラメータ
                 'detector_type': detector_type,
                 'cycle_part': cycle_part,
@@ -106,7 +222,41 @@ class ZASimpleSignalGenerator(BaseSignalGenerator):
                 
                 # ZAdaptiveMA用パラメータ
                 'fast_period': fast_period,
-                'slow_period': slow_period
+                'slow_period': slow_period,
+                
+                # Xトレンドインデックスパラメータ
+                'x_detector_type': x_detector_type,
+                'x_cycle_part': x_cycle_part,
+                'x_max_cycle': x_max_cycle,
+                'x_min_cycle': x_min_cycle,
+                'x_max_output': x_max_output,
+                'x_min_output': x_min_output,
+                'x_smoother_type': x_smoother_type,
+                
+                # 固定しきい値のパラメータ（XTrendIndex用）
+                'fixed_threshold': fixed_threshold,
+                
+                # ROC Persistenceパラメータ
+                'roc_detector_type': roc_detector_type,
+                'roc_max_persistence_periods': roc_max_persistence_periods,
+                'roc_smooth_persistence': roc_smooth_persistence,
+                'roc_persistence_smooth_period': roc_persistence_smooth_period,
+                'roc_smooth_roc': roc_smooth_roc,
+                'roc_alma_period': roc_alma_period,
+                'roc_alma_offset': roc_alma_offset,
+                'roc_alma_sigma': roc_alma_sigma,
+                'roc_signal_threshold': roc_signal_threshold,
+                
+                # Cycle RSXパラメータ
+                'cycle_rsx_detector_type': cycle_rsx_detector_type,
+                'cycle_rsx_lp_period': cycle_rsx_lp_period,
+                'cycle_rsx_hp_period': cycle_rsx_hp_period,
+                'cycle_rsx_cycle_part': cycle_rsx_cycle_part,
+                'cycle_rsx_max_cycle': cycle_rsx_max_cycle,
+                'cycle_rsx_min_cycle': cycle_rsx_min_cycle,
+                'cycle_rsx_max_output': cycle_rsx_max_output,
+                'cycle_rsx_min_output': cycle_rsx_min_output,
+                'cycle_rsx_src_type': cycle_rsx_src_type
             }
         )
         

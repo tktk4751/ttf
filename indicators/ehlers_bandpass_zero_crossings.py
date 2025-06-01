@@ -4,28 +4,26 @@
 from typing import Union, Optional, Tuple
 import numpy as np
 import pandas as pd
-from numba import jit, prange, float64, int32
+from numba import jit, float64
 
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
 
 
 @jit(nopython=True)
-def calculate_dudi_dce_numba(
+def calculate_bandpass_zero_crossings_numba(
     price: np.ndarray,
-    lp_period: int = 13,
-    hp_period: int = 233,
-    cycle_part: float = 0.5,
-    max_output: int = 144,
-    min_output: int = 5
+    bandwidth: float = 0.6,
+    center_period: float = 15.0,
+    max_output: int = 34,
+    min_output: int = 1
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    バンドパスフィルターを使った拡張二重微分アルゴリズムによるドミナントサイクル検出のNumba実装
+    バンドパスゼロクロッシングドミナントサイクル検出のNumba実装
     
     Args:
         price: 価格データの配列
-        lp_period: ローパスフィルターの期間
-        hp_period: ハイパスフィルターの期間
-        cycle_part: サイクル部分の倍率
+        bandwidth: バンド幅
+        center_period: 中心周期
         max_output: 最大出力値
         min_output: 最小出力値
         
@@ -35,136 +33,105 @@ def calculate_dudi_dce_numba(
     n = len(price)
     pi = 2 * np.arcsin(1.0)
     
-    # 初期化 - Pineスクリプトと同じ形式
-    alpha1 = 0.0
+    # 初期化
     hp = np.zeros(n)
-    a1 = 0.0
-    b1 = 0.0
-    c1 = 0.0
-    c2 = 0.0
-    c3 = 0.0
-    filt = np.zeros(n)
-    i_peak = np.zeros(n)
-    q_peak = np.zeros(n)
+    bp = np.zeros(n)
+    peak = np.zeros(n)
     real = np.zeros(n)
-    quad = np.zeros(n)
-    imag = np.zeros(n)
-    i_dot = np.zeros(n)
-    q_dot = np.zeros(n)
-    period = np.zeros(n)
-    dom_cycle = np.zeros(n)
     dc = np.zeros(n)
+    counter = np.zeros(n)
+    dom_cycle = np.zeros(n)
     
-    # メインループ
+    # フィルター係数の計算
+    alpha2 = (np.cos(0.25 * bandwidth * 2 * pi / center_period) + 
+              np.sin(0.25 * bandwidth * 2 * pi / center_period) - 1) / np.cos(0.25 * bandwidth * 2 * pi / center_period)
+    
+    beta1 = np.cos(2 * pi / center_period)
+    gamma1 = 1 / np.cos(2 * pi * bandwidth / center_period)
+    alpha1 = gamma1 - np.sqrt(gamma1 * gamma1 - 1)
+    
     for i in range(n):
-        # Highpass filter cyclic components whose periods are shorter than HPPeriod bars
-        alpha1 = (np.cos(0.707 * 2 * pi / hp_period) + np.sin(0.707 * 2 * pi / hp_period) - 1) / np.cos(0.707 * 2 * pi / hp_period)
+        # ハイパスフィルター
+        if i >= 1:
+            hp[i] = (1 + alpha2 / 2) * (price[i] - price[i-1]) + (1 - alpha2) * hp[i-1]
+        else:
+            hp[i] = 0.0
         
-        # HP計算
-        price_1 = price[i-1] if i >= 1 else 0.0
-        price_2 = price[i-2] if i >= 2 else 0.0
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        hp_2 = hp[i-2] if i >= 2 else 0.0
+        # バンドパスフィルター
+        if i == 0 or i == 1:
+            bp[i] = 0.0
+        elif i >= 2:
+            bp[i] = 0.5 * (1 - alpha1) * (hp[i] - hp[i-2]) + beta1 * (1 + alpha1) * bp[i-1] - alpha1 * bp[i-2]
         
-        hp[i] = ((1 - alpha1 / 2) * (1 - alpha1 / 2) * (price[i] - 2 * price_1 + price_2) + 
-                 2 * (1 - alpha1) * hp_1 - (1 - alpha1) * (1 - alpha1) * hp_2)
-        
-        # Smooth with a Super Smoother Filter
-        a1 = np.exp(-1.414 * 3.14159 / lp_period)  # PineスクリプトでのpiValue（3.14159）を使用
-        b1 = 2 * a1 * np.cos(1.414 * pi / lp_period)  # ここはpiを使用
-        c2 = b1
-        c3 = -a1 * a1
-        c1 = 1 - c2 - c3
-        
-        # Filt計算
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        filt_1 = filt[i-1] if i >= 1 else 0.0
-        filt_2 = filt[i-2] if i >= 2 else 0.0
-        
-        filt[i] = c1 * (hp[i] + hp_1) / 2 + c2 * filt_1 + c3 * filt_2
-        
-        # IPeak計算
-        i_peak_1 = i_peak[i-1] if i >= 1 else 0.0
-        i_peak[i] = 0.991 * i_peak_1
-        if abs(filt[i]) > i_peak[i]:
-            i_peak[i] = abs(filt[i])
+        # ピーク計算
+        if i > 0:
+            peak[i] = 0.991 * peak[i-1]
+            if np.abs(bp[i]) > peak[i]:
+                peak[i] = np.abs(bp[i])
+        else:
+            peak[i] = 0.0
         
         # Real計算
-        if i_peak[i] != 0:
-            real[i] = filt[i] / i_peak[i]
+        if peak[i] != 0:
+            real[i] = bp[i] / peak[i]
         else:
             real[i] = 0.0
         
-        # Quad計算
-        real_1 = real[i-1] if i >= 1 else 0.0
-        quad[i] = real[i] - real_1
-        
-        # QPeak計算
-        q_peak_1 = q_peak[i-1] if i >= 1 else 0.0
-        q_peak[i] = 0.991 * q_peak_1
-        if abs(quad[i]) > q_peak[i]:
-            q_peak[i] = abs(quad[i])
-        
-        # Imag計算
-        if q_peak[i] != 0:
-            imag[i] = quad[i] / q_peak[i]
+        # ドミナントサイクル計算
+        if i > 0:
+            dc[i] = dc[i-1]
+            counter[i] = counter[i-1] + 1
         else:
-            imag[i] = 0.0
+            dc[i] = 6.0
+            counter[i] = 1
         
-        # IDot, QDot計算
-        i_dot[i] = real[i] - real_1
-        imag_1 = imag[i-1] if i >= 1 else 0.0
-        q_dot[i] = imag[i] - imag_1
+        # DC制限
+        if dc[i] < 6:
+            dc[i] = 6.0
         
-        # Period計算 - Pineスクリプトと同じ式
-        denominator = real[i] * q_dot[i] - imag[i] * i_dot[i]
-        if denominator != 0:
-            period[i] = 6.28318 * (real[i] * real[i] + imag[i] * imag[i]) / (-real[i] * q_dot[i] + imag[i] * i_dot[i])
-        else:
-            # 分母がゼロの場合は前回の値を維持
-            period[i] = period[i-1] if i >= 1 else lp_period
+        # ゼロクロッシング検出
+        zero_crossing = False
+        if i > 0:
+            # crossover(Real, 0) or crossunder(Real, 0)
+            if (real[i-1] <= 0 and real[i] > 0) or (real[i-1] >= 0 and real[i] < 0):
+                zero_crossing = True
         
-        # Period制限
-        if period[i] < lp_period:
-            period[i] = lp_period
-        if period[i] > hp_period:
-            period[i] = hp_period
+        if zero_crossing:
+            new_dc = 2 * counter[i]
+            
+            # 変化制限を適用
+            if i > 0:
+                if new_dc > 1.25 * dc[i-1]:
+                    new_dc = 1.25 * dc[i-1]
+                elif new_dc < 0.8 * dc[i-1]:
+                    new_dc = 0.8 * dc[i-1]
+            
+            dc[i] = new_dc
+            counter[i] = 0
         
-        # DomCycle計算 - スーパースムーサーフィルター
-        period_1 = period[i-1] if i >= 1 else 0.0
-        dom_cycle_1 = dom_cycle[i-1] if i >= 1 else 0.0
-        dom_cycle_2 = dom_cycle[i-2] if i >= 2 else 0.0
-        
-        dom_cycle[i] = c1 * (period[i] + period_1) / 2 + c2 * dom_cycle_1 + c3 * dom_cycle_2
-        
-        # DC計算 - Pineスクリプトと同じロジック
-        cycle_value = np.ceil(dom_cycle[i] * cycle_part)
-        if cycle_value > max_output:
-            dc[i] = max_output
-        elif cycle_value < min_output:
-            dc[i] = min_output
-        else:
-            dc[i] = cycle_value
+        # 最終出力計算
+        final_dc = int(np.round(max(min_output, min(dc[i], max_output))))
+        dom_cycle[i] = final_dc
     
-    # 生の周期値と平滑化周期値を保存
-    raw_period = np.copy(period)
+    # 生の周期値と平滑化周期値
+    raw_period = np.copy(dc)
     smooth_period = np.copy(dom_cycle)
     
-    return dc, raw_period, smooth_period
+    return dom_cycle, raw_period, smooth_period
 
 
-class EhlersDuDiDCE(EhlersDominantCycle):
+class EhlersBandpassZeroCrossings(EhlersDominantCycle):
     """
-    エーラーズの拡張二重微分（Dual Differentiator with Bandpass Filter）アルゴリズム
+    エーラーズのバンドパスゼロクロッシングドミナントサイクル検出器
     
-    このアルゴリズムはバンドパスフィルターを使用して価格データをフィルタリングし、
-    二重微分法を使用して周期を検出します。バンドパスフィルターの使用により
-    ノイズ除去性能が向上しています。
+    このアルゴリズムはバンドパスフィルターのゼロクロッシングを使用してドミナントサイクルを定義します。
+    バンドパスフィルターを通じて特定の周波数帯域を抽出し、ゼロクロッシングでサイクルを検出します。
     
     特徴:
-    - バンドパスフィルターによる高精度なノイズ除去
-    - 二重微分による高感度な周期検出（トレンド変化に敏感）
-    - 適応型フィルターでさまざまな市場状況に対応
+    - バンドパスフィルターによる周波数帯域の抽出
+    - ゼロクロッシング検出による正確なサイクル測定
+    - ピーク正規化による振幅の安定化
+    - 適応的な変化制限による安定性
     """
     
     # 許可されるソースタイプのリスト
@@ -172,9 +139,8 @@ class EhlersDuDiDCE(EhlersDominantCycle):
     
     def __init__(
         self,
-        lp_period: int = 10,
-        hp_period: int = 48,
-        cycle_part: float = 0.5,
+        bandwidth: float = 0.6,
+        center_period: float = 15.0,
         max_output: int = 34,
         min_output: int = 1,
         src_type: str = 'close'
@@ -183,9 +149,8 @@ class EhlersDuDiDCE(EhlersDominantCycle):
         コンストラクタ
         
         Args:
-            lp_period: ローパスフィルターの期間（デフォルト: 10）
-            hp_period: ハイパスフィルターの期間（デフォルト: 48）
-            cycle_part: サイクル部分の倍率（デフォルト: 0.5）
+            bandwidth: バンド幅（デフォルト: 0.6）
+            center_period: 中心周期（デフォルト: 15.0）
             max_output: 最大出力値（デフォルト: 34）
             min_output: 最小出力値（デフォルト: 1）
             src_type: ソースタイプ ('close', 'hlc3', 'hl2', 'ohlc4')
@@ -195,15 +160,15 @@ class EhlersDuDiDCE(EhlersDominantCycle):
                 - 'ohlc4': (始値 + 高値 + 安値 + 終値) / 4
         """
         super().__init__(
-            f"EhlersDuDiDCE({lp_period}, {hp_period}, {cycle_part})",
-            cycle_part,
-            hp_period,  # max_cycle
-            lp_period,  # min_cycle
+            f"EhlersBandpassZeroCrossings({bandwidth}, {center_period})",
+            0.5,  # cycle_part (デフォルト値)
+            max_output,  # max_cycle
+            min_output,  # min_cycle
             max_output,
             min_output
         )
-        self.lp_period = lp_period
-        self.hp_period = hp_period
+        self.bandwidth = bandwidth
+        self.center_period = center_period
         
         # ソースタイプを保存
         self.src_type = src_type.lower()
@@ -276,7 +241,7 @@ class EhlersDuDiDCE(EhlersDominantCycle):
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        拡張二重微分アルゴリズムを使用してドミナントサイクルを計算する
+        バンドパスゼロクロッシングアルゴリズムを使用してドミナントサイクルを計算する
         
         Args:
             data: 価格データ（DataFrameまたはNumPy配列）
@@ -297,11 +262,10 @@ class EhlersDuDiDCE(EhlersDominantCycle):
             price = self.calculate_source_values(data, self.src_type)
             
             # Numba関数を使用してドミナントサイクルを計算
-            dom_cycle, raw_period, smooth_period = calculate_dudi_dce_numba(
+            dom_cycle, raw_period, smooth_period = calculate_bandpass_zero_crossings_numba(
                 price,
-                self.lp_period,
-                self.hp_period,
-                self.cycle_part,
+                self.bandwidth,
+                self.center_period,
                 self.max_output,
                 self.min_output
             )
@@ -320,5 +284,5 @@ class EhlersDuDiDCE(EhlersDominantCycle):
             import traceback
             error_msg = str(e)
             stack_trace = traceback.format_exc()
-            self.logger.error(f"EhlersDuDiDCE計算中にエラー: {error_msg}\n{stack_trace}")
+            self.logger.error(f"EhlersBandpassZeroCrossings計算中にエラー: {error_msg}\n{stack_trace}")
             return np.array([]) 

@@ -175,7 +175,7 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         unit: float = 1.0,              # 基本単位係数（デフォルト1.0）
         max_position_percent: float = 0.3,  # 最大ポジションサイズの比率（デフォルト50%）
         leverage: float = 1.0,          # レバレッジ（デフォルト1倍）
-        catr_detector_type: str = 'phac_e',  # CATRの検出器タイプ
+        catr_detector_type: str = 'cycle_period2',  # CATRの検出器タイプ
         catr_max_period: int = 89,      # CATR最大期間
         catr_min_period: int = 13,       # CATR最小期間
         apply_dynamic_adjustment: bool = True,  # 動的調整を適用するか
@@ -185,8 +185,8 @@ class CATRPositionSizing(PositionSizing, IPositionManager):
         trigger_type: str = 'x_trend',      # 'cer', 'x_trend', 'cycle_chop'
         
         # 動的ATR乗数のパラメータ
-        max_multiplier: float = 5.0,         # 最大ATR乗数
-        min_multiplier: float = 2.0,         # 最小ATR乗数
+        max_multiplier: float = 6.0,         # 最大ATR乗数
+        min_multiplier: float = 3.0,         # 最小ATR乗数
         
         # 動的リスク比率のパラメータ
         max_risk_ratio: float = 0.02,   # 最大リスク比率（2%）

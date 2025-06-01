@@ -1,30 +1,30 @@
+
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from typing import Union, Optional, Tuple
 import numpy as np
 import pandas as pd
-from numba import jit, prange, float64, int32
+from numba import jit, float64
 
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
 
 
 @jit(nopython=True)
-def calculate_phac_dce_numba(
+def calculate_cycle_period_numba(
     price: np.ndarray,
-    lp_period: int = 10,
-    hp_period: int = 48,
+    alpha: float = 0.07,
     cycle_part: float = 0.5,
     max_output: int = 34,
     min_output: int = 1
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    バンドパスフィルターを使った拡張位相累積アルゴリズムによるドミナントサイクル検出のNumba実装
+    サイクル期間ドミナントサイクル検出のNumba実装
     
     Args:
         price: 価格データの配列
-        lp_period: ローパスフィルターの期間
-        hp_period: ハイパスフィルターの期間
+        alpha: アルファ係数
         cycle_part: サイクル部分の倍率
         max_output: 最大出力値
         min_output: 最小出力値
@@ -35,164 +35,112 @@ def calculate_phac_dce_numba(
     n = len(price)
     pi = 2 * np.arcsin(1.0)
     
-    # 初期化 - Pineスクリプトと同じ形式
-    alpha1 = 0.0
-    hp = np.zeros(n)
-    a1 = 0.0
-    b1 = 0.0
-    c1 = 0.0
-    c2 = 0.0
-    c3 = 0.0
-    filt = np.zeros(n)
-    i_peak = np.zeros(n)
-    q_peak = np.zeros(n)
-    real = np.zeros(n)
-    quad = np.zeros(n)
-    imag = np.zeros(n)
-    phase = np.zeros(n)
+    # 初期化
+    smooth = np.zeros(n)
+    cycle = np.zeros(n)
+    q1 = np.zeros(n)
+    i1 = np.zeros(n)
     delta_phase = np.zeros(n)
-    inst_period = np.zeros(n)
-    phase_sum = 0.0
-    dom_cycle = np.zeros(n)
+    median_delta = np.zeros(n)
     dc = np.zeros(n)
+    inst_period = np.zeros(n)
+    period = np.zeros(n)
+    dom_cycle = np.zeros(n)
     
-    # メインループ
     for i in range(n):
-        # Highpass filter cyclic components whose periods are shorter than HPPeriod bars
-        alpha1 = (np.cos(0.707 * 2 * pi / hp_period) + np.sin(0.707 * 2 * pi / hp_period) - 1) / np.cos(0.707 * 2 * pi / hp_period)
-        
-        # HP計算
-        price_1 = price[i-1] if i >= 1 else 0.0
-        price_2 = price[i-2] if i >= 2 else 0.0
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        hp_2 = hp[i-2] if i >= 2 else 0.0
-        
-        hp[i] = ((1 - alpha1 / 2) * (1 - alpha1 / 2) * (price[i] - 2 * price_1 + price_2) + 
-                 2 * (1 - alpha1) * hp_1 - (1 - alpha1) * (1 - alpha1) * hp_2)
-        
-        # Smooth with a Super Smoother Filter
-        a1 = np.exp(-1.414 * 3.14159 / lp_period)  # PineスクリプトでのpiValue（3.14159）を使用
-        b1 = 2 * a1 * np.cos(1.414 * pi / lp_period)  # ここはpiを使用
-        c2 = b1
-        c3 = -a1 * a1
-        c1 = 1 - c2 - c3
-        
-        # Filt計算
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        filt_1 = filt[i-1] if i >= 1 else 0.0
-        filt_2 = filt[i-2] if i >= 2 else 0.0
-        
-        filt[i] = c1 * (hp[i] + hp_1) / 2 + c2 * filt_1 + c3 * filt_2
-        
-        # IPeak計算
-        i_peak_1 = i_peak[i-1] if i >= 1 else 0.0
-        i_peak[i] = 0.991 * i_peak_1
-        if abs(filt[i]) > i_peak[i]:
-            i_peak[i] = abs(filt[i])
-        
-        # Real計算
-        if i_peak[i] != 0:
-            real[i] = filt[i] / i_peak[i]
+        # スムーズ化
+        if i >= 3:
+            smooth[i] = (price[i] + 2 * price[i-1] + 2 * price[i-2] + price[i-3]) / 6.0
+        elif i >= 1:
+            smooth[i] = (price[i] + price[i-1]) / 2.0
         else:
-            real[i] = 0.0
+            smooth[i] = price[i]
         
-        # Quad計算
-        real_1 = real[i-1] if i >= 1 else 0.0
-        quad[i] = real[i] - real_1
-        
-        # QPeak計算
-        q_peak_1 = q_peak[i-1] if i >= 1 else 0.0
-        q_peak[i] = 0.991 * q_peak_1
-        if abs(quad[i]) > q_peak[i]:
-            q_peak[i] = abs(quad[i])
-        
-        # Imag計算
-        if q_peak[i] != 0:
-            imag[i] = quad[i] / q_peak[i]
+        # サイクル計算
+        if i < 7:
+            if i >= 2:
+                cycle[i] = (price[i] - 2 * price[i-1] + price[i-2]) / 4.0
+            else:
+                cycle[i] = 0.0
         else:
-            imag[i] = 0.0
+            cycle_val = (1 - 0.5 * alpha) * (1 - 0.5 * alpha) * (smooth[i] - 2 * smooth[i-1] + smooth[i-2])
+            cycle_val += 2 * (1 - alpha) * cycle[i-1] - (1 - alpha) * (1 - alpha) * cycle[i-2]
+            cycle[i] = cycle_val
         
-        # 位相計算 - Pineスクリプトと同じロジック
-        # Use atan to compute the current phase
-        if abs(real[i]) > 0:
-            phase[i] = np.arctan(abs(imag[i] / real[i]))
-        # else: phase[i]は前回の値を維持（初期値は0）
+        # Q1とI1の計算
+        if i >= 6:
+            coeff_factor = 0.5 + 0.08 * inst_period[i-1] if i > 0 else 0.58
+            q1[i] = (0.0962 * cycle[i] + 0.5769 * cycle[i-2] - 0.5769 * cycle[i-4] - 0.0962 * cycle[i-6]) * coeff_factor
+            i1[i] = cycle[i-3]
         
-        # Resolve the atan ambiguity
-        if real[i] < 0 and imag[i] > 0:
-            phase[i] = pi - phase[i]
-        elif real[i] < 0 and imag[i] < 0:
-            phase[i] = pi + phase[i]
-        elif real[i] > 0 and imag[i] < 0:
-            phase[i] = 2 * pi - phase[i]
+        # DeltaPhase計算
+        if i > 0 and q1[i] != 0 and q1[i-1] != 0:
+            numerator = i1[i] / q1[i] - i1[i-1] / q1[i-1]
+            denominator = 1 + i1[i] * i1[i-1] / (q1[i] * q1[i-1])
+            if denominator != 0:
+                delta_phase[i] = numerator / denominator
+            else:
+                delta_phase[i] = delta_phase[i-1] if i > 0 else 0.0
+            
+            # 範囲制限
+            if delta_phase[i] < 0.1:
+                delta_phase[i] = 0.1
+            elif delta_phase[i] > 1.1:
+                delta_phase[i] = 1.1
+        elif i > 0:
+            delta_phase[i] = delta_phase[i-1]
         
-        # Convert radians into degrees - Pineスクリプトの式： Phase /= pi * 180
-        # これは Phase = Phase / (pi * 180) ではなく、Phase = Phase * 180 / pi の意味
-        phase[i] = phase[i] * 180 / pi
-        
-        # Compute a differential phase, resolve phase wraparound, and limit delta phase errors
-        phase_1 = phase[i-1] if i >= 1 else 0.0
-        delta_phase[i] = phase_1 - phase[i]
-        
-        # 位相ラップアラウンドの処理
-        if phase_1 < 90 and phase[i] > 270:  # pi/2は90度、3*pi/2は270度
-            delta_phase[i] = 360 + phase_1 - phase[i]  # 2*piは360度
-        
-        # Limit DeltaPhase to be within the bounds of LPPeriod bar and HPPeriod bar cycles
-        if delta_phase[i] < lp_period:
-            delta_phase[i] = lp_period
-        if delta_phase[i] > hp_period:
-            delta_phase[i] = hp_period
-        
-        # Sum DeltaPhases to reach 360 degrees. The sum is the instantaneous period.
-        inst_period[i] = 0.0
-        phase_sum = 0.0
-        for count in range(41):  # 0 to 40
-            if i - count >= 0:
-                phase_sum += delta_phase[i - count]
-                if phase_sum > 360 and inst_period[i] == 0:
-                    inst_period[i] = count
-                    break
-        
-        # Resolve Instantaneous Period errors and smooth
-        if inst_period[i] == 0:
-            inst_period[i] = inst_period[i-1] if i >= 1 else 0.0
-        
-        # DomCycle計算 - スーパースムーサーフィルター
-        inst_period_1 = inst_period[i-1] if i >= 1 else 0.0
-        dom_cycle_1 = dom_cycle[i-1] if i >= 1 else 0.0
-        dom_cycle_2 = dom_cycle[i-2] if i >= 2 else 0.0
-        
-        dom_cycle[i] = c1 * (inst_period[i] + inst_period_1) / 2 + c2 * dom_cycle_1 + c3 * dom_cycle_2
-        
-        # DC計算 - Pineスクリプトと同じロジック
-        cycle_value = np.ceil(dom_cycle[i] * cycle_part)
-        if cycle_value > max_output:
-            dc[i] = max_output
-        elif cycle_value < min_output:
-            dc[i] = min_output
+        # メディアンデルタ計算（5期間のメディアン）
+        if i >= 4:
+            # 簡易メディアン計算（5要素）
+            values = np.array([delta_phase[i-4], delta_phase[i-3], delta_phase[i-2], delta_phase[i-1], delta_phase[i]])
+            values.sort()
+            median_delta[i] = values[2]  # 中央値
         else:
-            dc[i] = cycle_value
+            median_delta[i] = delta_phase[i]
+        
+        # DC計算
+        if median_delta[i] == 0.0:
+            dc[i] = 15.0
+        else:
+            dc[i] = 6.28318 / median_delta[i] + 0.5
+        
+        # InstPeriod計算
+        if i > 0:
+            inst_period[i] = 0.33 * dc[i] + 0.67 * inst_period[i-1]
+        else:
+            inst_period[i] = dc[i]
+        
+        # Period計算
+        if i > 0:
+            period[i] = 0.15 * inst_period[i] + 0.85 * period[i-1]
+        else:
+            period[i] = inst_period[i]
+        
+        # 最終出力計算
+        int_period = int(np.round(period[i] * cycle_part))
+        if int_period > max_output:
+            dom_cycle[i] = max_output
+        elif int_period < min_output:
+            dom_cycle[i] = min_output
+        else:
+            dom_cycle[i] = int_period
     
-    # 生の周期値と平滑化周期値を保存
-    raw_period = np.copy(inst_period)
-    smooth_period = np.copy(dom_cycle)
-    
-    return dc, raw_period, smooth_period
+    return dom_cycle, inst_period, period
 
 
-class EhlersPhAcDCE(EhlersDominantCycle):
+class EhlersCyclePeriod(EhlersDominantCycle):
     """
-    エーラーズの拡張位相累積（Phase Accumulation with Bandpass Filter）アルゴリズム
+    エーラーズのサイクル期間ドミナントサイクル検出器
     
-    このアルゴリズムはバンドパスフィルターを使用して価格データをフィルタリングし、
-    位相累積法を使用して周期を検出します。バンドパスフィルターの使用により
-    ノイズ除去性能が向上しています。
+    このアルゴリズムはサイクル期間を計算して現在のサイクル期間を特定します。
+    現在のピークまたは谷と次のピークまたは谷の間の概算日数を計算します。
     
     特徴:
-    - バンドパスフィルターによる高精度なノイズ除去
-    - 位相累積による正確な周期検出
-    - 適応型フィルターでさまざまな市場状況に対応
+    - 価格データのスムーズ化
+    - サイクル成分の抽出
+    - 位相差分析による周期検出
+    - メディアンフィルタによるノイズ除去
     """
     
     # 許可されるソースタイプのリスト
@@ -200,8 +148,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
     
     def __init__(
         self,
-        lp_period: int = 10,
-        hp_period: int = 48,
+        alpha: float = 0.07,
         cycle_part: float = 0.5,
         max_output: int = 34,
         min_output: int = 1,
@@ -211,8 +158,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
         コンストラクタ
         
         Args:
-            lp_period: ローパスフィルターの期間（デフォルト: 10）
-            hp_period: ハイパスフィルターの期間（デフォルト: 48）
+            alpha: アルファ係数（デフォルト: 0.07）
             cycle_part: サイクル部分の倍率（デフォルト: 0.5）
             max_output: 最大出力値（デフォルト: 34）
             min_output: 最小出力値（デフォルト: 1）
@@ -223,15 +169,14 @@ class EhlersPhAcDCE(EhlersDominantCycle):
                 - 'ohlc4': (始値 + 高値 + 安値 + 終値) / 4
         """
         super().__init__(
-            f"EhlersPhAcDCE({lp_period}, {hp_period}, {cycle_part})",
+            f"EhlersCyclePeriod({alpha}, {cycle_part})",
             cycle_part,
-            hp_period,  # max_cycle
-            lp_period,  # min_cycle
+            48,  # max_cycle (デフォルト値)
+            10,  # min_cycle (デフォルト値)
             max_output,
             min_output
         )
-        self.lp_period = lp_period
-        self.hp_period = hp_period
+        self.alpha = alpha
         
         # ソースタイプを保存
         self.src_type = src_type.lower()
@@ -304,7 +249,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        拡張位相累積アルゴリズムを使用してドミナントサイクルを計算する
+        サイクル期間アルゴリズムを使用してドミナントサイクルを計算する
         
         Args:
             data: 価格データ（DataFrameまたはNumPy配列）
@@ -325,10 +270,9 @@ class EhlersPhAcDCE(EhlersDominantCycle):
             price = self.calculate_source_values(data, self.src_type)
             
             # Numba関数を使用してドミナントサイクルを計算
-            dom_cycle, raw_period, smooth_period = calculate_phac_dce_numba(
+            dom_cycle, raw_period, smooth_period = calculate_cycle_period_numba(
                 price,
-                self.lp_period,
-                self.hp_period,
+                self.alpha,
                 self.cycle_part,
                 self.max_output,
                 self.min_output
@@ -348,5 +292,5 @@ class EhlersPhAcDCE(EhlersDominantCycle):
             import traceback
             error_msg = str(e)
             stack_trace = traceback.format_exc()
-            self.logger.error(f"EhlersPhAcDCE計算中にエラー: {error_msg}\n{stack_trace}")
+            self.logger.error(f"EhlersCyclePeriod計算中にエラー: {error_msg}\n{stack_trace}")
             return np.array([]) 

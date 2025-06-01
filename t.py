@@ -118,7 +118,7 @@ def run_backtest(config: dict):
     # 戦略の作成
 
 
-    strategy = ZTSimpleStrategy()
+    strategy = ZASimpleStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})

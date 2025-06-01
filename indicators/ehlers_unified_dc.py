@@ -19,6 +19,13 @@ from indicators.ehlers_dudi_dce import EhlersDuDiDCE # 絶対インポートに�
 from indicators.ehlers_hody_dce import EhlersHoDyDCE # 絶対インポートに変更
 # from .indicators.ehlers_phac_dce import EhlersPhAcDCE # 不正なパス
 from indicators.ehlers_phac_dce import EhlersPhAcDCE # 絶対インポートに変更
+# 新しい検出器のインポート
+from indicators.ehlers_cycle_period import EhlersCyclePeriod # サイクル周期検出器
+from indicators.ehlers_cycle_period2 import EhlersCyclePeriod2 # 改良サイクル周期検出器
+from indicators.ehlers_bandpass_zero_crossings import EhlersBandpassZeroCrossings # バンドパスゼロクロッシング検出器
+from indicators.ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram # 自己相関ピリオドグラム検出器
+from indicators.ehlers_dft_dominant_cycle import EhlersDFTDominantCycle # DFTドミナントサイクル検出器
+from indicators.ehlers_multiple_bandpass import EhlersMultipleBandpass # 複数バンドパス検出器
 # from .indicators.kalman_filter import KalmanFilter # 不正なパス
 from indicators.kalman_filter import KalmanFilter # 絶対インポートに変更
 # from .indicators.price_source import PriceSource # 不正なパス
@@ -44,6 +51,12 @@ class EhlersUnifiedDC(EhlersDominantCycle):
     - 'dudi_e': 拡張二重微分 (Enhanced Dual Differentiator)
     - 'hody_e': 拡張ホモダイン判別機 (Enhanced Homodyne Discriminator)
     - 'phac_e': 拡張位相累積 (Enhanced Phase Accumulation)
+    - 'cycle_period': サイクル周期検出器 (Cycle Period Dominant Cycle)
+    - 'cycle_period2': 改良サイクル周期検出器 (Enhanced Cycle Period)
+    - 'bandpass_zero': バンドパスゼロクロッシング検出器 (Bandpass Zero Crossings)
+    - 'autocorr_perio': 自己相関ピリオドグラム検出器 (Autocorrelation Periodogram)
+    - 'dft_dominant': DFTドミナントサイクル検出器 (DFT Dominant Cycle)
+    - 'multi_bandpass': 複数バンドパス検出器 (Multiple Bandpass)
     """
     
     # 利用可能な検出器の定義
@@ -53,7 +66,14 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'dudi': EhlersDuDiDC,
         'dudi_e': EhlersDuDiDCE,
         'hody_e': EhlersHoDyDCE,
-        'phac_e': EhlersPhAcDCE
+        'phac_e': EhlersPhAcDCE,
+        # 新しい検出器
+        'cycle_period': EhlersCyclePeriod,
+        'cycle_period2': EhlersCyclePeriod2,
+        'bandpass_zero': EhlersBandpassZeroCrossings,
+        'autocorr_perio': EhlersAutocorrelationPeriodogram,
+        'dft_dominant': EhlersDFTDominantCycle,
+        'multi_bandpass': EhlersMultipleBandpass
     }
     
     # 検出器の説明
@@ -63,7 +83,14 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'dudi': '二重微分（Dual Differentiator）',
         'dudi_e': '拡張二重微分（Enhanced Dual Differentiator）',
         'hody_e': '拡張ホモダイン判別機（Enhanced Homodyne Discriminator）',
-        'phac_e': '拡張位相累積（Enhanced Phase Accumulation）'
+        'phac_e': '拡張位相累積（Enhanced Phase Accumulation）',
+        # 新しい検出器の説明
+        'cycle_period': 'サイクル周期検出器（Cycle Period Dominant Cycle）',
+        'cycle_period2': '改良サイクル周期検出器（Enhanced Cycle Period）',
+        'bandpass_zero': 'バンドパスゼロクロッシング検出器（Bandpass Zero Crossings）',
+        'autocorr_perio': '自己相関ピリオドグラム検出器（Autocorrelation Periodogram）',
+        'dft_dominant': 'DFTドミナントサイクル検出器（DFT Dominant Cycle）',
+        'multi_bandpass': '複数バンドパス検出器（Multiple Bandpass）'
     }
     
     def __init__(
@@ -80,7 +107,13 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         kalman_process_noise: float = 0.01,
         kalman_n_states: int = 5,
         lp_period: int = 5,
-        hp_period: int = 55
+        hp_period: int = 55,
+        # 新しい検出器用のパラメータ
+        alpha: float = 0.07,
+        bandwidth: float = 0.6,
+        center_period: float = 15.0,
+        avg_length: float = 3.0,
+        window: int = 50
     ):
         """
         コンストラクタ
@@ -93,6 +126,12 @@ class EhlersUnifiedDC(EhlersDominantCycle):
                 - 'dudi_e': 拡張二重微分
                 - 'hody_e': 拡張ホモダイン判別機
                 - 'phac_e': 拡張位相累積
+                - 'cycle_period': サイクル周期検出器
+                - 'cycle_period2': 改良サイクル周期検出器
+                - 'bandpass_zero': バンドパスゼロクロッシング検出器
+                - 'autocorr_perio': 自己相関ピリオドグラム検出器
+                - 'dft_dominant': DFTドミナントサイクル検出器
+                - 'multi_bandpass': 複数バンドパス検出器
             cycle_part: サイクル部分の倍率（デフォルト: 0.5）
             max_cycle: 最大サイクル期間（デフォルト: 50）
             min_cycle: 最小サイクル期間（デフォルト: 6）
@@ -105,6 +144,11 @@ class EhlersUnifiedDC(EhlersDominantCycle):
             kalman_n_states: カルマンフィルターの状態数
             lp_period: ローパスフィルターの期間（拡張検出器用）
             hp_period: ハイパスフィルターの期間（拡張検出器用）
+            alpha: アルファパラメータ（cycle_period、cycle_period2用）
+            bandwidth: 帯域幅（bandpass_zero用）
+            center_period: 中心周期（bandpass_zero用）
+            avg_length: 平均長（autocorr_perio用）
+            window: 分析ウィンドウ長（dft_dominant用）
         """
         # 検出器名を小文字に変換して正規化
         detector_type = detector_type.lower()
@@ -134,6 +178,11 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         self.kalman_n_states = kalman_n_states
         self.lp_period = lp_period
         self.hp_period = hp_period
+        self.alpha = alpha
+        self.bandwidth = bandwidth
+        self.center_period = center_period
+        self.avg_length = avg_length
+        self.window = window
         
         # PriceSourceユーティリティ
         self.price_source_extractor = PriceSource()
@@ -154,6 +203,46 @@ class EhlersUnifiedDC(EhlersDominantCycle):
             self.detector = self._DETECTORS[detector_type](
                 lp_period=lp_period,
                 hp_period=hp_period,
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                src_type=src_type
+            )
+        elif detector_type in ['cycle_period', 'cycle_period2']:
+            # サイクル周期検出器
+            self.detector = self._DETECTORS[detector_type](
+                alpha=alpha,
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                src_type=src_type
+            )
+        elif detector_type == 'bandpass_zero':
+            # バンドパスゼロクロッシング検出器
+            self.detector = self._DETECTORS[detector_type](
+                bandwidth=bandwidth,
+                center_period=center_period,
+                src_type=src_type
+            )
+        elif detector_type == 'autocorr_perio':
+            # 自己相関ピリオドグラム検出器
+            self.detector = self._DETECTORS[detector_type](
+                avg_length=avg_length,
+                cycle_part=cycle_part,
+                src_type=src_type
+            )
+        elif detector_type == 'dft_dominant':
+            # DFTドミナントサイクル検出器
+            self.detector = self._DETECTORS[detector_type](
+                window=window,
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                src_type=src_type
+            )
+        elif detector_type == 'multi_bandpass':
+            # 複数バンドパス検出器
+            self.detector = self._DETECTORS[detector_type](
                 cycle_part=cycle_part,
                 max_output=max_output,
                 min_output=min_output,
@@ -322,7 +411,9 @@ class EhlersUnifiedDC(EhlersDominantCycle):
             f"kalman={self.use_kalman_filter}_{self.kalman_measurement_noise}_{self.kalman_process_noise}_{self.kalman_n_states}_"
             f"cycPart={self.cycle_part}_maxC={self.max_cycle}_minC={self.min_cycle}_"
             f"maxOut={self.max_output}_minOut={self.min_output}_"
-            f"lp={self.lp_period}_hp={self.hp_period}"
+            f"lp={self.lp_period}_hp={self.hp_period}_"
+            f"alpha={self.alpha}_bw={self.bandwidth}_cp={self.center_period}_"
+            f"avgLen={self.avg_length}_win={self.window}"
             # Add other specific detector params if they vary significantly and affect output
         )
         return f"{data_hash_val}_{param_str}" 

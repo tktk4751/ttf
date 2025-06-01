@@ -4,27 +4,25 @@
 from typing import Union, Optional, Tuple
 import numpy as np
 import pandas as pd
-from numba import jit, prange, float64, int32
+from numba import jit, float64
 
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
 
 
 @jit(nopython=True)
-def calculate_phac_dce_numba(
+def calculate_autocorrelation_periodogram_numba(
     price: np.ndarray,
-    lp_period: int = 10,
-    hp_period: int = 48,
+    avg_length: float = 3.0,
     cycle_part: float = 0.5,
     max_output: int = 34,
     min_output: int = 1
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    バンドパスフィルターを使った拡張位相累積アルゴリズムによるドミナントサイクル検出のNumba実装
+    自己相関ペリオドグラムドミナントサイクル検出のNumba実装
     
     Args:
         price: 価格データの配列
-        lp_period: ローパスフィルターの期間
-        hp_period: ハイパスフィルターの期間
+        avg_length: 平均化長
         cycle_part: サイクル部分の倍率
         max_output: 最大出力値
         min_output: 最小出力値
@@ -35,164 +33,161 @@ def calculate_phac_dce_numba(
     n = len(price)
     pi = 2 * np.arcsin(1.0)
     
-    # 初期化 - Pineスクリプトと同じ形式
-    alpha1 = 0.0
+    # 初期化
     hp = np.zeros(n)
-    a1 = 0.0
-    b1 = 0.0
-    c1 = 0.0
-    c2 = 0.0
-    c3 = 0.0
     filt = np.zeros(n)
-    i_peak = np.zeros(n)
-    q_peak = np.zeros(n)
-    real = np.zeros(n)
-    quad = np.zeros(n)
-    imag = np.zeros(n)
-    phase = np.zeros(n)
-    delta_phase = np.zeros(n)
-    inst_period = np.zeros(n)
-    phase_sum = 0.0
     dom_cycle = np.zeros(n)
-    dc = np.zeros(n)
+    dominant_cycle_values = np.zeros(n)
+    max_power = np.zeros(n)
     
-    # メインループ
+    # フィルター係数
+    alpha1 = (np.cos(0.707 * 2 * pi / 48) + np.sin(0.707 * 2 * pi / 48) - 1) / np.cos(0.707 * 2 * pi / 48)
+    
+    # Super Smoother係数
+    a1 = np.exp(-1.414 * pi / 10)
+    b1 = 2 * a1 * np.cos(1.414 * pi / 10)
+    c2 = b1
+    c3 = -a1 * a1
+    c1 = 1 - c2 - c3
+    
     for i in range(n):
-        # Highpass filter cyclic components whose periods are shorter than HPPeriod bars
-        alpha1 = (np.cos(0.707 * 2 * pi / hp_period) + np.sin(0.707 * 2 * pi / hp_period) - 1) / np.cos(0.707 * 2 * pi / hp_period)
-        
-        # HP計算
-        price_1 = price[i-1] if i >= 1 else 0.0
-        price_2 = price[i-2] if i >= 2 else 0.0
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        hp_2 = hp[i-2] if i >= 2 else 0.0
-        
-        hp[i] = ((1 - alpha1 / 2) * (1 - alpha1 / 2) * (price[i] - 2 * price_1 + price_2) + 
-                 2 * (1 - alpha1) * hp_1 - (1 - alpha1) * (1 - alpha1) * hp_2)
-        
-        # Smooth with a Super Smoother Filter
-        a1 = np.exp(-1.414 * 3.14159 / lp_period)  # PineスクリプトでのpiValue（3.14159）を使用
-        b1 = 2 * a1 * np.cos(1.414 * pi / lp_period)  # ここはpiを使用
-        c2 = b1
-        c3 = -a1 * a1
-        c1 = 1 - c2 - c3
-        
-        # Filt計算
-        hp_1 = hp[i-1] if i >= 1 else 0.0
-        filt_1 = filt[i-1] if i >= 1 else 0.0
-        filt_2 = filt[i-2] if i >= 2 else 0.0
-        
-        filt[i] = c1 * (hp[i] + hp_1) / 2 + c2 * filt_1 + c3 * filt_2
-        
-        # IPeak計算
-        i_peak_1 = i_peak[i-1] if i >= 1 else 0.0
-        i_peak[i] = 0.991 * i_peak_1
-        if abs(filt[i]) > i_peak[i]:
-            i_peak[i] = abs(filt[i])
-        
-        # Real計算
-        if i_peak[i] != 0:
-            real[i] = filt[i] / i_peak[i]
+        # ハイパスフィルター（48バー未満の周期成分を除去）
+        if i >= 2:
+            hp[i] = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (price[i] - 2 * price[i-1] + price[i-2])
+            if i > 2:
+                hp[i] += 2 * (1 - alpha1) * hp[i-1] - (1 - alpha1) * (1 - alpha1) * hp[i-2]
         else:
-            real[i] = 0.0
+            hp[i] = 0.0
         
-        # Quad計算
-        real_1 = real[i-1] if i >= 1 else 0.0
-        quad[i] = real[i] - real_1
-        
-        # QPeak計算
-        q_peak_1 = q_peak[i-1] if i >= 1 else 0.0
-        q_peak[i] = 0.991 * q_peak_1
-        if abs(quad[i]) > q_peak[i]:
-            q_peak[i] = abs(quad[i])
-        
-        # Imag計算
-        if q_peak[i] != 0:
-            imag[i] = quad[i] / q_peak[i]
+        # Super Smootherフィルター
+        if i >= 2:
+            filt[i] = c1 * (hp[i] + hp[i-1]) / 2 + c2 * filt[i-1] + c3 * filt[i-2]
+        elif i >= 1:
+            filt[i] = c1 * (hp[i] + hp[i-1]) / 2
         else:
-            imag[i] = 0.0
+            filt[i] = hp[i]
         
-        # 位相計算 - Pineスクリプトと同じロジック
-        # Use atan to compute the current phase
-        if abs(real[i]) > 0:
-            phase[i] = np.arctan(abs(imag[i] / real[i]))
-        # else: phase[i]は前回の値を維持（初期値は0）
-        
-        # Resolve the atan ambiguity
-        if real[i] < 0 and imag[i] > 0:
-            phase[i] = pi - phase[i]
-        elif real[i] < 0 and imag[i] < 0:
-            phase[i] = pi + phase[i]
-        elif real[i] > 0 and imag[i] < 0:
-            phase[i] = 2 * pi - phase[i]
-        
-        # Convert radians into degrees - Pineスクリプトの式： Phase /= pi * 180
-        # これは Phase = Phase / (pi * 180) ではなく、Phase = Phase * 180 / pi の意味
-        phase[i] = phase[i] * 180 / pi
-        
-        # Compute a differential phase, resolve phase wraparound, and limit delta phase errors
-        phase_1 = phase[i-1] if i >= 1 else 0.0
-        delta_phase[i] = phase_1 - phase[i]
-        
-        # 位相ラップアラウンドの処理
-        if phase_1 < 90 and phase[i] > 270:  # pi/2は90度、3*pi/2は270度
-            delta_phase[i] = 360 + phase_1 - phase[i]  # 2*piは360度
-        
-        # Limit DeltaPhase to be within the bounds of LPPeriod bar and HPPeriod bar cycles
-        if delta_phase[i] < lp_period:
-            delta_phase[i] = lp_period
-        if delta_phase[i] > hp_period:
-            delta_phase[i] = hp_period
-        
-        # Sum DeltaPhases to reach 360 degrees. The sum is the instantaneous period.
-        inst_period[i] = 0.0
-        phase_sum = 0.0
-        for count in range(41):  # 0 to 40
-            if i - count >= 0:
-                phase_sum += delta_phase[i - count]
-                if phase_sum > 360 and inst_period[i] == 0:
-                    inst_period[i] = count
-                    break
-        
-        # Resolve Instantaneous Period errors and smooth
-        if inst_period[i] == 0:
-            inst_period[i] = inst_period[i-1] if i >= 1 else 0.0
-        
-        # DomCycle計算 - スーパースムーサーフィルター
-        inst_period_1 = inst_period[i-1] if i >= 1 else 0.0
-        dom_cycle_1 = dom_cycle[i-1] if i >= 1 else 0.0
-        dom_cycle_2 = dom_cycle[i-2] if i >= 2 else 0.0
-        
-        dom_cycle[i] = c1 * (inst_period[i] + inst_period_1) / 2 + c2 * dom_cycle_1 + c3 * dom_cycle_2
-        
-        # DC計算 - Pineスクリプトと同じロジック
-        cycle_value = np.ceil(dom_cycle[i] * cycle_part)
-        if cycle_value > max_output:
-            dc[i] = max_output
-        elif cycle_value < min_output:
-            dc[i] = min_output
+        # 自己相関とDFTの計算
+        max_lag = min(48, i)
+        if max_lag > 10:
+            # 各ラグに対するピアソン相関を計算
+            corr = np.zeros(49)
+            
+            for lag in range(max_lag + 1):
+                # 平均化長を設定
+                m = int(avg_length) if avg_length > 0 else lag
+                m = max(1, min(m, lag + 1))
+                
+                if m > 0:
+                    sx = 0.0
+                    sy = 0.0
+                    sxx = 0.0
+                    syy = 0.0
+                    sxy = 0.0
+                    
+                    # サンプルを進めてピアソン成分を合計
+                    for count in range(m):
+                        if i - count >= 0 and i - lag - count >= 0:
+                            x = filt[i - count]
+                            y = filt[i - lag - count]
+                            sx += x
+                            sy += y
+                            sxx += x * x
+                            syy += y * y
+                            sxy += x * y
+                    
+                    # 各ラグ値に対する相関を計算
+                    denominator = (m * sxx - sx * sx) * (m * syy - sy * sy)
+                    if denominator > 0:
+                        corr[lag] = (m * sxy - sx * sy) / np.sqrt(denominator)
+            
+            # DFT計算
+            cosine_part = np.zeros(49)
+            sine_part = np.zeros(49)
+            sq_sum = np.zeros(49)
+            
+            for period in range(10, 49):
+                for n_val in range(3, 49):
+                    if n_val < len(corr):
+                        angle = 370.0 / 180.0 * pi * n_val / period
+                        cosine_part[period] += corr[n_val] * np.cos(angle)
+                        sine_part[period] += corr[n_val] * np.sin(angle)
+                
+                sq_sum[period] = cosine_part[period] ** 2 + sine_part[period] ** 2
+            
+            # パワースペクトラムの平滑化
+            r1 = np.zeros(49)
+            for period in range(10, 49):
+                r1[period] = 0.2 * (sq_sum[period] ** 2) + 0.8 * r1[period]
+            
+            # 正規化のための最大パワーレベルを見つける
+            if i > 0:
+                max_power[i] = 0.995 * max_power[i-1]
+            else:
+                max_power[i] = 0.0
+            
+            for period in range(10, 49):
+                if r1[period] > max_power[i]:
+                    max_power[i] = r1[period]
+            
+            # パワーの正規化
+            pwr = np.zeros(49)
+            if max_power[i] > 0:
+                for period in range(3, 49):
+                    pwr[period] = r1[period] / max_power[i]
+            
+            # スペクトラムの重心を使用してドミナントサイクルを計算
+            spx = 0.0
+            sp = 0.0
+            for period in range(10, 49):
+                if pwr[period] >= 0.5:
+                    spx += period * pwr[period]
+                    sp += pwr[period]
+            
+            if sp != 0:
+                dominant_cycle_values[i] = spx / sp
+            else:
+                dominant_cycle_values[i] = dominant_cycle_values[i-1] if i > 0 else 15.0
+            
+            # 制限を適用
+            if dominant_cycle_values[i] < 10:
+                dominant_cycle_values[i] = 10
+            elif dominant_cycle_values[i] > 48:
+                dominant_cycle_values[i] = 48
+            
+            # 最終出力計算
+            dc_output = int(np.ceil(dominant_cycle_values[i] * cycle_part))
+            if dc_output > max_output:
+                dom_cycle[i] = max_output
+            elif dc_output < min_output:
+                dom_cycle[i] = min_output
+            else:
+                dom_cycle[i] = dc_output
         else:
-            dc[i] = cycle_value
+            # 初期値
+            dominant_cycle_values[i] = 15.0
+            dom_cycle[i] = int(np.ceil(15.0 * cycle_part))
     
-    # 生の周期値と平滑化周期値を保存
-    raw_period = np.copy(inst_period)
+    # 生の周期値と平滑化周期値
+    raw_period = np.copy(dominant_cycle_values)
     smooth_period = np.copy(dom_cycle)
     
-    return dc, raw_period, smooth_period
+    return dom_cycle, raw_period, smooth_period
 
 
-class EhlersPhAcDCE(EhlersDominantCycle):
+class EhlersAutocorrelationPeriodogram(EhlersDominantCycle):
     """
-    エーラーズの拡張位相累積（Phase Accumulation with Bandpass Filter）アルゴリズム
+    エーラーズの自己相関ペリオドグラムドミナントサイクル検出器
     
-    このアルゴリズムはバンドパスフィルターを使用して価格データをフィルタリングし、
-    位相累積法を使用して周期を検出します。バンドパスフィルターの使用により
-    ノイズ除去性能が向上しています。
+    自己相関ペリオドグラムの構築は、最小3バーの平均化を使用した自己相関関数から始まります。
+    自己相関結果の離散フーリエ変換（DFT）を使用してサイクル情報を抽出します。
+    このアプローチは他のスペクトル推定技術に対して少なくとも4つの明確な利点があります。
     
     特徴:
-    - バンドパスフィルターによる高精度なノイズ除去
-    - 位相累積による正確な周期検出
-    - 適応型フィルターでさまざまな市場状況に対応
+    - 自己相関関数による周期性の検出
+    - 離散フーリエ変換による周波数分析
+    - パワースペクトラムの重心計算による正確なサイクル特定
+    - 適応的な平均化による安定性向上
     """
     
     # 許可されるソースタイプのリスト
@@ -200,8 +195,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
     
     def __init__(
         self,
-        lp_period: int = 10,
-        hp_period: int = 48,
+        avg_length: float = 3.0,
         cycle_part: float = 0.5,
         max_output: int = 34,
         min_output: int = 1,
@@ -211,8 +205,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
         コンストラクタ
         
         Args:
-            lp_period: ローパスフィルターの期間（デフォルト: 10）
-            hp_period: ハイパスフィルターの期間（デフォルト: 48）
+            avg_length: 平均化長（デフォルト: 3.0）
             cycle_part: サイクル部分の倍率（デフォルト: 0.5）
             max_output: 最大出力値（デフォルト: 34）
             min_output: 最小出力値（デフォルト: 1）
@@ -223,15 +216,14 @@ class EhlersPhAcDCE(EhlersDominantCycle):
                 - 'ohlc4': (始値 + 高値 + 安値 + 終値) / 4
         """
         super().__init__(
-            f"EhlersPhAcDCE({lp_period}, {hp_period}, {cycle_part})",
+            f"EhlersAutocorrelationPeriodogram({avg_length}, {cycle_part})",
             cycle_part,
-            hp_period,  # max_cycle
-            lp_period,  # min_cycle
+            48,  # max_cycle
+            10,  # min_cycle
             max_output,
             min_output
         )
-        self.lp_period = lp_period
-        self.hp_period = hp_period
+        self.avg_length = avg_length
         
         # ソースタイプを保存
         self.src_type = src_type.lower()
@@ -304,7 +296,7 @@ class EhlersPhAcDCE(EhlersDominantCycle):
     
     def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
-        拡張位相累積アルゴリズムを使用してドミナントサイクルを計算する
+        自己相関ペリオドグラムアルゴリズムを使用してドミナントサイクルを計算する
         
         Args:
             data: 価格データ（DataFrameまたはNumPy配列）
@@ -325,10 +317,9 @@ class EhlersPhAcDCE(EhlersDominantCycle):
             price = self.calculate_source_values(data, self.src_type)
             
             # Numba関数を使用してドミナントサイクルを計算
-            dom_cycle, raw_period, smooth_period = calculate_phac_dce_numba(
+            dom_cycle, raw_period, smooth_period = calculate_autocorrelation_periodogram_numba(
                 price,
-                self.lp_period,
-                self.hp_period,
+                self.avg_length,
                 self.cycle_part,
                 self.max_output,
                 self.min_output
@@ -348,5 +339,5 @@ class EhlersPhAcDCE(EhlersDominantCycle):
             import traceback
             error_msg = str(e)
             stack_trace = traceback.format_exc()
-            self.logger.error(f"EhlersPhAcDCE計算中にエラー: {error_msg}\n{stack_trace}")
+            self.logger.error(f"EhlersAutocorrelationPeriodogram計算中にエラー: {error_msg}\n{stack_trace}")
             return np.array([]) 

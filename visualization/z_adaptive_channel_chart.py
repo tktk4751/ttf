@@ -100,7 +100,7 @@ class ZAdaptiveChannelChart:
                             use_kalman_filter: bool = False,
                             # ZAdaptiveMA用パラメータ
                             fast_period: int = 2,
-                            slow_period: int = 30
+                            slow_period: int = 144
                            ) -> None:
         """
         Zアダプティブチャネルを計算する

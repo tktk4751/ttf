@@ -59,13 +59,19 @@ from .dubuc_hurst_exponent import DubucHurstExponent, DubucHurstResult
 
 # エーラーズのドミナントサイクル検出クラス
 from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
-from .ehlers_dft_dc import EhlersDFTDC
 from .ehlers_hody_dc import EhlersHoDyDC
 from .ehlers_phac_dc import EhlersPhAcDC
 from .ehlers_dudi_dc import EhlersDuDiDC
 from .ehlers_dudi_dce import EhlersDuDiDCE
 from .ehlers_hody_dce import EhlersHoDyDCE
 from .ehlers_phac_dce import EhlersPhAcDCE
+# 新しく作成したサイクル検出器
+from .ehlers_cycle_period import EhlersCyclePeriod
+from .ehlers_cycle_period2 import EhlersCyclePeriod2
+from .ehlers_bandpass_zero_crossings import EhlersBandpassZeroCrossings
+from .ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram
+from .ehlers_dft_dominant_cycle import EhlersDFTDominantCycle
+from .ehlers_multiple_bandpass import EhlersMultipleBandpass
 from .ehlers_unified_dc import EhlersUnifiedDC
 
 # エーラーズのドミナントサイクル検出アルゴリズム一覧
@@ -123,13 +129,19 @@ __all__ = [
     'DubucHurstResult',      # Dubucハースト指数の結果
     'EhlersDominantCycle',
     'DominantCycleResult',
-    'EhlersDFTDC',
     'EhlersHoDyDC',
     'EhlersPhAcDC',
     'EhlersDuDiDC',
     'EhlersDuDiDCE',
     'EhlersHoDyDCE',
     'EhlersPhAcDCE',
+    # 新しく作成したサイクル検出器
+    'EhlersCyclePeriod',
+    'EhlersCyclePeriod2',
+    'EhlersBandpassZeroCrossings',
+    'EhlersAutocorrelationPeriodogram',
+    'EhlersDFTDominantCycle',
+    'EhlersMultipleBandpass',
     'EhlersUnifiedDC',
     'CMA',
     'CATR',
