@@ -216,9 +216,25 @@ class EhlersAdaptiveUnifiedDC(EhlersDominantCycle):
 
             # --- 1. 最大サイクル期間の計算 ---
             self.max_cycle_detector.calculate(data)
-            max_cycle_result = self.max_cycle_detector.get_result()
-
-
+            
+            # 安全な結果取得
+            if hasattr(self.max_cycle_detector, 'get_result') and callable(getattr(self.max_cycle_detector, 'get_result')):
+                max_cycle_result = self.max_cycle_detector.get_result()
+            elif hasattr(self.max_cycle_detector, '_result'):
+                max_cycle_result = self.max_cycle_detector._result
+            else:
+                # フォールバック: 計算結果を直接使用
+                if hasattr(self.max_cycle_detector, '_values') and self.max_cycle_detector._values is not None:
+                    # DominantCycleResult を手動作成
+                    values = self.max_cycle_detector._values
+                    max_cycle_result = DominantCycleResult(
+                        values=values,
+                        raw_period=values,  # 同じ値を使用
+                        smooth_period=values
+                    )
+                else:
+                    self.logger.error("最大サイクル検出器から結果を取得できませんでした。")
+                    return np.full(data_length, np.nan)
             
             if max_cycle_result is None:
                  self.logger.error("最大サイクル期間の計算結果がNoneです。")
@@ -229,7 +245,26 @@ class EhlersAdaptiveUnifiedDC(EhlersDominantCycle):
             
             # --- 2. 最小サイクル期間の計算 ---
             self.min_cycle_detector.calculate(data)
-            min_cycle_result = self.min_cycle_detector.get_result()
+            
+            # 安全な結果取得
+            if hasattr(self.min_cycle_detector, 'get_result') and callable(getattr(self.min_cycle_detector, 'get_result')):
+                min_cycle_result = self.min_cycle_detector.get_result()
+            elif hasattr(self.min_cycle_detector, '_result'):
+                min_cycle_result = self.min_cycle_detector._result
+            else:
+                # フォールバック: 計算結果を直接使用
+                if hasattr(self.min_cycle_detector, '_values') and self.min_cycle_detector._values is not None:
+                    # DominantCycleResult を手動作成
+                    values = self.min_cycle_detector._values
+                    min_cycle_result = DominantCycleResult(
+                        values=values,
+                        raw_period=values,  # 同じ値を使用
+                        smooth_period=values
+                    )
+                else:
+                    self.logger.error("最小サイクル検出器から結果を取得できませんでした。")
+                    return np.full(data_length, np.nan)
+            
             if min_cycle_result is None:
                  self.logger.error("最小サイクル期間の計算結果がNoneです。")
                  return np.full(data_length, np.nan)
@@ -258,7 +293,26 @@ class EhlersAdaptiveUnifiedDC(EhlersDominantCycle):
             # --- 4. メインのサイクル計算と動的境界の適用 ---
             # メイン検出器で初期（固定）境界を使って計算
             main_dom_cycle_values = self.main_detector.calculate(data)
-            main_result = self.main_detector.get_result()
+            
+            # 安全な結果取得
+            if hasattr(self.main_detector, 'get_result') and callable(getattr(self.main_detector, 'get_result')):
+                main_result = self.main_detector.get_result()
+            elif hasattr(self.main_detector, '_result'):
+                main_result = self.main_detector._result
+            else:
+                # フォールバック: 計算結果を直接使用
+                if hasattr(self.main_detector, '_values') and self.main_detector._values is not None:
+                    # DominantCycleResult を手動作成
+                    values = self.main_detector._values
+                    main_result = DominantCycleResult(
+                        values=values,
+                        raw_period=values,  # 同じ値を使用
+                        smooth_period=values
+                    )
+                else:
+                    self.logger.error("メイン検出器から結果を取得できませんでした。")
+                    return np.full(data_length, np.nan)
+            
             if main_result is None:
                 self.logger.error("メインのサイクル計算結果がNoneです。")
                 return np.full(data_length, np.nan)

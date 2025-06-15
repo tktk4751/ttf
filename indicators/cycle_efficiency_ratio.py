@@ -43,20 +43,31 @@ class CycleEfficiencyRatio(Indicator):
         er_alma_period: int = 5,
         er_alma_offset: float = 0.85,
         er_alma_sigma: float = 6,
-        self_adaptive: bool = False
+        self_adaptive: bool = False,
+        # 新しい検出器用のパラメータ
+        alpha: float = 0.07,
+        bandwidth: float = 0.6,
+        center_period: float = 15.0,
+        avg_length: float = 3.0,
+        window: int = 50
     ):
         """
         コンストラクタ
         
         Args:
             detector_type: ドミナントサイクル検出器タイプ
-                - 'hody': ホモダイン判別機（デフォルト）
+                - 'hody': ホモダイン判別機
                 - 'phac': 位相累積
                 - 'dudi': 二重微分
                 - 'dudi_e': 拡張二重微分
                 - 'hody_e': 拡張ホモダイン判別機
-                - 'phac_e': 拡張位相累積
-                - 'dft': 離散フーリエ変換
+                - 'phac_e': 拡張位相累積（デフォルト）
+                - 'cycle_period': サイクル周期検出器
+                - 'cycle_period2': 改良サイクル周期検出器
+                - 'bandpass_zero': バンドパスゼロクロッシング検出器
+                - 'autocorr_perio': 自己相関ピリオドグラム検出器
+                - 'dft_dominant': DFTドミナントサイクル検出器
+                - 'multi_bandpass': 複数バンドパス検出器
             lp_period: ドミナントサイクル用ローパスフィルター期間
             hp_period: ドミナントサイクル用ハイパスフィルター期間
             cycle_part: ドミナントサイクル計算用サイクル部分
@@ -74,6 +85,11 @@ class CycleEfficiencyRatio(Indicator):
             er_alma_offset: ALMAスムージングのオフセット
             er_alma_sigma: ALMAスムージングのシグマ
             self_adaptive: セルフアダプティブモードを有効にするかどうか (スムージングが有効時のみ機能)
+            alpha: アルファパラメータ（cycle_period、cycle_period2用）
+            bandwidth: 帯域幅（bandpass_zero用）
+            center_period: 中心周期（bandpass_zero用）
+            avg_length: 平均長（autocorr_perio用）
+            window: 分析ウィンドウ長（dft_dominant用）
         """
         kalman_str = f"_kalman={'Y' if use_kalman_filter else 'N'}" if use_kalman_filter else ""
         smooth_str = f"_smooth={'Y' if smooth_er else 'N'}" if smooth_er else ""
@@ -105,6 +121,13 @@ class CycleEfficiencyRatio(Indicator):
         self.adaptive_min_period = 1
         self.adaptive_max_period = 5
         
+        # 新しい検出器用のパラメータ
+        self.alpha = alpha
+        self.bandwidth = bandwidth
+        self.center_period = center_period
+        self.avg_length = avg_length
+        self.window = window
+        
         # PriceSourceとKalmanFilterの初期化
         self.price_source_extractor = PriceSource()
         self.kalman_filter = None
@@ -124,8 +147,15 @@ class CycleEfficiencyRatio(Indicator):
             min_cycle=min_cycle,
             max_output=max_output,
             min_output=min_output,
+            src_type=src_type,
+            use_kalman_filter=False,  # CERレベルでKalmanを適用するため、DCレベルでは無効化
             lp_period=lp_period,
-            hp_period=hp_period
+            hp_period=hp_period,
+            alpha=alpha,
+            bandwidth=bandwidth,
+            center_period=center_period,
+            avg_length=avg_length,
+            window=window
         )
         
         # ALMAスムーザーの初期化（有効な場合）
@@ -135,8 +165,9 @@ class CycleEfficiencyRatio(Indicator):
                 period=self.er_alma_period,
                 offset=self.er_alma_offset,
                 sigma=self.er_alma_sigma,
+                use_dynamic_period=False,
                 src_type='close',  # 直接ERの値を渡すので、ソースタイプは関係ない
-                use_kalman_filter=False  # すでにER計算が済んでいるのでカルマンは不要
+
             )
         
         # 結果キャッシュ
@@ -210,7 +241,9 @@ class CycleEfficiencyRatio(Indicator):
             f"kalman={self.use_kalman_filter}_{self.kalman_measurement_noise}_"
             f"{self.kalman_process_noise}_{self.kalman_n_states}_"
             f"smooth={self.smooth_er}_{self.er_alma_period}_{self.er_alma_offset}_{self.er_alma_sigma}_"
-            f"adaptive={self.self_adaptive}_{self.adaptive_min_period}_{self.adaptive_max_period}"
+            f"adaptive={self.self_adaptive}_{self.adaptive_min_period}_{self.adaptive_max_period}_"
+            f"alpha={self.alpha}_bw={self.bandwidth}_cp={self.center_period}_"
+            f"avgLen={self.avg_length}_win={self.window}"
         )
         return f"{data_hash_val}_{param_str}"
     
@@ -333,7 +366,8 @@ class CycleEfficiencyRatio(Indicator):
                             # ALMAスムージングを適用（i番目までのデータでスムージング）
                             slice_data = er_values[:i+1]
                             if len(slice_data) >= current_period:
-                                smoothed_slice = current_alma.calculate(slice_data)
+                                # 1次元配列として渡す
+                                smoothed_slice = current_alma.calculate(slice_data.reshape(-1))
                                 if not np.isnan(smoothed_slice[-1]):
                                     smoothed_er_values[i] = smoothed_slice[-1]
                                 else:
@@ -351,7 +385,8 @@ class CycleEfficiencyRatio(Indicator):
                                 use_kalman_filter=False
                             )
                             
-                        smoothed_values = self.er_alma_smoother.calculate(er_values)
+                        # 1次元配列として渡す
+                        smoothed_values = self.er_alma_smoother.calculate(er_values.reshape(-1))
                         
                         # NaNの処理（最初の数ポイントはNaNになるため、元の値で埋める）
                         nan_indices = np.isnan(smoothed_values)

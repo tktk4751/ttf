@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Union, Optional
+from typing import Union, Optional, NamedTuple
 import numpy as np
 import pandas as pd
 from numba import jit
@@ -12,7 +12,7 @@ import traceback # For detailed error logging
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .kalman_filter import KalmanFilter
+    from .ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues, adjust as needed
     # This might happen if running the file directly without the package structure
@@ -23,37 +23,32 @@ except ImportError:
         def reset(self): pass
         def _get_logger(self): import logging; return logging.getLogger(self.__class__.__name__)
     class PriceSource:
-        def ensure_dataframe(self, data):
-             if isinstance(data, np.ndarray):
-                 # Basic conversion assuming OHLC or just Close
-                 cols = ['open', 'high', 'low', 'close'] if data.ndim == 2 and data.shape[1] >= 4 else ['close']
-                 if data.ndim == 1:
-                     return pd.DataFrame({'close': data})
-                 elif data.ndim == 2 and data.shape[1] < len(cols):
-                     return pd.DataFrame(data, columns=cols[:data.shape[1]])
-                 elif data.ndim == 2:
-                      return pd.DataFrame(data, columns=cols)
-                 else:
-                      raise ValueError("Cannot convert numpy array to DataFrame")
-             elif isinstance(data, pd.DataFrame):
-                 return data
-             else:
-                 raise TypeError("Data must be pd.DataFrame or np.ndarray")
-        def get_price(self, df, src_type):
-            src_type = src_type.lower()
-            if src_type == 'close': return df['close'].values
-            elif src_type == 'open': return df['open'].values
-            elif src_type == 'high': return df['high'].values
-            elif src_type == 'low': return df['low'].values
-            elif src_type == 'hl2': return ((df['high'] + df['low']) / 2).values
-            elif src_type == 'hlc3': return ((df['high'] + df['low'] + df['close']) / 3).values
-            elif src_type == 'ohlc4': return ((df['open'] + df['high'] + df['low'] + df['close']) / 4).values
-            else: return df['close'].values # Default to close
-    class KalmanFilter:
-        def __init__(self, **kwargs): self.logger = self._get_logger()
-        def calculate(self, data): return None # Dummy implementation
+        @staticmethod
+        def calculate_source(data, src_type):
+            if isinstance(data, pd.DataFrame):
+                if src_type == 'close': return data['close'].values
+                elif src_type == 'open': return data['open'].values
+                elif src_type == 'high': return data['high'].values
+                elif src_type == 'low': return data['low'].values
+                elif src_type == 'hl2': return ((data['high'] + data['low']) / 2).values
+                elif src_type == 'hlc3': return ((data['high'] + data['low'] + data['close']) / 3).values
+                elif src_type == 'ohlc4': return ((data['open'] + data['high'] + data['low'] + data['close']) / 4).values
+                else: return data['close'].values # Default to close
+            else:
+                return data[:, 3] if data.ndim > 1 and data.shape[1] > 3 else data
+    # Dummy EhlersUnifiedDC class for fallback
+    class EhlersUnifiedDC:
+        def __init__(self, **kwargs): pass
+        def calculate(self, data): return np.full(len(data), 20.0)
         def reset(self): pass
-        def _get_logger(self): import logging; return logging.getLogger(self.__class__.__name__)
+
+
+class HMAResult(NamedTuple):
+    """HMA計算結果"""
+    values: np.ndarray
+    trend_signals: np.ndarray  # 1=up, -1=down, 0=range
+    current_trend: str  # 'up', 'down', 'range'
+    current_trend_value: int  # 1, -1, 0
 
 
 @jit(nopython=True, cache=True)
@@ -151,6 +146,144 @@ def calculate_hma_numba(prices: np.ndarray, period: int) -> np.ndarray:
     return hma_values
 
 
+@jit(nopython=True, cache=True)
+def calculate_dynamic_hma_numba(
+    prices: np.ndarray,
+    period_array: np.ndarray,
+    max_period: int
+) -> np.ndarray:
+    """
+    動的期間でHMAを計算する（Numba JIT）
+    
+    Args:
+        prices: 価格の配列
+        period_array: 各時点での期間の配列
+        max_period: 最大期間（計算開始位置用）
+    
+    Returns:
+        HMA値の配列
+    """
+    length = len(prices)
+    result = np.full(length, np.nan)
+    
+    # 各時点での動的HMAを計算
+    for i in range(max_period, length):
+        # その時点でのドミナントサイクルから決定された期間を取得
+        curr_period = int(period_array[i])
+        if curr_period < 2:  # HMAには最低2期間が必要
+            curr_period = 2
+            
+        # 現在位置までの価格データを取得（効率化のためウィンドウサイズを制限）
+        start_idx = max(0, i - curr_period * 2)  # HMAには余裕をもったウィンドウが必要
+        window = prices[start_idx:i+1]
+        
+        # 現在の期間でHMAを計算
+        hma_values = calculate_hma_numba(window, curr_period)
+        
+        # 最後の値をHMAとして使用
+        if len(hma_values) > 0 and not np.isnan(hma_values[-1]):
+            result[i] = hma_values[-1]
+    
+    return result
+
+
+@jit(nopython=True, cache=True)
+def calculate_trend_signals_with_range(values: np.ndarray, slope_index: int, range_threshold: float = 0.005) -> np.ndarray:
+    """
+    トレンド信号を計算する（range状態対応版）(Numba JIT)
+    
+    Args:
+        values: インジケーター値の配列
+        slope_index: スロープ判定期間
+        range_threshold: range判定の閾値（相対的変化率）
+    
+    Returns:
+        trend_signals: 1=up, -1=down, 0=range のNumPy配列
+    """
+    length = len(values)
+    trend_signals = np.zeros(length, dtype=np.int8)
+    
+    # 統計的閾値計算用のウィンドウサイズ（固定）
+    stats_window = 21
+    
+    for i in range(slope_index, length):
+        if not np.isnan(values[i]) and not np.isnan(values[i - slope_index]):
+            current = values[i]
+            previous = values[i - slope_index]
+            
+            # 基本的な変化量
+            change = current - previous
+            
+            # 相対的変化率の計算
+            base_value = max(abs(current), abs(previous), 1e-10)  # ゼロ除算防止
+            relative_change = abs(change) / base_value
+            
+            # 統計的閾値の計算（過去の変動の標準偏差）
+            start_idx = max(slope_index, i - stats_window + 1)
+            if start_idx < i - slope_index:
+                # 過去の変化率を計算
+                historical_changes = np.zeros(i - start_idx)
+                for j in range(start_idx, i):
+                    if not np.isnan(values[j]) and not np.isnan(values[j - slope_index]):
+                        hist_current = values[j]
+                        hist_previous = values[j - slope_index]
+                        hist_base = max(abs(hist_current), abs(hist_previous), 1e-10)
+                        historical_changes[j - start_idx] = abs(hist_current - hist_previous) / hist_base
+                
+                # 標準偏差ベースの閾値のみを使用
+                if len(historical_changes) > 0:
+                    # 標準偏差ベースの閾値
+                    std_threshold = np.std(historical_changes) * 0.5  # 0.5倍の標準偏差
+                    
+                    # 最終的なrange閾値は、固定閾値と標準偏差閾値の大きい方
+                    effective_threshold = max(range_threshold, std_threshold)
+                else:
+                    effective_threshold = range_threshold
+            else:
+                effective_threshold = range_threshold
+            
+            # トレンド判定
+            if relative_change < effective_threshold:
+                # 変化が小さすぎる場合はrange
+                trend_signals[i] = 0  # range
+            elif change > 0:
+                # 上昇トレンド
+                trend_signals[i] = 1  # up
+            else:
+                # 下降トレンド
+                trend_signals[i] = -1  # down
+    
+    return trend_signals
+
+
+@jit(nopython=True, cache=True)
+def calculate_current_trend_with_range(trend_signals: np.ndarray) -> tuple:
+    """
+    現在のトレンド状態を計算する（range対応版）(Numba JIT)
+    
+    Args:
+        trend_signals: トレンド信号配列 (1=up, -1=down, 0=range)
+    
+    Returns:
+        tuple: (current_trend_index, current_trend_value)
+               current_trend_index: 0=range, 1=up, 2=down (trend_names用のインデックス)
+               current_trend_value: 0=range, 1=up, -1=down (実際のトレンド値)
+    """
+    length = len(trend_signals)
+    if length == 0:
+        return 0, 0  # range
+    
+    # 最新の値を取得
+    latest_trend = trend_signals[-1]
+    
+    if latest_trend == 1:  # up
+        return 1, 1   # up
+    elif latest_trend == -1:  # down
+        return 2, -1   # down
+    else:  # range
+        return 0, 0  # range
+
+
 class HMA(Indicator):
     """
     ハル移動平均線 (Hull Moving Average - HMA) インジケーター
@@ -160,55 +293,88 @@ class HMA(Indicator):
     特徴:
     - 非常になめらかで、価格変動への反応が速い移動平均線。
     - 計算に使用する価格ソースを選択可能 ('close', 'hlc3', etc.)。
-    - オプションで価格ソースにカルマンフィルターを適用可能（デフォルトは無効）。
+    - 固定期間または動的期間（ドミナントサイクル）での計算に対応。
+    - トレンド判定機能：slope_index期間前との比較でトレンド方向を判定
+    - range状態判定：統計的閾値を使用した高精度なレンジ相場検出
     """
 
     def __init__(self,
-                 period: int = 9,
-                 src_type: str = 'close',
-                 use_kalman_filter: bool = False, # HMA自体が平滑化するためデフォルト無効
-                 kalman_measurement_noise: float = 1.0,
-                 kalman_process_noise: float = 0.01,
-                 kalman_n_states: int = 5):
+                 period: int = 21,
+                 src_type: str = 'hlc3',
+                 use_dynamic_period: bool = True,
+                 cycle_part: float = 1.0,
+                 detector_type: str = 'absolute_ultimate',
+                 max_cycle: int = 233,
+                 min_cycle: int = 13,
+                 max_output: int = 120,
+                 min_output: int = 5,
+                 slope_index: int = 1,
+                 range_threshold: float = 0.005,
+                 lp_period: int = 10,
+                 hp_period: int = 48):
         """
         コンストラクタ
 
         Args:
-            period: 期間 (2以上である必要があります)
+            period: 期間（固定期間モードで使用、2以上である必要があります）
             src_type: 価格ソース ('close', 'hlc3', etc.)
-            use_kalman_filter: ソース価格にカルマンフィルターを適用するかどうか
-            kalman_*: カルマンフィルターのパラメータ
+            use_dynamic_period: 動的期間を使用するかどうか
+            cycle_part: サイクル部分の倍率（動的期間モード用）
+            detector_type: 検出器タイプ（動的期間モード用）
+            max_cycle: 最大サイクル期間（動的期間モード用）
+            min_cycle: 最小サイクル期間（動的期間モード用）
+            max_output: 最大出力値（動的期間モード用）
+            min_output: 最小出力値（動的期間モード用）
+            slope_index: トレンド判定期間 (1以上、デフォルト: 1)
+            range_threshold: range判定の基本閾値（デフォルト: 0.005 = 0.5%）
+            lp_period: ローパスフィルター期間（動的期間モード用、デフォルト: 10）
+            hp_period: ハイパスフィルター期間（動的期間モード用、デフォルト: 48）
         """
         if not isinstance(period, int) or period <= 1:
              raise ValueError(f"期間は2以上の整数である必要がありますが、'{period}'が指定されました")
 
-        kalman_str = f"_kalman={'Y' if use_kalman_filter else 'N'}" if use_kalman_filter else ""
-        super().__init__(f"HMA(p={period},src={src_type}{kalman_str})")
+        dynamic_str = f"_dynamic({detector_type})" if use_dynamic_period else ""
+        super().__init__(f"HMA(p={period},src={src_type}{dynamic_str},slope={slope_index},range_th={range_threshold:.3f})")
 
         self.period = period
         self.src_type = src_type.lower() # Ensure lowercase for consistency
-        self.use_kalman_filter = use_kalman_filter
-        self.kalman_measurement_noise = kalman_measurement_noise
-        self.kalman_process_noise = kalman_process_noise
-        self.kalman_n_states = kalman_n_states
+        self.use_dynamic_period = use_dynamic_period
+        self.slope_index = slope_index
+        self.range_threshold = range_threshold
+        
+        # 動的期間モード用パラメータ
+        self.cycle_part = cycle_part
+        self.detector_type = detector_type
+        self.max_cycle = max_cycle
+        self.min_cycle = min_cycle
+        self.max_output = max_output
+        self.min_output = min_output
+        self.lp_period = lp_period
+        self.hp_period = hp_period
 
         self.price_source_extractor = PriceSource()
-        self.kalman_filter = None
-        if self.use_kalman_filter:
-            # KalmanFilterの初期化時に自身のロガーを渡すなど、必要に応じて調整
-            self.kalman_filter = KalmanFilter(
-                price_source=self.src_type, # KalmanFilterもソースタイプを知る必要がある場合
-                measurement_noise=self.kalman_measurement_noise,
-                process_noise=self.kalman_process_noise,
-                n_states=self.kalman_n_states
-                # logger=self.logger # 必要であればロガーを共有
+        
+        # ドミナントサイクル検出器（動的期間モード用）
+        self.dc_detector = None
+        self._last_dc_values = None  # 最後に計算されたDC値を保存
+        if self.use_dynamic_period:
+            self.dc_detector = EhlersUnifiedDC(
+                detector_type=self.detector_type,
+                cycle_part=self.cycle_part,
+                max_cycle=self.max_cycle,
+                min_cycle=self.min_cycle,
+                max_output=self.max_output,
+                min_output=self.min_output,
+                src_type=self.src_type,
+                lp_period=self.lp_period,
+                hp_period=self.hp_period
             )
 
         self._cache = {}
-        self._result: Optional[np.ndarray] = None
+        self._result: Optional[HMAResult] = None
 
     def _get_data_hash(self, data: Union[pd.DataFrame, np.ndarray]) -> str:
-        """データとパラメータに基づいてハッシュ値を計算する (ALMAから流用し、HMA用に調整)"""
+        """データとパラメータに基づいてハッシュ値を計算する"""
         # src_typeに基づいて必要なカラムを決定
         required_cols = set()
         st = self.src_type
@@ -275,18 +441,16 @@ class HMA(Indicator):
              data_hash_val = hash(str(data)) # fallback
 
         # パラメータ文字列の作成
-        param_str = (
-            f"p={self.period}_src={self.src_type}_"
-            f"kalman={self.use_kalman_filter}"
-        )
-        # カルマンフィルター使用時のみ、関連パラメータをハッシュに含める
-        if self.use_kalman_filter:
-            param_str += f"_{self.kalman_measurement_noise}_{self.kalman_process_noise}_{self.kalman_n_states}"
+        if self.use_dynamic_period:
+            param_str = (f"p={self.period}_src={self.src_type}_"
+                        f"dynamic={self.detector_type}_{self.max_output}_{self.min_output}")
+        else:
+            param_str = f"p={self.period}_src={self.src_type}"
 
         return f"{data_hash_val}_{param_str}"
 
 
-    def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+    def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> HMAResult:
         """
         HMAを計算する
 
@@ -294,12 +458,18 @@ class HMA(Indicator):
             data: 価格データ (pd.DataFrame or np.ndarray)。OHLC形式を期待。
 
         Returns:
-            HMA値の配列 (np.ndarray)
+            HMAResult: HMA値とトレンド情報を含む結果
         """
         current_data_len = len(data) if hasattr(data, '__len__') else 0
         if current_data_len == 0:
              self.logger.warning("入力データが空です。空の配列を返します。")
-             return np.array([])
+             empty_result = HMAResult(
+                 values=np.array([]),
+                 trend_signals=np.array([], dtype=np.int8),
+                 current_trend='range',
+                 current_trend_value=0
+             )
+             return empty_result
              
         try:
             data_hash = self._get_data_hash(data)
@@ -307,120 +477,157 @@ class HMA(Indicator):
             # キャッシュチェック
             if data_hash in self._cache and self._result is not None:
                  # データ長が一致するか確認
-                if len(self._result) == current_data_len:
+                if len(self._result.values) == current_data_len:
                      # self.logger.debug(f"キャッシュヒット: {data_hash}")
-                     return self._result.copy() # Return a copy to prevent external modification
+                     return HMAResult(
+                         values=self._result.values.copy(),
+                         trend_signals=self._result.trend_signals.copy(),
+                         current_trend=self._result.current_trend,
+                         current_trend_value=self._result.current_trend_value
+                     )
                 else:
-                    self.logger.debug(f"キャッシュのデータ長 ({len(self._result)}) が現在のデータ長 ({current_data_len}) と異なるため再計算します。 Hash: {data_hash}")
+                    self.logger.debug(f"キャッシュのデータ長 ({len(self._result.values)}) が現在のデータ長 ({current_data_len}) と異なるため再計算します。 Hash: {data_hash}")
                     # キャッシュを無効化
                     del self._cache[data_hash]
                     self._result = None
 
             # --- データ検証とソース価格取得 ---
-            # PriceSourceにDataFrameを渡すことを保証
-            prices_df = self.price_source_extractor.ensure_dataframe(data)
-            if prices_df is None or prices_df.empty:
-                self.logger.warning("DataFrameへの変換または価格ソースの抽出に失敗しました。NaN配列を返します。")
-                return np.full(current_data_len, np.nan)
+            # PriceSourceを使ってソース価格を取得
+            src_prices = PriceSource.calculate_source(data, self.src_type)
 
-            src_prices = self.price_source_extractor.get_price(prices_df, self.src_type)
-
-             # src_pricesがNoneまたは空でないか確認
-            if src_prices is None or len(src_prices) == 0:
-                self.logger.warning(f"価格ソース '{self.src_type}' の取得に失敗またはデータが空です。NaN配列を返します。")
-                return np.full(current_data_len, np.nan)
+            # データ長の検証
+            data_length = len(src_prices)
+            if data_length == 0:
+                self.logger.warning("価格データが空です。空の配列を返します。")
+                empty_result = HMAResult(
+                    values=np.array([]),
+                    trend_signals=np.array([], dtype=np.int8),
+                    current_trend='range',
+                    current_trend_value=0
+                )
+                self._result = empty_result
+                self._cache[data_hash] = self._result
+                return empty_result
 
             # Numbaのためにnumpy配列かつfloat64であることを保証
             if not isinstance(src_prices, np.ndarray):
                 src_prices = np.array(src_prices)
             if src_prices.dtype != np.float64:
                 # NaNが含まれている可能性があるため、astypeで変換
-                 try:
-                     src_prices = src_prices.astype(np.float64)
-                 except ValueError:
-                      self.logger.error(f"価格ソース '{self.src_type}' をfloat64に変換できませんでした。NaNが含まれているか、数値以外のデータが存在する可能性があります。")
-                      return np.full(current_data_len, np.nan)
-
-
-            # --- Optional Kalman Filtering ---
-            effective_src_prices = src_prices
-            if self.use_kalman_filter and self.kalman_filter:
-                self.logger.debug("カルマンフィルターを適用します...")
-                # KalmanFilterにはDataFrameを渡す (OHLCが必要な場合があるため)
-                kalman_input_data = prices_df
                 try:
-                    filtered_prices = self.kalman_filter.calculate(kalman_input_data)
+                    src_prices = src_prices.astype(np.float64)
+                except ValueError:
+                    self.logger.error(f"価格ソース '{self.src_type}' をfloat64に変換できませんでした。NaNが含まれているか、数値以外のデータが存在する可能性があります。")
+                    error_result = HMAResult(
+                        values=np.full(current_data_len, np.nan),
+                        trend_signals=np.zeros(current_data_len, dtype=np.int8),
+                        current_trend='range',
+                        current_trend_value=0
+                    )
+                    return error_result
 
-                    if filtered_prices is not None and len(filtered_prices) > 0:
-                        # フィルター結果がnumpy配列であることを確認
-                        if isinstance(filtered_prices, pd.Series):
-                            filtered_prices = filtered_prices.values
-                        elif not isinstance(filtered_prices, np.ndarray):
-                             self.logger.warning("カルマンフィルターの出力が予期しない型です。フィルター結果は使用しません。")
-                             filtered_prices = None # Skip using this result
+            if self.use_dynamic_period:
+                # 動的期間モード
+                if self.dc_detector is None:
+                    self.logger.error("動的期間モードですが、ドミナントサイクル検出器が初期化されていません。")
+                    error_result = HMAResult(
+                        values=np.full(current_data_len, np.nan),
+                        trend_signals=np.zeros(current_data_len, dtype=np.int8),
+                        current_trend='range',
+                        current_trend_value=0
+                    )
+                    return error_result
+                
+                # ドミナントサイクルの計算
+                dc_values = self.dc_detector.calculate(data)
+                period_array = np.asarray(dc_values, dtype=np.float64)
+                
+                # DC値を保存（get_dynamic_periods用）
+                self._last_dc_values = period_array.copy()
+                
+                # デバッグ情報の出力
+                valid_dc = period_array[~np.isnan(period_array)]
+                if len(valid_dc) > 0:
+                    self.logger.info(f"動的期間統計 - 平均: {valid_dc.mean():.1f}, 範囲: {valid_dc.min():.0f} - {valid_dc.max():.0f}")
+                else:
+                    self.logger.warning("ドミナントサイクル値が全てNaNです。")
+                
+                # 最大期間の取得
+                max_period_value_float = np.nanmax(period_array)
+                if np.isnan(max_period_value_float):
+                    max_period_value = self.period  # デフォルト期間を使用
+                    self.logger.warning("ドミナントサイクルが全てNaNです。デフォルト期間を使用します。")
+                else:
+                    max_period_value = int(max_period_value_float)
+                    if max_period_value < 2:  # HMAには最低2期間が必要
+                        max_period_value = max(2, self.period)
+                
+                # データ長の検証
+                min_len_required = max_period_value + int(math.sqrt(max_period_value)) - 1
+                if data_length < min_len_required:
+                    self.logger.warning(f"データ長({data_length})が必要な最大期間({min_len_required})より短いため、計算できません。")
+                    error_result = HMAResult(
+                        values=np.full(current_data_len, np.nan),
+                        trend_signals=np.zeros(current_data_len, dtype=np.int8),
+                        current_trend='range',
+                        current_trend_value=0
+                    )
+                    return error_result
+                
+                # 動的HMAの計算
+                hma_values = calculate_dynamic_hma_numba(src_prices, period_array, max_period_value)
+            else:
+                # 固定期間モード
+                min_len_required = self.period + int(math.sqrt(self.period)) -1 # Roughly the lookback of the final WMA
+                if data_length < min_len_required:
+                     self.logger.warning(f"データ長 ({data_length}) がHMA期間 ({self.period}) に対して短すぎる可能性があります (最小目安: {min_len_required})。結果はNaNが多くなります。")
+                     # 計算は続行するが、結果はほぼNaNになる
 
-                        # データ長の一致を確認
-                        if filtered_prices is not None and len(filtered_prices) == len(src_prices):
-                            effective_src_prices = filtered_prices
-                            # Ensure float64 for numba
-                            if effective_src_prices.dtype != np.float64:
-                                 try:
-                                     effective_src_prices = effective_src_prices.astype(np.float64)
-                                 except ValueError:
-                                     self.logger.error("カルマンフィルター適用後のデータをfloat64に変換できませんでした。元の価格を使用します。")
-                                     effective_src_prices = src_prices # Revert
-                            self.logger.debug("カルマンフィルター適用完了。")
-                        elif filtered_prices is not None:
-                             self.logger.warning(f"カルマンフィルター適用後のデータ長 ({len(filtered_prices)}) が元のデータ長 ({len(src_prices)}) と異なります。フィルター結果は使用しません。")
-                             # effective_src_prices は変更しない (元の src_prices のまま)
-                        else:
-                             # filtered_prices が None か空だった場合
-                             self.logger.warning("カルマンフィルターの計算結果がNoneまたは空です。元のソース価格を使用します。")
-                    else:
-                        self.logger.warning("カルマンフィルター計算失敗または空の結果。元のソース価格を使用します。")
+                # --- HMA計算 (Numba) ---
+                # Numba関数には float64 配列を渡す
+                if src_prices.dtype != np.float64:
+                     self.logger.warning(f"Numba関数に渡す価格データの型が {src_prices.dtype} です。float64に変換します。")
+                     try:
+                         src_prices = src_prices.astype(np.float64)
+                     except ValueError:
+                          self.logger.error("最終価格データをfloat64に変換できませんでした。NaN配列を返します。")
+                          error_result = HMAResult(
+                              values=np.full(current_data_len, np.nan),
+                              trend_signals=np.zeros(current_data_len, dtype=np.int8),
+                              current_trend='range',
+                              current_trend_value=0
+                          )
+                          return error_result
 
-                except Exception as kf_e:
-                    self.logger.error(f"カルマンフィルター計算中にエラーが発生しました: {kf_e}", exc_info=True)
-                    # Fallback to using original source prices
-                    self.logger.warning("エラーのため、元のソース価格を使用します。")
-                    effective_src_prices = src_prices # Ensure fallback
+                # Ensure input array is C-contiguous for Numba
+                if not src_prices.flags['C_CONTIGUOUS']:
+                    src_prices = np.ascontiguousarray(src_prices)
 
-            # 再度データ長の検証 (フィルター適用後)
-            data_length = len(effective_src_prices)
-            if data_length == 0:
-                self.logger.warning("有効な価格データが空です（フィルター適用後？）。空の配列を返します。")
-                self._result = np.array([])
-                self._cache[data_hash] = self._result
-                return self._result.copy()
+                # self.logger.debug(f"calculate_hma_numba を呼び出します。period={self.period}, data length={len(src_prices)}")
+                hma_values = calculate_hma_numba(src_prices, self.period)
+                # self.logger.debug(f"calculate_hma_numba 完了。結果の長さ: {len(hma_values)}")
 
-            # 期間に対するデータ長のチェック
-            min_len_required = self.period + int(math.sqrt(self.period)) -1 # Roughly the lookback of the final WMA
-            if data_length < min_len_required:
-                 self.logger.warning(f"データ長 ({data_length}) がHMA期間 ({self.period}) に対して短すぎる可能性があります (最小目安: {min_len_required})。結果はNaNが多くなります。")
-                 # 計算は続行するが、結果はほぼNaNになる
+            # トレンド判定
+            trend_signals = calculate_trend_signals_with_range(hma_values, self.slope_index, self.range_threshold)
+            trend_index, trend_value = calculate_current_trend_with_range(trend_signals)
+            trend_names = ['range', 'up', 'down']
+            current_trend = trend_names[trend_index]
 
-            # --- HMA計算 (Numba) ---
-            # Numba関数には float64 配列を渡す
-            if effective_src_prices.dtype != np.float64:
-                 self.logger.warning(f"Numba関数に渡す価格データの型が {effective_src_prices.dtype} です。float64に変換します。")
-                 try:
-                     effective_src_prices = effective_src_prices.astype(np.float64)
-                 except ValueError:
-                      self.logger.error("最終価格データをfloat64に変換できませんでした。NaN配列を返します。")
-                      return np.full(current_data_len, np.nan)
+            result = HMAResult(
+                values=hma_values,
+                trend_signals=trend_signals,
+                current_trend=current_trend,
+                current_trend_value=trend_value
+            )
 
-
-            # Ensure input array is C-contiguous for Numba
-            if not effective_src_prices.flags['C_CONTIGUOUS']:
-                effective_src_prices = np.ascontiguousarray(effective_src_prices)
-
-            # self.logger.debug(f"calculate_hma_numba を呼び出します。period={self.period}, data length={len(effective_src_prices)}")
-            hma_values = calculate_hma_numba(effective_src_prices, self.period)
-            # self.logger.debug(f"calculate_hma_numba 完了。結果の長さ: {len(hma_values)}")
-
-            self._result = hma_values
+            self._result = result
             self._cache[data_hash] = self._result
-            return self._result.copy() # Return a copy
+            return HMAResult(
+                values=result.values.copy(),
+                trend_signals=result.trend_signals.copy(),
+                current_trend=result.current_trend,
+                current_trend_value=result.current_trend_value
+            )
 
         except Exception as e:
             # Log the full error with traceback
@@ -429,14 +636,60 @@ class HMA(Indicator):
             self.logger.error(f"HMA '{self.name}' 計算中に予期せぬエラー: {error_msg}\n{stack_trace}")
             # Return NaNs matching the input data length
             self._result = None # Clear result on error
-            return np.full(current_data_len, np.nan)
+            error_result = HMAResult(
+                values=np.full(current_data_len, np.nan),
+                trend_signals=np.zeros(current_data_len, dtype=np.int8),
+                current_trend='range',
+                current_trend_value=0
+            )
+            return error_result
 
+    def get_values(self) -> Optional[np.ndarray]:
+        """HMA値のみを取得する（後方互換性のため）"""
+        if self._result is not None:
+            return self._result.values.copy()
+        return None
+
+    def get_trend_signals(self) -> Optional[np.ndarray]:
+        """トレンド信号を取得する"""
+        if self._result is not None:
+            return self._result.trend_signals.copy()
+        return None
+
+    def get_current_trend(self) -> str:
+        """現在のトレンド状態を取得する"""
+        if self._result is not None:
+            return self._result.current_trend
+        return 'range'
+
+    def get_current_trend_value(self) -> int:
+        """現在のトレンド値を取得する"""
+        if self._result is not None:
+            return self._result.current_trend_value
+        return 0
+
+    def get_dynamic_periods(self) -> np.ndarray:
+        """
+        動的期間の値を取得する（動的期間モードのみ）
+        
+        Returns:
+            動的期間の配列
+        """
+        if not self.use_dynamic_period:
+            return np.array([])
+        
+        # 最後に計算されたドミナントサイクル値を返す
+        if self._last_dc_values is not None:
+            return self._last_dc_values.copy()
+        
+        return np.array([])
 
     def reset(self) -> None:
-        """インジケータの状態（キャッシュ、結果、カルマンフィルター）をリセットする"""
+        """インジケータの状態（キャッシュ、結果）をリセットする"""
         super().reset()
         self._result = None
         self._cache = {}
-        if self.kalman_filter and hasattr(self.kalman_filter, 'reset'):
-            self.kalman_filter.reset()
+        self._last_dc_values = None
+        if self.dc_detector and hasattr(self.dc_detector, 'reset'):
+            self.dc_detector.reset()
         self.logger.debug(f"インジケータ '{self.name}' がリセットされました。")

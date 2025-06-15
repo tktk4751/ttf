@@ -12,6 +12,7 @@ from .divergence.z_macd_divergence import ZMACDDivergenceSignal
 from .z_trend import ZTrendBreakoutEntrySignal
 from .z_adaptive_ma import ZAdaptiveMACrossoverEntrySignal
 from .cycle_trend_index.fillter import CycleTrendIndexFilterSignal
+from .ultimate_ma import UltimateMAEntrySignal
 
 # 公開するクラスのリスト
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     'ZMACDDivergenceSignal',
     'ZTrendBreakoutEntrySignal',
     'ZAdaptiveMACrossoverEntrySignal',
-    'CycleTrendIndexFilterSignal'
+    'CycleTrendIndexFilterSignal',
+    'UltimateMAEntrySignal'
 ] 

@@ -11,6 +11,7 @@ from position_sizing.fixed_ratio import FixedRatioSizing
 from position_sizing.atr_volatility import ATRVolatilitySizing
 from position_sizing.volatility_std import AlphaVolatilitySizing
 from position_sizing.c_position_sizing import CATRPositionSizing
+from position_sizing.simple_atr_sizing import SimpleATRPositionSizing
 from strategies.base.strategy import BaseStrategy
 from analytics.analytics import Analytics
 from data.data_loader import DataLoader, CSVDataSource
@@ -85,7 +86,7 @@ class BayesianOptimizer(BaseOptimizer):
         # ポジションサイジングの作成
         position_config = self.config.get('position_sizing', {})
 
-        position_sizing = CATRPositionSizing()
+        position_sizing = SimpleATRPositionSizing()
         
         # バックテスターの作成
         initial_balance = self.config.get('position_sizing', {}).get('initial_balance', 10000)

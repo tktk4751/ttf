@@ -744,7 +744,6 @@ class ZAdaptiveChannel(Indicator):
                 min_cycle=min_cycle,
                 max_output=max_output,
                 min_output=min_output,
-                use_kalman_filter=use_kalman_filter,
                 src_type=src_type
             )
         

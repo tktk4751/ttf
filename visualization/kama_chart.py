@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import yaml
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import mplfinance as mpf
+from pathlib import Path
+from typing import Dict, Any, Optional, Tuple, List
+
+# データ取得のための依存関係
+from data.data_loader import DataLoader, CSVDataSource
+from data.data_processor import DataProcessor
+from data.binance_data_source import BinanceDataSource
+
+# インジケーター
+from indicators.kama import KaufmanAdaptiveMA
+from indicators.efficiency_ratio import EfficiencyRatio
+
+
+class KAMAChart:
+    """
+    KAMA（カウフマン適応移動平均線）を表示するローソク足チャートクラス
+    
+    - ローソク足と出来高
+    - KAMAの中心線
+    - トレンド方向のカラー表示
+    - 効率比（ER）の表示
+    """
+    
+    def __init__(self):
+        """初期化"""
+        self.data = None
+        self.kama = None
+        self.er = None
+        self.fig = None
+        self.axes = None
+    
+    def load_data_from_config(self, config_path: str) -> pd.DataFrame:
+        """
+        設定ファイルからデータを読み込む
+        
+        Args:
+            config_path: 設定ファイルのパス
+            
+        Returns:
+            処理済みのデータフレーム
+        """
+        # 設定ファイルの読み込み
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            
+        # データの準備
+        binance_config = config.get('binance_data', {})
+        data_dir = binance_config.get('data_dir', 'data/binance')
+        binance_data_source = BinanceDataSource(data_dir)
+        
+        # CSVデータソースはダミーとして渡す（Binanceデータソースのみを使用）
+        dummy_csv_source = CSVDataSource("dummy")
+        data_loader = DataLoader(
+            data_source=dummy_csv_source,
+            binance_data_source=binance_data_source
+        )
+        data_processor = DataProcessor()
+        
+        # データの読み込みと処理
+        print("\nデータを読み込み・処理中...")
+        raw_data = data_loader.load_data_from_config(config)
+        processed_data = {
+            symbol: data_processor.process(df)
+            for symbol, df in raw_data.items()
+        }
+        
+        # 最初のシンボルのデータを取得
+        first_symbol = next(iter(processed_data))
+        self.data = processed_data[first_symbol]
+        
+        print(f"データ読み込み完了: {first_symbol}")
+        print(f"期間: {self.data.index.min()} → {self.data.index.max()}")
+        print(f"データ数: {len(self.data)}")
+        
+        return self.data
+
+    def calculate_indicators(self) -> None:
+        """
+        KAMAと効率比を計算する
+        """
+        if self.data is None:
+            raise ValueError("データが読み込まれていません。load_data_from_config()を先に実行してください。")
+            
+        print("\nKAMAと効率比を計算中...")
+        
+        # KAMAの計算
+        self.kama = KaufmanAdaptiveMA(
+            period=10,
+            fast_period=5,
+            slow_period=120,
+            src_type='hlc3',
+            slope_index=1,
+            range_threshold=0.005
+        )
+        
+        # 効率比の計算
+        self.er = EfficiencyRatio(
+            period=5,
+            src_type='hlc3',
+            smoothing_method='hma',
+            use_dynamic_period=True,
+            cycle_part=1.0,
+            detector_type='absolute_ultimate',
+            max_cycle=120,
+            min_cycle=5,
+            max_output=120,
+            min_output=5,
+            slope_index=3,
+            range_threshold=0.005,
+            smoother_period=13,
+            lp_period=5,
+            hp_period=120
+        )
+        
+        # インジケーターの計算
+        print("計算を実行します...")
+        kama_result = self.kama.calculate(self.data)
+        er_result = self.er.calculate(self.data)
+        
+        print("KAMAと効率比の計算完了")
+            
+    def plot(self, 
+            title: str = "KAMAチャート", 
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            show_volume: bool = True,
+            figsize: Tuple[int, int] = (14, 12),
+            style: str = 'yahoo',
+            savefig: Optional[str] = None) -> None:
+        """
+        ローソク足チャートとKAMAを描画する
+        
+        Args:
+            title: チャートのタイトル
+            start_date: 表示開始日（フォーマット: YYYY-MM-DD）
+            end_date: 表示終了日（フォーマット: YYYY-MM-DD）
+            show_volume: 出来高を表示するか
+            figsize: 図のサイズ
+            style: mplfinanceのスタイル
+            savefig: 保存先のパス（指定しない場合は表示のみ）
+        """
+        if self.data is None:
+            raise ValueError("データが読み込まれていません。load_data_from_config()を先に実行してください。")
+            
+        if self.kama is None or self.er is None:
+            raise ValueError("インジケーターが計算されていません。calculate_indicators()を先に実行してください。")
+        
+        # データの期間絞り込み
+        df = self.data.copy()
+        if start_date:
+            df = df[df.index >= pd.to_datetime(start_date)]
+        if end_date:
+            df = df[df.index <= pd.to_datetime(end_date)]
+            
+        # KAMAと効率比の値を取得
+        print("インジケーターデータを取得中...")
+        kama_values = self.kama.get_values()
+        er_values = self.er.get_values()
+        trend_signals = self.er.get_trend_signals()
+        
+        # 全データの時系列データフレームを作成
+        full_df = pd.DataFrame(
+            index=self.data.index,
+            data={
+                'kama': kama_values,
+                'er': er_values,
+                'trend': trend_signals
+            }
+        )
+        
+        # 絞り込み後のデータに対してインジケーターデータを結合
+        df = df.join(full_df)
+        
+        print(f"チャートデータ準備完了 - 行数: {len(df)}")
+        
+        # トレンド方向に基づくKAMAの色分け
+        df['kama_uptrend'] = np.where(df['trend'] == 1, df['kama'], np.nan)
+        df['kama_downtrend'] = np.where(df['trend'] == -1, df['kama'], np.nan)
+        df['kama_range'] = np.where(df['trend'] == 0, df['kama'], np.nan)
+        
+        # mplfinanceでプロット用の設定
+        # 1. メインチャート上のプロット
+        main_plots = []
+        
+        # KAMAのプロット設定
+        main_plots.append(mpf.make_addplot(df['kama_uptrend'], color='green', width=2, label='KAMA (Up)'))
+        main_plots.append(mpf.make_addplot(df['kama_downtrend'], color='red', width=2, label='KAMA (Down)'))
+        main_plots.append(mpf.make_addplot(df['kama_range'], color='gray', width=2, label='KAMA (Range)'))
+        
+        # 2. オシレータープロット
+        # 効率比パネル
+        er_panel = mpf.make_addplot(df['er'], panel=1, color='purple', width=1.2, 
+                                   ylabel='Efficiency Ratio', secondary_y=False, label='ER')
+        
+        # トレンド方向パネル
+        trend_panel = mpf.make_addplot(df['trend'], panel=2, color='orange', width=1.5, 
+                                      ylabel='Trend Direction', secondary_y=False, label='Trend', type='line')
+        
+        # mplfinanceの設定
+        kwargs = dict(
+            type='candle',
+            figsize=figsize,
+            title=title,
+            style=style,
+            datetime_format='%Y-%m-%d',
+            xrotation=45,
+            returnfig=True
+        )
+        
+        # 出来高と追加パネルの設定
+        if show_volume:
+            kwargs['volume'] = True
+            kwargs['panel_ratios'] = (4, 1, 1, 1)  # メイン:出来高:ER:トレンド
+            # 出来高を表示する場合は、オシレーターのパネル番号を+1する
+            er_panel = mpf.make_addplot(df['er'], panel=2, color='purple', width=1.2, 
+                                       ylabel='Efficiency Ratio', secondary_y=False, label='ER')
+            trend_panel = mpf.make_addplot(df['trend'], panel=3, color='orange', width=1.5, 
+                                          ylabel='Trend Direction', secondary_y=False, label='Trend', type='line')
+        else:
+            kwargs['volume'] = False
+            kwargs['panel_ratios'] = (4, 1, 1)  # メイン:ER:トレンド
+        
+        # すべてのプロットを結合
+        all_plots = main_plots + [er_panel, trend_panel]
+        kwargs['addplot'] = all_plots
+        
+        # プロット実行
+        fig, axes = mpf.plot(df, **kwargs)
+        
+        # 凡例の追加
+        axes[0].legend(['KAMA (Up)', 'KAMA (Down)', 'KAMA (Range)'], 
+                      loc='upper left')
+        
+        self.fig = fig
+        self.axes = axes
+        
+        # 各パネルに参照線を追加
+        if show_volume:
+            # 効率比パネル
+            axes[2].axhline(y=0.618, color='green', linestyle='--', alpha=0.5)
+            axes[2].axhline(y=0.382, color='red', linestyle='--', alpha=0.5)
+            
+            # トレンド方向パネル
+            axes[3].axhline(y=0, color='black', linestyle='-', alpha=0.5)
+            axes[3].axhline(y=1, color='green', linestyle='--', alpha=0.5)
+            axes[3].axhline(y=-1, color='red', linestyle='--', alpha=0.5)
+        else:
+            # 効率比パネル
+            axes[1].axhline(y=0.618, color='green', linestyle='--', alpha=0.5)
+            axes[1].axhline(y=0.382, color='red', linestyle='--', alpha=0.5)
+            
+            # トレンド方向パネル
+            axes[2].axhline(y=0, color='black', linestyle='-', alpha=0.5)
+            axes[2].axhline(y=1, color='green', linestyle='--', alpha=0.5)
+            axes[2].axhline(y=-1, color='red', linestyle='--', alpha=0.5)
+        
+        # 統計情報の表示
+        print(f"\n=== トレンド統計 ===")
+        total_points = len(df[df['trend'] != 0])
+        uptrend_points = len(df[df['trend'] == 1])
+        downtrend_points = len(df[df['trend'] == -1])
+        range_points = len(df[df['trend'] == 0])
+        
+        print(f"総データ点数: {total_points}")
+        print(f"上昇トレンド: {uptrend_points} ({uptrend_points/total_points*100:.1f}%)")
+        print(f"下降トレンド: {downtrend_points} ({downtrend_points/total_points*100:.1f}%)")
+        print(f"レンジ相場: {range_points} ({range_points/total_points*100:.1f}%)")
+        print(f"効率比 - 平均: {df['er'].mean():.3f}, 範囲: {df['er'].min():.3f} - {df['er'].max():.3f}")
+        
+        # 保存または表示
+        if savefig:
+            plt.savefig(savefig, dpi=150, bbox_inches='tight')
+            print(f"チャートを保存しました: {savefig}")
+        else:
+            plt.tight_layout()
+            plt.show()
+
+
+def main():
+    """メイン関数"""
+    # コマンドライン引数を処理
+    import argparse
+    parser = argparse.ArgumentParser(description='KAMAチャートの描画')
+    parser.add_argument('--config', '-c', type=str, default='config.yaml', help='設定ファイルのパス')
+    parser.add_argument('--start', '-s', type=str, help='表示開始日 (YYYY-MM-DD)')
+    parser.add_argument('--end', '-e', type=str, help='表示終了日 (YYYY-MM-DD)')
+    parser.add_argument('--output', '-o', type=str, help='出力ファイルのパス')
+    args = parser.parse_args()
+    
+    # チャートを作成
+    chart = KAMAChart()
+    chart.load_data_from_config(args.config)
+    chart.calculate_indicators()
+    chart.plot(
+        start_date=args.start,
+        end_date=args.end,
+        savefig=args.output
+    )
+
+
+if __name__ == "__main__":
+    main() 

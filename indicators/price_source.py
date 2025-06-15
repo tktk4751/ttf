@@ -6,7 +6,15 @@ import numpy as np
 import pandas as pd
 from numba import jit, vectorize
 
-from .indicator import Indicator
+# 相対インポートから絶対インポートに変更
+try:
+    from .indicator import Indicator
+except ImportError:
+    # スタンドアロン実行時の対応
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from indicator import Indicator
 
 
 @jit(nopython=True)

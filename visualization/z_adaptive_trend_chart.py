@@ -84,8 +84,8 @@ class ZAdaptiveTrendChart:
 
     def calculate_indicators(self,
                             # シンプルアジャストメント乗数パラメータ
-                            max_multiplier: float = 6.0,
-                            min_multiplier: float = 2.0,
+                            max_multiplier: float = 8.0,
+                            min_multiplier: float = 3.0,
                             # ソースタイプ選択
                             trend_src_type: str = 'z_adaptive_ma',
                             trigger_source: str = 'x_trend',
@@ -98,16 +98,16 @@ class ZAdaptiveTrendChart:
                             hp_period: int = 100,
                             max_cycle: int = 120,
                             min_cycle: int = 10,
-                            max_output: int = 75,
-                            min_output: int = 5,
+                            max_output: int = 89,
+                            min_output: int = 21,
                             use_kalman_filter: bool = False,
                             # Xトレンドインデックスパラメータ
                             x_detector_type: str = 'dudi_e',
-                            x_cycle_part: float = 0.7,
+                            x_cycle_part: float = 1.0,
                             x_max_cycle: int = 120,
                             x_min_cycle: int = 5,
-                            x_max_output: int = 55,
-                            x_min_output: int = 8,
+                            x_max_output: int = 89,
+                            x_min_output: int = 21,
                             x_smoother_type: str = 'alma',
                             fixed_threshold: float = 0.65,
                             # ZAdaptiveMA用パラメータ

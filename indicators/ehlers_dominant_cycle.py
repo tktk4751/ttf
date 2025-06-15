@@ -7,7 +7,11 @@ import numpy as np
 import pandas as pd
 from numba import jit, prange
 
-from .indicator import Indicator
+try:
+    from .indicator import Indicator
+except ImportError:
+    # スタンドアロン実行時の対応
+    from indicator import Indicator
 
 @dataclass
 class DominantCycleResult:

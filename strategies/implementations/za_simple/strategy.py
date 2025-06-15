@@ -45,7 +45,7 @@ class ZASimpleStrategy(BaseStrategy):
 
 
         # CERパラメータ
-        detector_type: str = 'phac_e',     # CER用ドミナントサイクル検出器タイプ
+        detector_type: str = 'absolute_ultimate',     # CER用ドミナントサイクル検出器タイプ
         cycle_part: float = 0.5,           # CER用サイクル部分
         lp_period: int = 5,               # CER用ローパスフィルター期間
         hp_period: int = 100,              # CER用ハイパスフィルター期間
@@ -53,7 +53,6 @@ class ZASimpleStrategy(BaseStrategy):
         min_cycle: int = 5,               # CER用最小サイクル期間
         max_output: int = 89,             # CER用最大出力値
         min_output: int = 5,              # CER用最小出力値
-        use_kalman_filter: bool = False,   # CER用カルマンフィルター使用有無
         
         # ZAdaptiveMA用パラメータ
         fast_period: int = 2,             # 速い移動平均の期間（固定値）
@@ -180,7 +179,6 @@ class ZASimpleStrategy(BaseStrategy):
             'min_cycle': min_cycle,
             'max_output': max_output,
             'min_output': min_output,
-            'use_kalman_filter': use_kalman_filter,
             
             # ZAdaptiveMA用パラメータ
             'fast_period': fast_period,
@@ -227,7 +225,6 @@ class ZASimpleStrategy(BaseStrategy):
             min_cycle=min_cycle,
             max_output=max_output,
             min_output=min_output,
-            use_kalman_filter=use_kalman_filter,
             
             # ZAdaptiveMA用パラメータ
             fast_period=fast_period,

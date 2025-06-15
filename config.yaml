@@ -3,7 +3,7 @@
 # データ設定
 data:
   data_dir: "data/spot/monthly/klines"  # データディレクトリのパス
-  symbol: "DOGEUSDT"  # 取引対象の銘柄
+  symbol: "SUIUSDT"  # 取引対象の銘柄
   timeframe: "4h"    # 時間足 (1m, 5m, 15m, 1h, 4h, 1d)
   start: "2017-10-30"  # データ開始日 (YYYY-MM-DD)
   end: "2025-12-30"    # データ終了日 (YYYY-MM-DD)
@@ -12,7 +12,7 @@ data:
 binance_data:
   data_dir: "data/binance"
   enabled: true
-  symbol: "DOGE"
+  symbol: "AVAX"
   market_type: "spot"  # spot or future
   timeframe: "4h"
   start: "2000-01-01"

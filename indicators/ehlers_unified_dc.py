@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Union, Optional, Dict, Type
+from typing import Union, Optional, Dict, Type, Tuple
 import numpy as np
 import pandas as pd
 
@@ -26,6 +26,8 @@ from indicators.ehlers_bandpass_zero_crossings import EhlersBandpassZeroCrossing
 from indicators.ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram # 自己相関ピリオドグラム検出器
 from indicators.ehlers_dft_dominant_cycle import EhlersDFTDominantCycle # DFTドミナントサイクル検出器
 from indicators.ehlers_multiple_bandpass import EhlersMultipleBandpass # 複数バンドパス検出器
+from indicators.ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle # 絶対的究極サイクル検出器
+from indicators.ehlers_neural_quantum_fractal_cycle import EhlersUltraSupremeStabilityCycle # 究極安定性サイクル検出器
 # from .indicators.kalman_filter import KalmanFilter # 不正なパス
 from indicators.kalman_filter import KalmanFilter # 絶対インポートに変更
 # from .indicators.price_source import PriceSource # 不正なパス
@@ -57,6 +59,7 @@ class EhlersUnifiedDC(EhlersDominantCycle):
     - 'autocorr_perio': 自己相関ピリオドグラム検出器 (Autocorrelation Periodogram)
     - 'dft_dominant': DFTドミナントサイクル検出器 (DFT Dominant Cycle)
     - 'multi_bandpass': 複数バンドパス検出器 (Multiple Bandpass)
+    - 'absolute_ultimate': 絶対的究極サイクル検出器 (Absolute Ultimate Cycle)
     """
     
     # 利用可能な検出器の定義
@@ -73,7 +76,9 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'bandpass_zero': EhlersBandpassZeroCrossings,
         'autocorr_perio': EhlersAutocorrelationPeriodogram,
         'dft_dominant': EhlersDFTDominantCycle,
-        'multi_bandpass': EhlersMultipleBandpass
+        'multi_bandpass': EhlersMultipleBandpass,
+        'absolute_ultimate': EhlersAbsoluteUltimateCycle,
+        'ultra_supreme_stability': EhlersUltraSupremeStabilityCycle
     }
     
     # 検出器の説明
@@ -90,7 +95,9 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'bandpass_zero': 'バンドパスゼロクロッシング検出器（Bandpass Zero Crossings）',
         'autocorr_perio': '自己相関ピリオドグラム検出器（Autocorrelation Periodogram）',
         'dft_dominant': 'DFTドミナントサイクル検出器（DFT Dominant Cycle）',
-        'multi_bandpass': '複数バンドパス検出器（Multiple Bandpass）'
+        'multi_bandpass': '複数バンドパス検出器（Multiple Bandpass）',
+        'absolute_ultimate': '絶対的究極サイクル検出器（Absolute Ultimate Cycle）',
+        'ultra_supreme_stability': '究極安定性サイクル検出器（Ultra Supreme Stability Cycle）'
     }
     
     def __init__(
@@ -113,7 +120,8 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         bandwidth: float = 0.6,
         center_period: float = 15.0,
         avg_length: float = 3.0,
-        window: int = 50
+        window: int = 50,
+        period_range: Tuple[int, int] = (5, 120)
     ):
         """
         コンストラクタ
@@ -132,6 +140,8 @@ class EhlersUnifiedDC(EhlersDominantCycle):
                 - 'autocorr_perio': 自己相関ピリオドグラム検出器
                 - 'dft_dominant': DFTドミナントサイクル検出器
                 - 'multi_bandpass': 複数バンドパス検出器
+                - 'absolute_ultimate': 絶対的究極サイクル検出器
+                - 'ultra_supreme_stability': 究極安定性サイクル検出器
             cycle_part: サイクル部分の倍率（デフォルト: 0.5）
             max_cycle: 最大サイクル期間（デフォルト: 50）
             min_cycle: 最小サイクル期間（デフォルト: 6）
@@ -149,6 +159,7 @@ class EhlersUnifiedDC(EhlersDominantCycle):
             center_period: 中心周期（bandpass_zero用）
             avg_length: 平均長（autocorr_perio用）
             window: 分析ウィンドウ長（dft_dominant用）
+            period_range: 周期範囲のタプル（absolute_ultimate、ultra_supreme_stability用）
         """
         # 検出器名を小文字に変換して正規化
         detector_type = detector_type.lower()
@@ -183,6 +194,7 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         self.center_period = center_period
         self.avg_length = avg_length
         self.window = window
+        self.period_range = period_range
         
         # PriceSourceユーティリティ
         self.price_source_extractor = PriceSource()
@@ -246,6 +258,24 @@ class EhlersUnifiedDC(EhlersDominantCycle):
                 cycle_part=cycle_part,
                 max_output=max_output,
                 min_output=min_output,
+                src_type=src_type
+            )
+        elif detector_type == 'absolute_ultimate':
+            # 絶対的究極サイクル検出器
+            self.detector = self._DETECTORS[detector_type](
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                period_range=period_range,
+                src_type=src_type
+            )
+        elif detector_type == 'ultra_supreme_stability':
+            # 究極安定性サイクル検出器
+            self.detector = self._DETECTORS[detector_type](
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                period_range=period_range,
                 src_type=src_type
             )
         else:
@@ -413,7 +443,8 @@ class EhlersUnifiedDC(EhlersDominantCycle):
             f"maxOut={self.max_output}_minOut={self.min_output}_"
             f"lp={self.lp_period}_hp={self.hp_period}_"
             f"alpha={self.alpha}_bw={self.bandwidth}_cp={self.center_period}_"
-            f"avgLen={self.avg_length}_win={self.window}"
+            f"avgLen={self.avg_length}_win={self.window}_"
+            f"periodRange={self.period_range}"
             # Add other specific detector params if they vary significantly and affect output
         )
         return f"{data_hash_val}_{param_str}" 

@@ -25,7 +25,6 @@ from .alpha_squeeze import AlphaSqueeze
 from .alpha_rsx import AlphaRSX
 from .rsx import RSX
 from .hma import HMA
-from .hyper_ma import HyperMA
 from .alpha_donchian import AlphaDonchian
 from .alpha_volatility import AlphaVolatility
 from .alpha_vix import AlphaVIX
@@ -73,6 +72,12 @@ from .ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram
 from .ehlers_dft_dominant_cycle import EhlersDFTDominantCycle
 from .ehlers_multiple_bandpass import EhlersMultipleBandpass
 from .ehlers_unified_dc import EhlersUnifiedDC
+# 革新的な次世代サイクル検出器
+from .ehlers_adaptive_ensemble_cycle import EhlersAdaptiveEnsembleCycle
+from .ehlers_quantum_adaptive_cycle import EhlersQuantumAdaptiveCycle
+from .ehlers_ultimate_cycle import EhlersUltimateCycle
+from .ehlers_supreme_ultimate_cycle import EhlersSupremeUltimateCycle
+from .ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle
 
 # エーラーズのドミナントサイクル検出アルゴリズム一覧
 __all__ = [
@@ -145,6 +150,12 @@ __all__ = [
     'EhlersUnifiedDC',
     'CMA',
     'CATR',
+    # 革新的な次世代サイクル検出器
+    'EhlersAdaptiveEnsembleCycle',
+    'EhlersQuantumAdaptiveCycle',
+    'EhlersUltimateCycle',
+    'EhlersSupremeUltimateCycle',
+    'EhlersAbsoluteUltimateCycle',
 ]
 
 # Version

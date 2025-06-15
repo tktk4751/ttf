@@ -27,6 +27,9 @@ class XTrendIndexResult:
     fixed_threshold: float      # 固定しきい値
     trend_state: np.ndarray     # トレンド状態 (1=トレンド、0=レンジ、NaN=不明)
 
+\
+
+
 
 @njit(fastmath=True)
 def calculate_tr(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
@@ -142,7 +145,7 @@ def calculate_stddev_factor(atr: np.ndarray) -> np.ndarray:
             lowest_lookback_start = max(0, i - fixed_lookback + 1)
             # windowがlookback期間より短い場合も考慮
             valid_stddev_window = stddev[lowest_lookback_start : i + 1]
-            # infを除外して最小値を計算
+            # infを除外して最小値を計算 
             valid_stddev_window_finite = valid_stddev_window[np.isfinite(valid_stddev_window)]
             if len(valid_stddev_window_finite) > 0:
                  lowest_stddev[i] = np.min(valid_stddev_window_finite)
@@ -285,14 +288,14 @@ class XTrendIndex(Indicator):
     def __init__(
         self,
         # EhlersUnifiedDC パラメータ
-        detector_type: str = 'phac_e',
-        cycle_part: float = 0.5,
+        detector_type: str = 'cycle_period2',
+        cycle_part: float = 1.0,
         max_cycle: int = 120, # CATRと合わせる例
-        min_cycle: int = 5,  # CATRと合わせる例
+        min_cycle: int = 21,  # CATRと合わせる例
         max_output: int = 89, # CATRと合わせる例
-        min_output: int = 8,  # CATRと合わせる例
+        min_output: int = 13,  # CATRと合わせる例
         src_type: str = 'hlc3', # DC計算ソース
-        lp_period: int = 5,    # 拡張DC用
+        lp_period: int = 21,    # 拡張DC用
         hp_period: int = 120,   # 拡張DC用
 
         # CATR パラメータ (DCパラメータは上記と共有可能)

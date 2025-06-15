@@ -173,8 +173,8 @@ class ZAdaptiveTrend(Indicator):
     def __init__(
         self,
         # シンプルアジャストメント乗数パラメータ
-        max_multiplier: float = 6.0,     # 最大乗数（トリガー値0の時）
-        min_multiplier: float = 1.0,     # 最小乗数（トリガー値1の時）
+        max_multiplier: float = 8.0,     # 最大乗数（トリガー値0の時）
+        min_multiplier: float = 2.0,     # 最小乗数（トリガー値1の時）
         
         # トレンド用ソースタイプ選択（中心線とトレンド判定に使用）
         trend_src_type: str = 'z_adaptive_ma',    # 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'z_adaptive_ma'
