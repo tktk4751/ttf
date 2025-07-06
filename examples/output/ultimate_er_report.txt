@@ -1,0 +1,18 @@
+🎯 Ultimate Efficiency Ratio 分析レポート
+==================================================
+
+データサンプル数: 500
+Ultimate ER平均: 0.8674
+標準ER平均: 0.2514
+現在の効率性: 0.6437
+市場効率性状態: moderately_efficient_stable
+
+改善統計:
+  ultimate_er_avg: 0.8674
+  raw_er_avg: 0.4039
+  ultimate_er_std: 0.2542
+  raw_er_std: 0.2814
+  noise_reduction_ratio: 0.0967
+  stability_improvement: 0.0272
+
+平均適応期間: 7.9

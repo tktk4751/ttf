@@ -12,6 +12,8 @@ from .simple_z_donchian import SimpleZDonchianStrategy
 from .z_macd_breakout import ZMACDBreakoutStrategy
 from .zt_simple import ZTSimpleStrategy
 from .z_adaptive_ma_crossover import ZAdaptiveMACrossoverStrategy
+from .ultra_quantum_adaptive_channel import UltraQuantumAdaptiveChannelStrategy
+from .cosmic_universal import CosmicUniversalStrategy
 
 # 公開する戦略のリスト
 __all__ = [
@@ -24,5 +26,7 @@ __all__ = [
     'SimpleZDonchianStrategy',
     'ZMACDBreakoutStrategy',
     'ZTSimpleStrategy',
-    'ZAdaptiveMACrossoverStrategy'
+    'ZAdaptiveMACrossoverStrategy',
+    'UltraQuantumAdaptiveChannelStrategy',
+    'CosmicUniversalStrategy'
 ] 

@@ -459,7 +459,7 @@ class EhlersAbsoluteUltimateCycle(EhlersDominantCycle):
     """
     
     # 許可されるソースタイプのリスト
-    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4']
+    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4','ukf_hlc3','ukf_close','ukf']
     
     def __init__(
         self,
@@ -502,6 +502,19 @@ class EhlersAbsoluteUltimateCycle(EhlersDominantCycle):
         """
         指定されたソースタイプに基づいて価格データを計算する
         """
+        # UKFソースタイプの場合はPriceSourceを使用
+        if src_type.startswith('ukf'):
+            try:
+                from .price_source import PriceSource
+                result = PriceSource.calculate_source(data, src_type)
+                # 確実にnp.ndarrayにする
+                if not isinstance(result, np.ndarray):
+                    result = np.asarray(result, dtype=np.float64)
+                return result
+            except ImportError:
+                raise ImportError("PriceSourceが利用できません。UKFソースタイプを使用するにはPriceSourceが必要です。")
+        
+        # 従来のソースタイプ処理
         if isinstance(data, pd.DataFrame):
             if src_type == 'close':
                 if 'close' in data.columns:

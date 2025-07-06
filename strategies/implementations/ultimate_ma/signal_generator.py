@@ -58,7 +58,7 @@ class UltimateMASignalGenerator(BaseSignalGenerator):
     def __init__(
         self,
         # Ultimate MAパラメータ
-        super_smooth_period: int = 10,
+        ultimate_smoother_period: int = 10,
         zero_lag_period: int = 21,
         realtime_window: int = 13,
         src_type: str = 'hlc3',
@@ -89,7 +89,7 @@ class UltimateMASignalGenerator(BaseSignalGenerator):
         
         # パラメータの設定
         self._params = {
-            'super_smooth_period': super_smooth_period,
+            'ultimate_smoother_period': ultimate_smoother_period,
             'zero_lag_period': zero_lag_period,
             'realtime_window': realtime_window,
             'src_type': src_type,
@@ -114,7 +114,7 @@ class UltimateMASignalGenerator(BaseSignalGenerator):
         
         # Ultimate MAエントリーシグナルの初期化
         self.ultimate_ma_signal = UltimateMAEntrySignal(
-            super_smooth_period=super_smooth_period,
+            ultimate_smoother_period=ultimate_smoother_period,
             zero_lag_period=zero_lag_period,
             realtime_window=realtime_window,
             src_type=src_type,

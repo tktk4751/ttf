@@ -1,0 +1,30 @@
+STR 動的期間対応テスト レポート
+==================================================
+
+テストデータ: 1000 データポイント
+テスト日時: 2025-07-06 06:04:24.055071
+
+固定期間版STR設定:
+  期間: 20.0
+  期間モード: fixed
+
+動的期間版STR設定:
+  期間: 20.0
+  期間モード: dynamic
+  サイクル検出器: absolute_ultimate
+  サイクル期間範囲: (10, 60)
+
+結果統計:
+  固定期間版STR - 平均: 4.064335, 標準偏差: 1.037020
+  動的期間版STR - 平均: 4.073402, 標準偏差: 0.864456
+  差分（動的-固定）- 平均: 0.009068, 標準偏差: 0.358541
+
+動的期間情報:
+  period_mode: dynamic
+  cycle_detector_available: True
+  cycle_detector_type: absolute_ultimate
+  cycle_detector_cycle_part: 1.0
+  cycle_detector_max_cycle: 60
+  cycle_detector_min_cycle: 10
+  cycle_period_multiplier: 1.0
+  cycle_detector_period_range: (10, 60)

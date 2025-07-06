@@ -28,6 +28,8 @@ from indicators.ehlers_dft_dominant_cycle import EhlersDFTDominantCycle # DFTド
 from indicators.ehlers_multiple_bandpass import EhlersMultipleBandpass # 複数バンドパス検出器
 from indicators.ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle # 絶対的究極サイクル検出器
 from indicators.ehlers_neural_quantum_fractal_cycle import EhlersUltraSupremeStabilityCycle # 究極安定性サイクル検出器
+# EhlersRefinedCycleDetector は関数内でインポートして循環インポートを回避
+from indicators.ehlers_practical_cycle_detector import EhlersPracticalCycleDetector # 実践的サイクル検出器
 # from .indicators.kalman_filter import KalmanFilter # 不正なパス
 from indicators.kalman_filter import KalmanFilter # 絶対インポートに変更
 # from .indicators.price_source import PriceSource # 不正なパス
@@ -78,7 +80,9 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'dft_dominant': EhlersDFTDominantCycle,
         'multi_bandpass': EhlersMultipleBandpass,
         'absolute_ultimate': EhlersAbsoluteUltimateCycle,
-        'ultra_supreme_stability': EhlersUltraSupremeStabilityCycle
+        'ultra_supreme_stability': EhlersUltraSupremeStabilityCycle,
+        # 'refined': EhlersRefinedCycleDetector,  # 循環インポート回避のため関数内でインポート
+        'practical': EhlersPracticalCycleDetector
     }
     
     # 検出器の説明
@@ -97,7 +101,9 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         'dft_dominant': 'DFTドミナントサイクル検出器（DFT Dominant Cycle）',
         'multi_bandpass': '複数バンドパス検出器（Multiple Bandpass）',
         'absolute_ultimate': '絶対的究極サイクル検出器（Absolute Ultimate Cycle）',
-        'ultra_supreme_stability': '究極安定性サイクル検出器（Ultra Supreme Stability Cycle）'
+        'ultra_supreme_stability': '究極安定性サイクル検出器（Ultra Supreme Stability Cycle）',
+        'refined': '洗練されたサイクル検出器（Refined Cycle Detector）',
+        'practical': '実践的サイクル検出器（Practical Cycle Detector）'
     }
     
     def __init__(
@@ -142,6 +148,8 @@ class EhlersUnifiedDC(EhlersDominantCycle):
                 - 'multi_bandpass': 複数バンドパス検出器
                 - 'absolute_ultimate': 絶対的究極サイクル検出器
                 - 'ultra_supreme_stability': 究極安定性サイクル検出器
+                - 'refined': 洗練されたサイクル検出器
+                - 'practical': 実践的サイクル検出器
             cycle_part: サイクル部分の倍率（デフォルト: 0.5）
             max_cycle: 最大サイクル期間（デフォルト: 50）
             min_cycle: 最小サイクル期間（デフォルト: 6）
@@ -164,10 +172,10 @@ class EhlersUnifiedDC(EhlersDominantCycle):
         # 検出器名を小文字に変換して正規化
         detector_type = detector_type.lower()
         
-        # 検出器が有効かチェック
-        if detector_type not in self._DETECTORS:
-            valid_detectors = ", ".join(self._DETECTORS.keys())
-            raise ValueError(f"無効な検出器タイプです: {detector_type}。有効なオプション: {valid_detectors}")
+        # 検出器が有効かチェック ('refined' は関数内でインポートするため別途処理)
+        valid_detectors = list(self._DETECTORS.keys()) + ['refined']
+        if detector_type not in valid_detectors:
+            raise ValueError(f"無効な検出器タイプです: {detector_type}。有効なオプション: {', '.join(valid_detectors)}")
         
         # 親クラスの初期化
         name = f"EhlersUnifiedDC(det={detector_type}, src={src_type}, kalman={'Y' if use_kalman_filter else 'N'})"
@@ -277,6 +285,23 @@ class EhlersUnifiedDC(EhlersDominantCycle):
                 min_output=min_output,
                 period_range=period_range,
                 src_type=src_type
+            )
+        elif detector_type == 'refined':
+            # 洗練されたサイクル検出器 - 循環インポート回避のため関数内でインポート
+            try:
+                from indicators.ehlers_refined_cycle_detector import EhlersRefinedCycleDetector
+            except ImportError:
+                from ehlers_refined_cycle_detector import EhlersRefinedCycleDetector
+            
+            self.detector = EhlersRefinedCycleDetector(
+                cycle_part=cycle_part,
+                max_output=max_output,
+                min_output=min_output,
+                period_range=(float(period_range[0]), float(period_range[1])),
+                alpha=alpha,
+                src_type=src_type,
+                ultimate_smoother_period=20.0,
+                use_ultimate_smoother=True
             )
         else:
             # 標準検出器

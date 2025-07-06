@@ -31,7 +31,7 @@ class ZASimpleStrategy(BaseStrategy):
         self,
         # 基本パラメータ
         band_lookback: int = 1,
-        src_type: str = 'hlc3',
+        src_type: str = 'ukf_hlc3',
         
         # 乗数計算方法選択
         multiplier_method: str = 'simple_adjustment',  # 'adaptive', 'simple', 'simple_adjustment'
@@ -59,7 +59,7 @@ class ZASimpleStrategy(BaseStrategy):
         slow_period: int = 144,           # 遅い移動平均の期間（固定値）
         
         # Xトレンドインデックスパラメータ
-        x_detector_type: str = 'cycle_period2',
+        x_detector_type: str = 'absolute_ultimate',
         x_cycle_part: float = 0.7,
         x_max_cycle: int = 120,
         x_min_cycle: int = 5,

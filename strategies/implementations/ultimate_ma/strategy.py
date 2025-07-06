@@ -33,10 +33,10 @@ class UltimateMAStrategy(BaseStrategy):
     def __init__(
         self,
         # Ultimate MAパラメータ
-        super_smooth_period: int = 10,
+        ultimate_smoother_period: int = 8,
         zero_lag_period: int = 21,
         realtime_window: int = 13,
-        src_type: str = 'hlc3',
+        src_type: str = 'ukf_hlc3',
         slope_index: int = 4,
         range_threshold: float = 0.002,
         enable_exit_signals: bool = True,
@@ -63,7 +63,7 @@ class UltimateMAStrategy(BaseStrategy):
         初期化
         
         Args:
-            super_smooth_period: スーパースムーザーフィルター期間（デフォルト: 10）
+            ultimate_smoother_period: スーパースムーザーフィルター期間（デフォルト: 10）
             zero_lag_period: ゼロラグEMA期間（デフォルト: 21）
             realtime_window: リアルタイムトレンド検出ウィンドウ（デフォルト: 13）
             src_type: 価格ソース（'close', 'hlc3', 'hl2', 'ohlc4'など）
@@ -97,7 +97,7 @@ class UltimateMAStrategy(BaseStrategy):
         
         # パラメータの設定
         self._parameters = {
-            'super_smooth_period': super_smooth_period,
+            'ultimate_smoother_period': ultimate_smoother_period,
             'zero_lag_period': zero_lag_period,
             'realtime_window': realtime_window,
             'src_type': src_type,
@@ -122,7 +122,7 @@ class UltimateMAStrategy(BaseStrategy):
         
         # シグナル生成器の初期化
         self.signal_generator = UltimateMASignalGenerator(
-            super_smooth_period=super_smooth_period,
+            ultimate_smoother_period=ultimate_smoother_period,
             zero_lag_period=zero_lag_period,
             realtime_window=realtime_window,
             src_type=src_type,
@@ -272,7 +272,7 @@ class UltimateMAStrategy(BaseStrategy):
         """
         params = {
             # Ultimate MAパラメータ
-            'super_smooth_period': trial.suggest_int('super_smooth_period', 5, 20),
+            'ultimate_smoother_period': trial.suggest_int('ultimate_smoother_period', 5, 20),
             'zero_lag_period': trial.suggest_int('zero_lag_period', 8, 233),
             'realtime_window': trial.suggest_int('realtime_window', 5, 89),
             'src_type': trial.suggest_categorical('src_type', ['close', 'hlc3', 'hl2', 'ohlc4']),
@@ -318,7 +318,7 @@ class UltimateMAStrategy(BaseStrategy):
             Dict[str, Any]: 戦略パラメータ
         """
         strategy_params = {
-            'super_smooth_period': int(params['super_smooth_period']),
+            'ultimate_smoother_period': int(params['ultimate_smoother_period']),
             'zero_lag_period': int(params['zero_lag_period']),
             'realtime_window': int(params['realtime_window']),
             'src_type': params['src_type'],

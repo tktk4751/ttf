@@ -1,0 +1,107 @@
+# UKF比較テスト用設定ファイル
+# 
+# 使用方法:
+# 1. このファイルをconfig.yamlにコピー
+# 2. データパスを適切に設定
+# 3. python examples/ukf_comparison_test.py --simple を実行
+
+# Binanceデータの設定
+binance_data:
+  # データディレクトリのパス（相対パスまたは絶対パス）
+  data_dir: "data/binance"
+  
+  # 取得する通貨ペア
+  symbols:
+    - "BTCUSDT"
+    #- "ETHUSDT" 
+    #- "ADAUSDT"
+  
+  # データの期間設定
+  timeframe: "1h"  # 1分足: "1m", 5分足: "5m", 1時間足: "1h", 1日足: "1d"
+  
+  # データ期間（日数）
+  days: 30  # 過去30日分のデータを使用
+  
+  # データ更新設定
+  update_data: false  # 既存データがある場合は更新しない
+  
+  # その他の設定
+  start_date: null  # 開始日を指定する場合（YYYY-MM-DD形式）
+  end_date: null    # 終了日を指定する場合（YYYY-MM-DD形式）
+
+# データ処理設定
+data_processing:
+  # 欠損値の処理方法
+  fill_method: "forward"  # "forward", "backward", "interpolate"
+  
+  # 外れ値の除去
+  remove_outliers: true
+  outlier_threshold: 3.0  # 標準偏差の倍数
+  
+  # データの平滑化
+  smooth_data: false
+  smooth_window: 5
+
+# UKF比較設定
+ukf_comparison:
+  # 共通パラメータ
+  src_type: "close"  # 価格ソース: "close", "hlc3", "hl2", "ohlc4"
+  adaptive_noise: true  # 適応的ノイズ推定
+  
+  # テストパラメータセット
+  test_cases:
+    standard:
+      alpha: 0.001
+      beta: 2.0
+      kappa: 0.0
+      process_noise_scale: 0.001
+      volatility_window: 10
+      
+    high_sensitivity:
+      alpha: 0.01
+      beta: 2.0
+      kappa: 0.0
+      process_noise_scale: 0.01
+      volatility_window: 5
+      
+    low_noise:
+      alpha: 0.0001
+      beta: 2.0
+      kappa: 0.0
+      process_noise_scale: 0.0001
+      volatility_window: 20
+
+# チャート設定
+chart_settings:
+  # 図のサイズ
+  figsize: [16, 14]
+  
+  # 表示設定
+  show_volume: true
+  
+  # スタイル
+  style: "yahoo"  # "yahoo", "charles", "nightclouds", "sas"
+  
+  # 出力設定
+  output_dir: "output"
+  dpi: 150
+  
+  # 期間制限（オプション）
+  date_range:
+    start_date: null  # 表示開始日（YYYY-MM-DD）
+    end_date: null    # 表示終了日（YYYY-MM-DD）
+
+# ログ設定
+logging:
+  level: "INFO"  # "DEBUG", "INFO", "WARNING", "ERROR"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+# その他の設定
+misc:
+  # 並列処理
+  use_multiprocessing: false
+  max_workers: 4
+  
+  # キャッシュ設定
+  enable_cache: true
+  cache_size: 10 

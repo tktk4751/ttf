@@ -366,11 +366,29 @@ class CycleEfficiencyRatio(Indicator):
                             # ALMAスムージングを適用（i番目までのデータでスムージング）
                             slice_data = er_values[:i+1]
                             if len(slice_data) >= current_period:
-                                # 1次元配列として渡す
-                                smoothed_slice = current_alma.calculate(slice_data.reshape(-1))
-                                if not np.isnan(smoothed_slice[-1]):
-                                    smoothed_er_values[i] = smoothed_slice[-1]
-                                else:
+                                try:
+                                    # データの形状を確認し、適切に整形
+                                    if slice_data.ndim > 1:
+                                        slice_data_1d = slice_data.flatten()
+                                    else:
+                                        slice_data_1d = slice_data
+                                    
+                                    # ALMA計算を実行
+                                    smoothed_slice = current_alma.calculate(slice_data_1d)
+                                    
+                                    # 結果の形状を確認
+                                    if hasattr(smoothed_slice, 'values'):
+                                        smoothed_slice = smoothed_slice.values
+                                    elif isinstance(smoothed_slice, (list, tuple)) and len(smoothed_slice) > 0:
+                                        # タプルやリストの場合は最初の要素を使用
+                                        smoothed_slice = smoothed_slice[0] if hasattr(smoothed_slice[0], '__len__') else smoothed_slice
+                                    
+                                    if not np.isnan(smoothed_slice[-1]):
+                                        smoothed_er_values[i] = smoothed_slice[-1]
+                                    else:
+                                        smoothed_er_values[i] = er_values[i]
+                                except Exception as e:
+                                    # ALMA計算でエラーが発生した場合は元の値を使用
                                     smoothed_er_values[i] = er_values[i]
                             else:
                                 smoothed_er_values[i] = er_values[i]
@@ -386,12 +404,32 @@ class CycleEfficiencyRatio(Indicator):
                             )
                             
                         # 1次元配列として渡す
-                        smoothed_values = self.er_alma_smoother.calculate(er_values.reshape(-1))
-                        
-                        # NaNの処理（最初の数ポイントはNaNになるため、元の値で埋める）
-                        nan_indices = np.isnan(smoothed_values)
-                        smoothed_er_values = smoothed_values.copy()
-                        smoothed_er_values[nan_indices] = er_values[nan_indices]
+                        try:
+                            # データの形状を確認し、適切に整形
+                            if er_values.ndim > 1:
+                                # 多次元配列の場合は最初の次元のみを使用
+                                er_values_1d = er_values.flatten()
+                            else:
+                                er_values_1d = er_values
+                            
+                            # ALMA計算を実行
+                            smoothed_values = self.er_alma_smoother.calculate(er_values_1d)
+                            
+                            # 結果の形状を確認
+                            if hasattr(smoothed_values, 'values'):
+                                smoothed_values = smoothed_values.values
+                            elif isinstance(smoothed_values, (list, tuple)) and len(smoothed_values) > 0:
+                                # タプルやリストの場合は最初の要素を使用
+                                smoothed_values = smoothed_values[0] if hasattr(smoothed_values[0], '__len__') else smoothed_values
+                            
+                            # NaNの処理（最初の数ポイントはNaNになるため、元の値で埋める）
+                            nan_indices = np.isnan(smoothed_values)
+                            smoothed_er_values = smoothed_values.copy()
+                            smoothed_er_values[nan_indices] = er_values_1d[nan_indices]
+                        except Exception as e:
+                            # ALMA計算でエラーが発生した場合は元の値を使用
+                            self.logger.warning(f"ALMA計算中にエラー: {str(e)}。元のER値を使用します。")
+                            smoothed_er_values = er_values.copy()
                 except Exception as e:
                     self.logger.error(f"ER値のスムージング中にエラー: {str(e)}。生のER値を使用します。")
                     smoothed_er_values = er_values.copy()  # エラー時は元の値を使用

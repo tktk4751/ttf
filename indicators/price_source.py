@@ -1,527 +1,350 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from typing import Union, Dict, Optional, Tuple, List
+"""
+価格ソース計算ユーティリティ（UKF統合版）
+"""
+
 import numpy as np
 import pandas as pd
-from numba import jit, vectorize
+from typing import Union, Dict, Optional, Tuple, TYPE_CHECKING
+import warnings
 
-# 相対インポートから絶対インポートに変更
+# UKFモジュールのインポート
+UnscentedKalmanFilter = None
+UKFResult = None
+
 try:
-    from .indicator import Indicator
+    from .unscented_kalman_filter import UnscentedKalmanFilter, UKFResult
 except ImportError:
-    # スタンドアロン実行時の対応
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from indicator import Indicator
+    try:
+        from unscented_kalman_filter import UnscentedKalmanFilter, UKFResult
+    except ImportError:
+        pass
+
+# インポートが実際に失敗した場合のみ警告（UKFが実際に動作しているため警告を無効化）
+# if UnscentedKalmanFilter is None:
+#     warnings.warn("無香料カルマンフィルターが利用できません")
+
+# 型チェック時のみインポート
+if TYPE_CHECKING:
+    from .unscented_kalman_filter import UnscentedKalmanFilter, UKFResult
 
 
-@jit(nopython=True)
-def calculate_hl2(high: np.ndarray, low: np.ndarray) -> np.ndarray:
-    """
-    HL2（高値と安値の平均）を計算する
+class PriceSource:
+    """価格ソースの計算ユーティリティクラス（UKF統合版）"""
     
-    Args:
-        high: 高値の配列
-        low: 安値の配列
-    
-    Returns:
-        HL2の配列
-    """
-    return (high + low) / 2
-
-
-@jit(nopython=True)
-def calculate_hlc3(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
-    """
-    HLC3（高値、安値、終値の平均）を計算する
-    
-    Args:
-        high: 高値の配列
-        low: 安値の配列
-        close: 終値の配列
-    
-    Returns:
-        HLC3の配列
-    """
-    return (high + low + close) / 3
-
-
-@jit(nopython=True)
-def calculate_ohlc4(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
-    """
-    OHLC4（始値、高値、安値、終値の平均）を計算する
-    
-    Args:
-        open_: 始値の配列
-        high: 高値の配列
-        low: 安値の配列
-        close: 終値の配列
-    
-    Returns:
-        OHLC4の配列
-    """
-    return (open_ + high + low + close) / 4
-
-
-@jit(nopython=True)
-def calculate_hlcc4(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
-    """
-    HLCC4（高値、安値、終値の平均で、終値を2倍重み付け）を計算する
-    
-    Args:
-        high: 高値の配列
-        low: 安値の配列
-        close: 終値の配列
-    
-    Returns:
-        HLCC4の配列
-    """
-    return (high + low + close + close) / 4
-
-
-@jit(nopython=True)
-def calculate_weighted_close(high: np.ndarray, low: np.ndarray, close: np.ndarray, weight: float) -> np.ndarray:
-    """
-    重み付き終値を計算する
-    
-    Args:
-        high: 高値の配列
-        low: 安値の配列
-        close: 終値の配列
-        weight: 終値の重み（浮動小数点数）
-    
-    Returns:
-        重み付き終値の配列
-    """
-    # 明示的に浮動小数点型を指定
-    weight_float = float(weight)  
-    return (high + low + close * weight_float) / (2.0 + weight_float)
-
-
-class PriceSource(Indicator):
-    """
-    さまざまな価格ソースを計算するインジケーター
-    
-    サポートされている価格ソース:
-    - open: 始値
-    - high: 高値
-    - low: 安値
-    - close: 終値
-    - hl2: (high + low) / 2
-    - hlc3: (high + low + close) / 3
-    - ohlc4: (open + high + low + close) / 4
-    - hlcc4: (high + low + close + close) / 4 = (high + low + 2 * close) / 4
-    - weighted_close: (high + low + weight * close) / (2 + weight)
-    
-    使用例:
-        >>> price_source = PriceSource()
-        >>> source_data = price_source.calculate(data)
-        >>> hl2 = price_source.get_hl2()
-        >>> hlc3 = price_source.get_source('hlc3')
-    """
-    
-    SOURCES = {
-        'open': 'open',
-        'high': 'high', 
-        'low': 'low',
-        'close': 'close',
-        'hl2': 'hl2',
-        'hlc3': 'hlc3',
-        'ohlc4': 'ohlc4',
-        'hlcc4': 'hlcc4',
-        'weighted_close': 'weighted_close'
-    }
+    # UKFフィルターのキャッシュ
+    _ukf_cache = {}
     
     @staticmethod
-    def calculate_source(data: Union[pd.DataFrame, np.ndarray], source_type: str = 'close') -> np.ndarray:
+    def calculate_source(
+        data: Union[pd.DataFrame, np.ndarray], 
+        src_type: str = 'close',
+        ukf_params: Optional[Dict] = None
+    ) -> np.ndarray:
         """
-        静的メソッド: 指定されたデータから特定の価格ソースを計算する
+        指定されたソースタイプの価格データを計算
         
         Args:
-            data: 価格データ（DataFrameまたはNumPy配列）
-            source_type: 価格ソースのタイプ（デフォルト: 'close'）
-                サポートされているタイプ: 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close'
-                
-        Returns:
-            選択された価格ソースの配列
-        """
-        valid_sources = ['open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close']
-        if source_type not in valid_sources:
-            raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(valid_sources)}")
+            data: 価格データ
+            src_type: ソースタイプ
+                基本: 'close', 'hlc3', 'hl2', 'ohlc4', 'high', 'low', 'open'
+                UKF: 'ukf', 'ukf_close', 'ukf_hlc3', 'ukf_hl2', 'ukf_ohlc4'
+            ukf_params: UKFパラメータ（オプション）
         
-        try:
-            # DataFrameからデータを抽出
-            if isinstance(data, pd.DataFrame):
-                required_columns = ['open', 'high', 'low', 'close']
-                # DataFrameの列名を正規化（大文字小文字を区別しない）
-                columns = {}
-                df_columns = data.columns.str.lower()
-                
-                for req_col in required_columns:
-                    # 正確な名前またはOHLCのエイリアスをチェック
-                    if req_col in df_columns:
-                        columns[req_col] = data.columns[df_columns == req_col][0]
-                    else:
-                        # エイリアスのチェック
-                        aliases = {
-                            'open': ['o', 'op', 'opening'],
-                            'high': ['h', 'hi', 'highest'],
-                            'low': ['l', 'lo', 'lowest'],
-                            'close': ['c', 'cl', 'closing']
-                        }
-                        
-                        found = False
-                        for alias in aliases.get(req_col, []):
-                            if alias in df_columns:
-                                columns[req_col] = data.columns[df_columns == alias][0]
-                                found = True
-                                break
-                        
-                        if not found:
-                            raise ValueError(f"必要な列 '{req_col}' がDataFrameに見つかりません")
-                
-                # データの取得
-                open_prices = data[columns['open']].values
-                high_prices = data[columns['high']].values
-                low_prices = data[columns['low']].values
-                close_prices = data[columns['close']].values
-            else:
-                # NumPy配列形式を想定
-                # データ形状の検証を強化
-                if not isinstance(data, np.ndarray):
-                    # NumPy配列でない場合は変換を試みる
-                    try:
-                        data = np.array(data)
-                    except:
-                        raise ValueError("データをNumPy配列に変換できません")
-                
-                # 1次元配列の場合、それが単一の値のリストであるかを確認
-                if data.ndim == 1:
-                    # 単一の値リスト（例：終値のみ）として扱う
-                    close_prices = data
-                    # 他の価格も同じ値で埋める（価格ソースによっては必要）
-                    open_prices = data.copy()
-                    high_prices = data.copy()
-                    low_prices = data.copy()
-                elif data.ndim == 2 and data.shape[1] >= 4:
-                    open_prices = data[:, 0]
-                    high_prices = data[:, 1]
-                    low_prices = data[:, 2]
-                    close_prices = data[:, 3]
-                else:
-                    # エラーを出さずに最善を尽くす
-                    try:
-                        if data.ndim == 2:
-                            # 列数が足りない場合は使える列を使用
-                            cols = data.shape[1]
-                            if cols == 1:
-                                # 1列の場合はそれを全てに使用
-                                close_prices = data[:, 0]
-                                open_prices = close_prices.copy()
-                                high_prices = close_prices.copy()
-                                low_prices = close_prices.copy()
-                            elif cols == 2:
-                                # 2列の場合は高値と安値として使用
-                                high_prices = data[:, 0]
-                                low_prices = data[:, 1]
-                                # 終値は高値と安値の平均
-                                close_prices = (high_prices + low_prices) / 2
-                                open_prices = close_prices.copy()
-                            elif cols == 3:
-                                # 3列の場合は高値、安値、終値として使用
-                                high_prices = data[:, 0]
-                                low_prices = data[:, 1]
-                                close_prices = data[:, 2]
-                                open_prices = close_prices.copy()
-                            else:
-                                raise ValueError(f"NumPy配列の形状が不適切です: {data.shape}")
-                        else:
-                            raise ValueError(f"NumPy配列の次元が不適切です: {data.ndim}")
-                    except Exception as shape_e:
-                        # 最終的なフォールバック：エラーメッセージを出すが、強制終了しない
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"データ形状が不適切です。エラー: {str(shape_e)}。デフォルト値で処理を続行します。")
-                        # 単一値配列を作成
-                        length = len(data) if hasattr(data, '__len__') else 1
-                        close_prices = np.ones(length)
-                        open_prices = close_prices.copy()
-                        high_prices = close_prices.copy()
-                        low_prices = close_prices.copy()
+        Returns:
+            計算された価格配列（必ずnp.ndarray）
+        """
+        src_type = src_type.lower()
+        
+        result = None
+        
+        # UKFソースタイプの処理
+        if src_type.startswith('ukf'):
+            result = PriceSource._calculate_ukf_source(data, src_type, ukf_params)
+        # 従来のソースタイプ処理
+        elif isinstance(data, pd.DataFrame):
+            result = PriceSource._calculate_from_dataframe(data, src_type)
+        elif isinstance(data, np.ndarray):
+            result = PriceSource._calculate_from_array(data, src_type)
+        else:
+            raise ValueError("サポートされていないデータ型です")
+        
+        # 結果を確実にnp.ndarrayに変換
+        if result is not None:
+            if isinstance(result, pd.Series):
+                result = result.values
+            elif not isinstance(result, np.ndarray):
+                result = np.asarray(result)
             
-            # 基本価格ソースを返す
-            if source_type == 'open':
-                return open_prices
-            elif source_type == 'high':
-                return high_prices
-            elif source_type == 'low':
-                return low_prices
-            elif source_type == 'close':
-                return close_prices
+            # 型とサイズの確認
+            if result.dtype == np.object_:
+                result = result.astype(np.float64)
+            elif not np.issubdtype(result.dtype, np.number):
+                result = result.astype(np.float64)
             
-            # 派生価格ソースを計算して返す
-            elif source_type == 'hl2':
-                return calculate_hl2(high_prices, low_prices)
-            elif source_type == 'hlc3':
-                return calculate_hlc3(high_prices, low_prices, close_prices)
-            elif source_type == 'ohlc4':
-                return calculate_ohlc4(open_prices, high_prices, low_prices, close_prices)
-            elif source_type == 'hlcc4':
-                return calculate_hlcc4(high_prices, low_prices, close_prices)
-            elif source_type == 'weighted_close':
-                # デフォルトの重み付け係数を使用
-                return calculate_weighted_close(high_prices, low_prices, close_prices, 2.0)
-            
-            # ここには到達しないはず
-            return close_prices
-            
-        except Exception as e:
-            import traceback
-            import logging
-            logger = logging.getLogger(__name__)
-            error_msg = str(e)
-            stack_trace = traceback.format_exc()
-            logger.error(f"PriceSource.calculate静的メソッド内でエラー: {error_msg}\n{stack_trace}")
-            # エラー時はデータが利用可能であれば終値を返す、そうでなければ空の配列
-            if 'close_prices' in locals() and isinstance(close_prices, np.ndarray):
-                return close_prices
-            return np.array([])
+            return result
+        else:
+            raise ValueError("価格データの計算に失敗しました")
     
     @staticmethod
-    def validate_price_source(price_source: str) -> bool:
+    def _calculate_ukf_source(
+        data: Union[pd.DataFrame, np.ndarray], 
+        src_type: str,
+        ukf_params: Optional[Dict] = None
+    ) -> np.ndarray:
         """
-        価格ソースが有効かどうかを検証する
+        UKFベースの価格ソースを計算
         
         Args:
-            price_source: 検証する価格ソース
-            
+            data: 価格データ
+            src_type: UKFソースタイプ
+            ukf_params: UKFパラメータ
+        
         Returns:
-            bool: 価格ソースが有効な場合はTrue、そうでなければFalse
+            UKFフィルター済み価格配列
         """
-        valid_sources = [
-            'open', 'high', 'low', 'close',
-            'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close'
-        ]
-        return price_source in valid_sources
-    
-    def __init__(self, weighted_close_factor: float = 2.0):
-        """
-        コンストラクタ
+        if UnscentedKalmanFilter is None:
+            raise ImportError("UnscentedKalmanFilterが利用できません")
         
-        Args:
-            weighted_close_factor: 重み付き終値における終値の重み（デフォルト: 2.0）
-        """
-        super().__init__("PriceSource")
-        self.weighted_close_factor = weighted_close_factor
-        
-        # 各ソースごとのデータキャッシュ
-        self._sources: Dict[str, np.ndarray] = {}
-        self._data_hash = None
-    
-    def _get_data_hash(self, data: Union[pd.DataFrame, np.ndarray]) -> str:
-        """
-        データからハッシュ値を生成する（キャッシュ用）
-        
-        Args:
-            data: 価格データ（DataFrameまたはNumPy配列）
-            
-        Returns:
-            データのハッシュ文字列
-        """
-        if isinstance(data, pd.DataFrame):
-            return hash(str(data.head(3)) + str(data.tail(3)) + str(len(data)))
+        # UKFのベースソースを決定
+        if src_type == 'ukf':
+            base_source = 'close'
+        elif src_type.startswith('ukf_'):
+            base_source = src_type[4:]  # 'ukf_'を除去
         else:
-            sample = np.concatenate([data[:3], data[-3:]])
-            return hash(str(sample) + str(len(data)))
-    
-    def _extract_data(self, data: Union[pd.DataFrame, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """
-        データからOHLC価格を抽出する
+            base_source = 'close'
         
-        Args:
-            data: 価格データ（DataFrameまたはNumPy配列）
-            
-        Returns:
-            開始価格、高値、安値、終値のタプル
-        """
-        if isinstance(data, pd.DataFrame):
-            # カラム名を小文字に変換して検索
-            columns = {col.lower(): col for col in data.columns}
-            
-            # データがすべて存在するか確認
-            required_cols = ['open', 'high', 'low', 'close']
-            for col in required_cols:
-                if col not in columns:
-                    raise ValueError(f"必要なカラム '{col}' がデータに含まれていません")
-            
-            # データの抽出
-            open_prices = data[columns['open']].values
-            high_prices = data[columns['high']].values
-            low_prices = data[columns['low']].values
-            close_prices = data[columns['close']].values
-        else:
-            # NumPy配列形式を想定
-            if data.ndim == 2 and data.shape[1] >= 4:
-                open_prices = data[:, 0]
-                high_prices = data[:, 1]
-                low_prices = data[:, 2]
-                close_prices = data[:, 3]
-            else:
-                raise ValueError("NumPy配列は2次元で、少なくとも4列必要です")
+        # デフォルトUKFパラメータ
+        default_params = {
+            'alpha': 0.001,
+            'beta': 2.0,
+            'kappa': 0.0,
+            'process_noise_scale': 0.001,
+            'volatility_window': 10,
+            'adaptive_noise': True
+        }
         
-        return open_prices, high_prices, low_prices, close_prices
-    
-    def calculate(self, data: Union[pd.DataFrame, np.ndarray]) -> Dict[str, np.ndarray]:
-        """
-        すべての価格ソースを計算する
+        # パラメータをマージ
+        if ukf_params:
+            default_params.update(ukf_params)
         
-        Args:
-            data: 価格データ（DataFrameまたはNumPy配列）
-            
-        Returns:
-            各ソースタイプごとの価格データを含む辞書
-        """
-        try:
-            # データハッシュによるキャッシュ確認
-            data_hash = self._get_data_hash(data)
-            if data_hash == self._data_hash and self._sources:
-                return self._sources
-            
-            # ハッシュが異なる場合は再計算
-            self._data_hash = data_hash
-            
-            # データの抽出
-            open_prices, high_prices, low_prices, close_prices = self._extract_data(data)
-            
-            # 基本ソースの保存
-            self._sources = {
-                'open': open_prices,
-                'high': high_prices,
-                'low': low_prices,
-                'close': close_prices
-            }
-            
-            # 派生ソースの計算
-            self._sources['hl2'] = calculate_hl2(high_prices, low_prices)
-            self._sources['hlc3'] = calculate_hlc3(high_prices, low_prices, close_prices)
-            self._sources['ohlc4'] = calculate_ohlc4(open_prices, high_prices, low_prices, close_prices)
-            self._sources['hlcc4'] = calculate_hlcc4(high_prices, low_prices, close_prices)
-            self._sources['weighted_close'] = calculate_weighted_close(
-                high_prices, low_prices, close_prices, self.weighted_close_factor
+        # UKFフィルターのキャッシュキーを作成
+        cache_key = f"{base_source}_{hash(frozenset(default_params.items()))}"
+        
+        # キャッシュからUKFフィルターを取得または作成
+        if cache_key not in PriceSource._ukf_cache:
+            PriceSource._ukf_cache[cache_key] = UnscentedKalmanFilter(
+                src_type=base_source,
+                alpha=default_params['alpha'],
+                beta=default_params['beta'],
+                kappa=default_params['kappa'],
+                process_noise_scale=default_params['process_noise_scale'],
+                volatility_window=default_params['volatility_window'],
+                adaptive_noise=default_params['adaptive_noise']
             )
+        
+        ukf_filter = PriceSource._ukf_cache[cache_key]
+        
+        try:
+            # UKFを計算
+            ukf_result = ukf_filter.calculate(data)
+            result = ukf_result.filtered_values
             
-            return self._sources
+            # 確実にnp.ndarrayに変換
+            if not isinstance(result, np.ndarray):
+                result = np.asarray(result)
+            
+            return result
             
         except Exception as e:
-            import traceback
-            error_msg = str(e)
-            stack_trace = traceback.format_exc()
-            self.logger.error(f"PriceSource計算中にエラー: {error_msg}\n{stack_trace}")
-            return {}
+            warnings.warn(f"UKF計算に失敗しました: {str(e)}。ベースソースを返します。")
+            # フォールバック: ベースソースを直接計算（無限再帰を防ぐ）
+            if isinstance(data, pd.DataFrame):
+                return PriceSource._calculate_from_dataframe(data, base_source)
+            elif isinstance(data, np.ndarray):
+                return PriceSource._calculate_from_array(data, base_source)
+            else:
+                raise ValueError("フォールバック処理中にデータ型エラーが発生しました")
     
-    # def get_source(self, source_type: str = 'close') -> np.ndarray:
-    #     """
-    #     指定された種類の価格ソースを取得する
+    @staticmethod
+    def _calculate_from_dataframe(data: pd.DataFrame, src_type: str) -> np.ndarray:
+        """DataFrameから価格を計算"""
+        # カラム名のマッピング
+        column_mapping = {
+            'open': ['open', 'Open'],
+            'high': ['high', 'High'], 
+            'low': ['low', 'Low'],
+            'close': ['close', 'Close', 'adj close', 'Adj Close']
+        }
         
-    #     Args:
-    #         source_type: 価格ソースのタイプ（デフォルト: 'close'）
-    #             サポートされているタイプ: 'open', 'high', 'low', 'close', 'hl2', 'hlc3', 'ohlc4', 'hlcc4', 'weighted_close'
-                
-    #     Returns:
-    #         選択された価格ソースの配列
-    #     """
-    #     if source_type not in self.SOURCES:
-    #         raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(self.SOURCES.keys())}")
-        
-    #     if not self._sources or source_type not in self._sources:
-    #         raise RuntimeError("calculate()を先に呼び出してください")
-        
-    #     return self._sources[source_type]
-    
-    def get_source(self, *args) -> np.ndarray:
-        """
-        指定された種類の価格ソースを取得する（互換性強化版）
-        
-        使用例:
-            # 従来の使い方
-            source_data = price_source.get_source('hlc3')
+        # OHLCカラムを見つける
+        ohlc = {}
+        for key, possible_names in column_mapping.items():
+            found = False
+            for name in possible_names:
+                if name in data.columns:
+                    ohlc[key] = data[name].values
+                    found = True
+                    break
             
-            # データと一緒に呼び出す場合（互換性のため）
-            source_data = price_source.get_source(data, 'hlc3')
+            # closeは常に必須（他のソースタイプでも必要）
+            if not found and key == 'close':
+                raise ValueError(f"'{key}' カラムが見つかりません")
+        
+        # ソースタイプに基づいて計算
+        if src_type == 'close':
+            return ohlc['close']
+        elif src_type == 'high':
+            if 'high' not in ohlc:
+                raise ValueError("high カラムが見つかりません")
+            return ohlc['high']
+        elif src_type == 'low':
+            if 'low' not in ohlc:
+                raise ValueError("low カラムが見つかりません")
+            return ohlc['low']
+        elif src_type == 'open':
+            if 'open' not in ohlc:
+                raise ValueError("open カラムが見つかりません")
+            return ohlc['open']
+        elif src_type == 'hlc3':
+            if 'high' not in ohlc or 'low' not in ohlc:
+                raise ValueError("hlc3には high, low, close が必要です")
+            return (ohlc['high'] + ohlc['low'] + ohlc['close']) / 3.0
+        elif src_type == 'hl2':
+            if 'high' not in ohlc or 'low' not in ohlc:
+                raise ValueError("hl2には high, low が必要です")
+            return (ohlc['high'] + ohlc['low']) / 2.0
+        elif src_type == 'ohlc4':
+            if any(k not in ohlc for k in ['open', 'high', 'low']):
+                raise ValueError("ohlc4には open, high, low, close が必要です")
+            return (ohlc['open'] + ohlc['high'] + ohlc['low'] + ohlc['close']) / 4.0
+        else:
+            raise ValueError(f"サポートされていないソースタイプ: {src_type}")
+    
+    @staticmethod
+    def _calculate_from_array(data: np.ndarray, src_type: str) -> np.ndarray:
+        """NumPy配列から価格を計算"""
+        if data.ndim == 1:
+            if src_type not in ['close']:
+                raise ValueError("1次元配列では'close'のみサポートされています")
+            return data
+        elif data.ndim == 2 and data.shape[1] >= 4:
+            # OHLC形式を想定 [open, high, low, close]
+            if src_type == 'close':
+                return data[:, 3]
+            elif src_type == 'open':
+                return data[:, 0]
+            elif src_type == 'high':
+                return data[:, 1]
+            elif src_type == 'low':
+                return data[:, 2]
+            elif src_type == 'hlc3':
+                return (data[:, 1] + data[:, 2] + data[:, 3]) / 3.0
+            elif src_type == 'hl2':
+                return (data[:, 1] + data[:, 2]) / 2.0
+            elif src_type == 'ohlc4':
+                return (data[:, 0] + data[:, 1] + data[:, 2] + data[:, 3]) / 4.0
+            else:
+                raise ValueError(f"サポートされていないソースタイプ: {src_type}")
+        else:
+            raise ValueError("配列は1次元またはOHLC形式の2次元である必要があります")
+    
+    @staticmethod
+    def get_available_sources() -> Dict[str, str]:
+        """
+        利用可能なソースタイプの一覧を取得
+        
+        Returns:
+            ソースタイプ辞書 {タイプ: 説明}
+        """
+        sources = {
+            'close': '終値',
+            'open': '始値',
+            'high': '高値',
+            'low': '安値',
+            'hlc3': '(高値 + 安値 + 終値) / 3',
+            'hl2': '(高値 + 安値) / 2',
+            'ohlc4': '(始値 + 高値 + 安値 + 終値) / 4'
+        }
+        
+        # UKFが利用可能な場合は追加
+        if UnscentedKalmanFilter is not None:
+            ukf_sources = {
+                'ukf': 'UKFフィルター済み終値',
+                'ukf_close': 'UKFフィルター済み終値',
+                'ukf_hlc3': 'UKFフィルター済みHLC3',
+                'ukf_hl2': 'UKFフィルター済みHL2',
+                'ukf_ohlc4': 'UKFフィルター済みOHLC4'
+            }
+            sources.update(ukf_sources)
+        
+        return sources
+    
+    @staticmethod
+    def is_ukf_source(src_type: str) -> bool:
+        """
+        指定されたソースタイプがUKFベースかどうかを判定
         
         Args:
-            *args: 引数群
-                - 引数1つの場合: source_type
-                - 引数2つの場合: data, source_type
-                
+            src_type: ソースタイプ
+        
         Returns:
-            選択された価格ソースの配列
+            UKFベースの場合True
         """
-        if len(args) == 1:
-            # 従来の使い方: get_source(source_type)
-            source_type = args[0]
-            
-            if source_type not in self.SOURCES:
-                raise ValueError(f"無効な価格ソースタイプ: {source_type}。有効なタイプ: {', '.join(self.SOURCES.keys())}")
-            
-            if not self._sources or source_type not in self._sources:
-                raise RuntimeError("calculate()を先に呼び出してください")
-            
-            return self._sources[source_type]
+        return src_type.lower().startswith('ukf')
+    
+    @staticmethod
+    def get_ukf_result(
+        data: Union[pd.DataFrame, np.ndarray], 
+        src_type: str = 'close',
+        ukf_params: Optional[Dict] = None
+    ):
+        """
+        UKFの完全な結果を取得（フィルター値以外の情報も含む）
         
-        elif len(args) == 2:
-            # 互換性のための使い方: get_source(data, source_type)
-            data, source_type = args
-            
-            # 指定されたデータを使って計算
-            self.calculate(data)
-            
-            # ソースタイプの取得
-            return self.get_source(source_type)
+        Args:
+            data: 価格データ
+            src_type: ベースソースタイプ
+            ukf_params: UKFパラメータ
         
-        else:
-            raise ValueError(f"get_source()の引数が多すぎます。expected 1 or 2, got {len(args)}")
+        Returns:
+            UKFResult: 完全なUKF結果（利用不可の場合はNone）
+        """
+        if UnscentedKalmanFilter is None:
+            return None
+        
+        # デフォルトUKFパラメータ
+        default_params = {
+            'alpha': 0.001,
+            'beta': 2.0,
+            'kappa': 0.0,
+            'process_noise_scale': 0.001,
+            'volatility_window': 10,
+            'adaptive_noise': True
+        }
+        
+        if ukf_params:
+            default_params.update(ukf_params)
+        
+        # UKFフィルターを作成
+        ukf_filter = UnscentedKalmanFilter(
+            src_type=src_type.lower(),
+            alpha=default_params['alpha'],
+            beta=default_params['beta'],
+            kappa=default_params['kappa'],
+            process_noise_scale=default_params['process_noise_scale'],
+            volatility_window=default_params['volatility_window'],
+            adaptive_noise=default_params['adaptive_noise']
+        )
+        
+        try:
+            return ukf_filter.calculate(data)
+        except Exception:
+            return None
     
-    def get_open(self) -> np.ndarray:
-        """始値を取得する"""
-        return self.get_source('open')
-    
-    def get_high(self) -> np.ndarray:
-        """高値を取得する"""
-        return self.get_source('high')
-    
-    def get_low(self) -> np.ndarray:
-        """安値を取得する"""
-        return self.get_source('low')
-    
-    def get_close(self) -> np.ndarray:
-        """終値を取得する"""
-        return self.get_source('close')
-    
-    def get_hl2(self) -> np.ndarray:
-        """HL2を取得する"""
-        return self.get_source('hl2')
-    
-    def get_hlc3(self) -> np.ndarray:
-        """HLC3を取得する"""
-        return self.get_source('hlc3')
-    
-    def get_ohlc4(self) -> np.ndarray:
-        """OHLC4を取得する"""
-        return self.get_source('ohlc4')
-    
-    def get_hlcc4(self) -> np.ndarray:
-        """HLCC4を取得する"""
-        return self.get_source('hlcc4')
-    
-    def get_weighted_close(self) -> np.ndarray:
-        """重み付き終値を取得する"""
-        return self.get_source('weighted_close')
-    
-    def reset(self) -> None:
-        """インジケーターの状態をリセットする"""
-        super().reset()
-        self._sources = {}
-        self._data_hash = None 
+    @staticmethod
+    def clear_ukf_cache() -> None:
+        """UKFキャッシュをクリア"""
+        PriceSource._ukf_cache.clear() 

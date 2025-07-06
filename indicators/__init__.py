@@ -25,6 +25,7 @@ from .alpha_squeeze import AlphaSqueeze
 from .alpha_rsx import AlphaRSX
 from .rsx import RSX
 from .hma import HMA
+from .mama import MAMA
 from .alpha_donchian import AlphaDonchian
 from .alpha_volatility import AlphaVolatility
 from .alpha_vix import AlphaVIX
@@ -79,6 +80,9 @@ from .ehlers_ultimate_cycle import EhlersUltimateCycle
 from .ehlers_supreme_ultimate_cycle import EhlersSupremeUltimateCycle
 from .ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle
 
+# エラーズ ヒルベルト判別機
+from .ehlers_hilbert_discriminator import EhlersHilbertDiscriminator, HilbertDiscriminatorResult
+
 # エーラーズのドミナントサイクル検出アルゴリズム一覧
 __all__ = [
     'Indicator',
@@ -92,6 +96,7 @@ __all__ = [
     'AlphaMAV2',
     'AlphaATR',
     'HMA',
+    'MAMA',
     'HyperMA',
     'OmegaMA',
     'AlphaChoppiness',
@@ -156,6 +161,9 @@ __all__ = [
     'EhlersUltimateCycle',
     'EhlersSupremeUltimateCycle',
     'EhlersAbsoluteUltimateCycle',
+    # エラーズ ヒルベルト判別機
+    'EhlersHilbertDiscriminator',
+    'HilbertDiscriminatorResult',
 ]
 
 # Version

@@ -12,6 +12,9 @@ from indicators.kama import KaufmanAdaptiveMA
 class KAMATrendFollowingStrategy(BaseSignal, IEntrySignal):
     """
     KAMAを使用したトレンドフォロー戦略
+
+
+    
     - 短期KAMA > 長期KAMA: ロング方向 (1)
     - 短期KAMA < 長期KAMA: ショート方向 (-1)
     """

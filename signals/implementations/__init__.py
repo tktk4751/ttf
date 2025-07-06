@@ -13,6 +13,7 @@ from .z_trend import ZTrendBreakoutEntrySignal
 from .z_adaptive_ma import ZAdaptiveMACrossoverEntrySignal
 from .cycle_trend_index.fillter import CycleTrendIndexFilterSignal
 from .ultimate_ma import UltimateMAEntrySignal
+from .ultimate_channel.breakout_entry import UltimateChannelBreakoutEntrySignal
 
 # 公開するクラスのリスト
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     'ZTrendBreakoutEntrySignal',
     'ZAdaptiveMACrossoverEntrySignal',
     'CycleTrendIndexFilterSignal',
-    'UltimateMAEntrySignal'
+    'UltimateMAEntrySignal',
+    'UltimateChannelBreakoutEntrySignal'
 ] 

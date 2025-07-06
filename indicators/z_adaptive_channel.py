@@ -265,72 +265,72 @@ def calculate_new_simple_dynamic_multiplier_optimized(cer: np.ndarray, x_trend: 
     return result
 
 
-@njit(fastmath=True, parallel=True, cache=True)
-def adjust_multipliers_with_roc_persistence(
-    base_multiplier: np.ndarray,
-    roc_persistence_values: np.ndarray,
-    roc_directions: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    ROC継続性に基づいてアッパーバンドとロワーバンドの乗数を調整する
-    
-    新しいロジック:
-    - roc_directionsが-1の場合: アッパーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
-    - roc_directionsが1の場合: アッパーバンドは通常の動的乗数を使用
-    - roc_directionsが1の場合: ロワーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
-    - roc_directionsが-1の場合: ロワーバンドは通常の動的乗数を使用
-    - 調整後の乗数が0.5以下になったら、0.5とする
-    
-    Args:
-        base_multiplier: 基本の動的乗数
-        roc_persistence_values: ROC継続性の値（-1から1）
-        roc_directions: ROC方向（1=正、-1=負、0=ゼロ）
-    
-    Returns:
-        調整されたアッパーバンド乗数とロワーバンド乗数のタプル
-    """
-    length = len(base_multiplier)
-    upper_multiplier = np.empty(length, dtype=np.float64)
-    lower_multiplier = np.empty(length, dtype=np.float64)
-    
-    for i in prange(length):
-        # 基本値で初期化
-        upper_mult = base_multiplier[i]
-        lower_mult = base_multiplier[i]
-        
-        # NaN値の場合はそのまま
-        if (np.isnan(base_multiplier[i]) or 
-            np.isnan(roc_persistence_values[i]) or 
-            np.isnan(roc_directions[i])):
-            upper_multiplier[i] = upper_mult
-            lower_multiplier[i] = lower_mult
-            continue
-        
-        # ROC方向に基づく乗数調整
-        if roc_directions[i] == -1:  # 負の方向（下降）
-            # アッパーバンド乗数のみを調整
-            # アッパーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
-            upper_mult = base_multiplier[i] - 10.0 * abs(roc_persistence_values[i])
-            # ロワーバンドは通常の動的乗数を使用
-            lower_mult = base_multiplier[i]
-            
-        elif roc_directions[i] == 1:  # 正の方向（上昇）
-            # ロワーバンド乗数のみを調整
-            # ロワーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
-            lower_mult = base_multiplier[i] - 10.0 * abs(roc_persistence_values[i])
-            # アッパーバンドは通常の動的乗数を使用
-            upper_mult = base_multiplier[i]
-        
-        else:  # roc_directions[i] == 0（ゼロの場合）
-            # 両方とも通常の動的乗数を使用
-            upper_mult = base_multiplier[i]
-            lower_mult = base_multiplier[i]
-        
-        # 乗数が0.5以下にならないよう制限（最小値0.5）
-        upper_multiplier[i] = max(upper_mult, 0.5)
-        lower_multiplier[i] = max(lower_mult, 0.5)
-    
-    return upper_multiplier, lower_multiplier
+# @njit(fastmath=True, parallel=True, cache=True)
+# def adjust_multipliers_with_roc_persistence(
+#     base_multiplier: np.ndarray,
+#     roc_persistence_values: np.ndarray,
+#     roc_directions: np.ndarray
+# ) -> Tuple[np.ndarray, np.ndarray]:
+#     """
+#     ROC継続性に基づいてアッパーバンドとロワーバンドの乗数を調整する
+#     
+#     新しいロジック:
+#     - roc_directionsが-1の場合: アッパーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
+#     - roc_directionsが1の場合: アッパーバンドは通常の動的乗数を使用
+#     - roc_directionsが1の場合: ロワーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
+#     - roc_directionsが-1の場合: ロワーバンドは通常の動的乗数を使用
+#     - 調整後の乗数が0.5以下になったら、0.5とする
+#     
+#     Args:
+#         base_multiplier: 基本の動的乗数
+#         roc_persistence_values: ROC継続性の値（-1から1）
+#         roc_directions: ROC方向（1=正、-1=負、0=ゼロ）
+#     
+#     Returns:
+#         調整されたアッパーバンド乗数とロワーバンド乗数のタプル
+#     """
+#     length = len(base_multiplier)
+#     upper_multiplier = np.empty(length, dtype=np.float64)
+#     lower_multiplier = np.empty(length, dtype=np.float64)
+#     
+#     for i in prange(length):
+#         # 基本値で初期化
+#         upper_mult = base_multiplier[i]
+#         lower_mult = base_multiplier[i]
+#         
+#         # NaN値の場合はそのまま
+#         if (np.isnan(base_multiplier[i]) or 
+#             np.isnan(roc_persistence_values[i]) or 
+#             np.isnan(roc_directions[i])):
+#             upper_multiplier[i] = upper_mult
+#             lower_multiplier[i] = lower_mult
+#             continue
+#         
+#         # ROC方向に基づく乗数調整
+#         if roc_directions[i] == -1:  # 負の方向（下降）
+#             # アッパーバンド乗数のみを調整
+#             # アッパーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
+#             upper_mult = base_multiplier[i] - 10.0 * abs(roc_persistence_values[i])
+#             # ロワーバンドは通常の動的乗数を使用
+#             lower_mult = base_multiplier[i]
+#             
+#         elif roc_directions[i] == 1:  # 正の方向（上昇）
+#             # ロワーバンド乗数のみを調整
+#             # ロワーバンド乗数 = 動的乗数 - 10*abs(ROCPersistenceのvalues)
+#             lower_mult = base_multiplier[i] - 10.0 * abs(roc_persistence_values[i])
+#             # アッパーバンドは通常の動的乗数を使用
+#             upper_mult = base_multiplier[i]
+#         
+#         else:  # roc_directions[i] == 0（ゼロの場合）
+#             # 両方とも通常の動的乗数を使用
+#             upper_mult = base_multiplier[i]
+#             lower_mult = base_multiplier[i]
+#         
+#         # 乗数が0.5以下にならないよう制限（最小値0.5）
+#         upper_multiplier[i] = max(upper_mult, 0.5)
+#         lower_multiplier[i] = max(lower_mult, 0.5)
+#     
+#     return upper_multiplier, lower_multiplier
 
 
 @njit(fastmath=True, parallel=True, cache=True)
@@ -1143,7 +1143,8 @@ class ZAdaptiveChannel(Indicator):
             )
             
             # 9. ZAdaptiveMAの計算（中心線）- 選択されたソースを使用
-            z_ma = self._z_adaptive_ma.calculate(data, ma_source_values)
+            z_ma_result = self._z_adaptive_ma.calculate(data, ma_source_values)
+            z_ma = z_ma_result.values  # ZAdaptiveMAResultから値のみを抽出
             
             # 10. CATRの計算（external_erパラメータは不要になった）
             self._c_atr.calculate(data)

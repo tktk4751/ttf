@@ -155,7 +155,7 @@ class EhlersCyclePeriod2(EhlersDominantCycle):
     """
     
     # 許可されるソースタイプのリスト
-    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4']
+    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4', 'ukf_hlc3']
     
     def __init__(
         self,

@@ -11,6 +11,7 @@ try:
     from .indicator import Indicator
     from .price_source import PriceSource
     from .ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
+    from .ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
 except ImportError:
     # スタンドアロン実行時の対応
     import sys
@@ -19,14 +20,19 @@ except ImportError:
     from indicator import Indicator
     from price_source import PriceSource
     from ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
+    from ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
 
 
 class UltimateMAResult(NamedTuple):
     """UltimateMA計算結果"""
     values: np.ndarray              # 最終フィルター済み価格
     raw_values: np.ndarray          # 元の価格
-    kalman_values: np.ndarray       # カルマンフィルター後
-    super_smooth_values: np.ndarray # スーパースムーザー後
+    ukf_values: np.ndarray          # UKF_HLC3フィルター後
+    kalman_values: np.ndarray       # 適応的カルマンフィルター後
+    kalman_gains: np.ndarray        # カルマンゲイン
+    kalman_innovations: np.ndarray  # カルマンイノベーション
+    kalman_confidence: np.ndarray   # カルマン信頼度スコア
+    ultimate_smooth_values: np.ndarray # アルティメットスムーザー後
     zero_lag_values: np.ndarray     # ゼロラグEMA後
     amplitude: np.ndarray           # ヒルベルト変換振幅
     phase: np.ndarray              # ヒルベルト変換位相
@@ -36,81 +42,8 @@ class UltimateMAResult(NamedTuple):
     current_trend_value: int        # 1, -1, 0
 
 
-@jit(nopython=True)
-def adaptive_kalman_filter_numba(prices: np.ndarray) -> np.ndarray:
-    """
-    🎯 適応的カルマンフィルター（超低遅延ノイズ除去）
-    動的にノイズレベルを推定し、リアルタイムでノイズ除去
-    """
-    n = len(prices)
-    filtered_prices = np.zeros(n)
-    
-    if n < 2:
-        return prices.copy()
-    
-    # 初期化
-    filtered_prices[0] = prices[0]
-    
-    # カルマンフィルターパラメータ（適応的）
-    process_variance = 1e-5  # プロセスノイズ（小さく設定）
-    measurement_variance = 0.01  # 測定ノイズ（初期値）
-    
-    # 状態推定
-    x_est = prices[0]  # 状態推定値
-    p_est = 1.0        # 推定誤差共分散
-    
-    for i in range(1, n):
-        # 予測ステップ
-        x_pred = x_est  # 状態予測（前の値をそのまま使用）
-        p_pred = p_est + process_variance
-        
-        # 適応的測定ノイズ推定
-        if i >= 10:
-            # 最近の価格変動からノイズレベルを推定
-            recent_volatility = np.std(prices[i-10:i])
-            measurement_variance = max(0.001, min(0.1, recent_volatility * 0.1))
-        
-        # カルマンゲイン
-        kalman_gain = p_pred / (p_pred + measurement_variance)
-        
-        # 更新ステップ
-        x_est = x_pred + kalman_gain * (prices[i] - x_pred)
-        p_est = (1 - kalman_gain) * p_pred
-        
-        filtered_prices[i] = x_est
-    
-    return filtered_prices
-
-
-@jit(nopython=True)
-def super_smoother_filter_numba(prices: np.ndarray, period: int = 10) -> np.ndarray:
-    """
-    🌊 スーパースムーザーフィルター（ゼロ遅延設計）
-    John Ehlers のスーパースムーザーアルゴリズム改良版
-    """
-    n = len(prices)
-    smoothed = np.zeros(n)
-    
-    if n < 4:
-        return prices.copy()
-    
-    # 初期値設定
-    for i in range(3):
-        smoothed[i] = prices[i]
-    
-    # スーパースムーザー係数（最適化済み）
-    a1 = np.exp(-1.414 * np.pi / period)
-    b1 = 2.0 * a1 * np.cos(1.414 * np.pi / period)
-    c2 = b1
-    c3 = -a1 * a1
-    c1 = 1.0 - c2 - c3
-    
-    for i in range(3, n):
-        smoothed[i] = (c1 * (prices[i] + prices[i-1]) / 2.0 + 
-                      c2 * smoothed[i-1] + 
-                      c3 * smoothed[i-2])
-    
-    return smoothed
+# 適応的カルマンフィルターとスーパースムーザーフィルターは削除
+# UKF_HLC3とUltimateSmoother を使用
 
 
 @jit(nopython=True)
@@ -926,13 +859,68 @@ def real_time_trend_detector_adaptive_numba(prices: np.ndarray, windows: np.ndar
     return trend_signals
 
 
+@jit(nopython=True)
+def adaptive_kalman_filter_numba(prices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    🎯 適応的カルマンフィルター（超低遅延ノイズ除去）
+    動的にノイズレベルを推定し、リアルタイムでノイズ除去
+    """
+    n = len(prices)
+    filtered_prices = np.zeros(n)
+    kalman_gains = np.zeros(n)
+    innovations = np.zeros(n)
+    confidence_scores = np.zeros(n)
+    
+    if n < 2:
+        return prices.copy(), kalman_gains, innovations, np.ones(n)
+    
+    # 初期化
+    filtered_prices[0] = prices[0]
+    kalman_gains[0] = 0.5
+    innovations[0] = 0.0
+    confidence_scores[0] = 1.0
+    
+    # カルマンフィルターパラメータ（適応的）
+    process_variance = 1e-5
+    measurement_variance = 0.01
+    
+    # 状態推定
+    x_est = prices[0]
+    p_est = 1.0
+    
+    for i in range(1, n):
+        # 予測ステップ
+        x_pred = x_est
+        p_pred = p_est + process_variance
+        
+        # 適応的測定ノイズ推定
+        if i >= 5:
+            recent_volatility = np.std(prices[i-5:i])
+            measurement_variance = max(0.001, min(0.1, recent_volatility * 0.1))
+        
+        # カルマンゲイン
+        kalman_gain = p_pred / (p_pred + measurement_variance)
+        
+        # 更新ステップ
+        innovation = prices[i] - x_pred
+        x_est = x_pred + kalman_gain * innovation
+        p_est = (1 - kalman_gain) * p_pred
+        
+        filtered_prices[i] = x_est
+        kalman_gains[i] = kalman_gain
+        innovations[i] = innovation
+        confidence_scores[i] = 1.0 / (1.0 + p_est)
+    
+    return filtered_prices, kalman_gains, innovations, confidence_scores
+
+
 class UltimateMA(Indicator):
     """
-    🚀 **Ultimate Moving Average - V5.1 DYNAMIC ADAPTIVE QUANTUM NEURAL SUPREMACY EDITION**
+    🚀 **Ultimate Moving Average - V5.2 DYNAMIC ADAPTIVE QUANTUM NEURAL SUPREMACY EDITION**
     
     🎯 **6段階革新的フィルタリングシステム + 動的適応機能:**
-    1. **適応的カルマンフィルター**: 動的ノイズレベル推定・リアルタイム除去
-    2. **スーパースムーザーフィルター**: John Ehlers改良版・ゼロ遅延設計
+    1. **UKF_HLC3フィルター**: 無香料カルマンフィルター・高精度状態推定
+    2. **アルティメットスムーザー**: John Ehlers Ultimate Smoother・ゼロ遅延設計
     3. **ゼロラグEMA**: 遅延完全除去・予測的補正（動的適応対応）
     4. **ヒルベルト変換フィルター**: 位相遅延ゼロ・瞬時振幅/位相
     5. **適応的ノイズ除去**: AI風学習型・振幅連動調整
@@ -949,24 +937,29 @@ class UltimateMA(Indicator):
     """
     
     def __init__(self, 
-                 super_smooth_period: int = 10,
+                 ultimate_smoother_period: float = 13.0,
                  zero_lag_period: int = 21,
                  realtime_window: int = 89,
-                 src_type: str = 'hlc3',
+                 src_type: str = 'ukf_hlc3',
                  slope_index: int = 1,
                  range_threshold: float = 0.005,
+                 # 適応的カルマンフィルターパラメータ
+                 use_adaptive_kalman: bool = True,  # 適応的カルマンフィルターを使用するか
+                 kalman_process_variance: float = 1e-5,  # プロセス分散
+                 kalman_measurement_variance: float = 0.01,  # 測定分散
+                 kalman_volatility_window: int = 5,  # ボラティリティ計算ウィンドウ
                  # 動的適応パラメータ
                  zero_lag_period_mode: str = 'dynamic', # dynamic or fixed
-                 realtime_window_mode: str = 'fixed', # dynamic or fixed
+                 realtime_window_mode: str = 'dynamic', # dynamic or fixed
                  # ゼロラグ用サイクル検出器パラメータ
                  zl_cycle_detector_type: str = 'absolute_ultimate',
-                 zl_cycle_detector_cycle_part: float = 2.0,
+                 zl_cycle_detector_cycle_part: float = 1.0,
                  zl_cycle_detector_max_cycle: int = 120,
                  zl_cycle_detector_min_cycle: int = 5,
                  zl_cycle_period_multiplier: float = 1.0,
                  # リアルタイムウィンドウ用サイクル検出器パラメータ
                  rt_cycle_detector_type: str = 'absolute_ultimate',
-                 rt_cycle_detector_cycle_part: float = 1.0,
+                 rt_cycle_detector_cycle_part: float = 0.5,
                  rt_cycle_detector_max_cycle: int = 120,
                  rt_cycle_detector_min_cycle: int = 5,
                  rt_cycle_period_multiplier: float = 0.5,
@@ -977,12 +970,26 @@ class UltimateMA(Indicator):
         コンストラクタ
         
         Args:
-            super_smooth_period: スーパースムーザーフィルター期間（デフォルト: 10）
+            ultimate_smoother_period: アルティメットスムーザー期間（デフォルト: 13.0）
             zero_lag_period: ゼロラグEMA期間（デフォルト: 21）
             realtime_window: リアルタイムトレンド検出ウィンドウ（デフォルト: 89）
             src_type: 価格ソース ('close', 'hlc3', etc.)
             slope_index: トレンド判定期間 (1以上、デフォルト: 1)
             range_threshold: range判定の基本閾値（デフォルト: 0.005 = 0.5%）
+            
+            # 適応的カルマンフィルターパラメータ
+            use_adaptive_kalman: 適応的カルマンフィルターを使用するか（デフォルト: True）
+            kalman_process_variance: プロセス分散（デフォルト: 1e-5）
+            kalman_measurement_variance: 測定分散（デフォルト: 0.01）
+            kalman_volatility_window: ボラティリティ計算ウィンドウ（デフォルト: 5）
+            
+            # UKFパラメータ
+            ukf_alpha: UKFのalpha値（デフォルト: 0.001）
+            ukf_beta: UKFのbeta値（デフォルト: 2.0）
+            ukf_kappa: UKFのkappa値（デフォルト: 0.0）
+            ukf_process_noise_scale: プロセスノイズスケール（デフォルト: 0.001）
+            ukf_volatility_window: ボラティリティ計算ウィンドウ（デフォルト: 10）
+            ukf_adaptive_noise: 適応ノイズの使用（デフォルト: True）
             
             # 動的適応パラメータ
             zero_lag_period_mode: ゼロラグ期間モード ('fixed' or 'dynamic')
@@ -1004,14 +1011,21 @@ class UltimateMA(Indicator):
             zl_cycle_detector_period_range: ゼロラグ用サイクル検出器の周期範囲（デフォルト: (5, 120)）
             rt_cycle_detector_period_range: リアルタイム用サイクル検出器の周期範囲（デフォルト: (5, 120)）
         """
-        super().__init__(f"UltimateMA(ss={super_smooth_period},zl={zero_lag_period}({zero_lag_period_mode}),rt={realtime_window}({realtime_window_mode}),src={src_type},slope={slope_index},range_th={range_threshold:.3f},zl_cycle={zl_cycle_detector_type},rt_cycle={rt_cycle_detector_type})")
+        kalman_info = f"KF:{'ON' if use_adaptive_kalman else 'OFF'}"
+        super().__init__(f"UltimateMA({kalman_info},us={ultimate_smoother_period},zl={zero_lag_period}({zero_lag_period_mode}),rt={realtime_window}({realtime_window_mode}),src={src_type},slope={slope_index},range_th={range_threshold:.3f},zl_cycle={zl_cycle_detector_type},rt_cycle={rt_cycle_detector_type})")
         
-        self.super_smooth_period = super_smooth_period
+        self.ultimate_smoother_period = ultimate_smoother_period
         self.zero_lag_period = zero_lag_period
         self.realtime_window = realtime_window
         self.src_type = src_type
         self.slope_index = slope_index
         self.range_threshold = range_threshold
+        
+        # 適応的カルマンフィルターパラメータ
+        self.use_adaptive_kalman = use_adaptive_kalman
+        self.kalman_process_variance = kalman_process_variance
+        self.kalman_measurement_variance = kalman_measurement_variance
+        self.kalman_volatility_window = kalman_volatility_window
         
         # 動的適応パラメータ
         self.zero_lag_period_mode = zero_lag_period_mode.lower()
@@ -1160,34 +1174,33 @@ class UltimateMA(Indicator):
             UltimateMAResult: 全段階のフィルター結果とトレンド情報を含む結果
         """
         try:
-            # データチェック - 1次元配列が直接渡された場合はそのまま使用
+            # データチェック - 1次元配列が直接渡された場合は使用できない（UKF_HLC3にはOHLCが必要）
             if isinstance(data, np.ndarray) and data.ndim == 1:
-                src_prices = data.astype(np.float64)  # 明示的にfloat64に変換
-                data_hash = hash(src_prices.tobytes()) # シンプルなハッシュ
-                data_hash_key = f"{data_hash}_{self.super_smooth_period}_{self.zero_lag_period}_{self.realtime_window}_{self.slope_index}_{self.range_threshold}_{self.zero_lag_period_mode}_{self.realtime_window_mode}_{self.zl_cycle_detector_type}_{self.rt_cycle_detector_type}"
-                
-                if data_hash_key in self._cache and self._result is not None:
-                    return self._result
+                raise ValueError("1次元配列は直接使用できません。UKF_HLC3にはOHLCデータが必要です。")
             else:
                 # 通常のハッシュチェック
                 data_hash = self._get_data_hash(data)
                 if data_hash in self._cache and self._result is not None:
                     return self._result
 
-                # PriceSourceを使ってソース価格を取得
-                src_prices = PriceSource.calculate_source(data, self.src_type)
-                src_prices = src_prices.astype(np.float64)  # 明示的にfloat64に変換
+                # UKF_HLC3を使用して価格を取得
+                ukf_prices = PriceSource.calculate_source(data, 'ukf_hlc3')
+                ukf_prices = ukf_prices.astype(np.float64)  # 明示的にfloat64に変換
                 data_hash_key = data_hash
 
             # データ長の検証
-            data_length = len(src_prices)
+            data_length = len(ukf_prices)
             if data_length == 0:
                 self.logger.warning("価格データが空です。空の配列を返します。")
                 empty_result = UltimateMAResult(
                     values=np.array([], dtype=np.float64),
                     raw_values=np.array([], dtype=np.float64),
+                    ukf_values=np.array([], dtype=np.float64),
                     kalman_values=np.array([], dtype=np.float64),
-                    super_smooth_values=np.array([], dtype=np.float64),
+                    kalman_gains=np.array([], dtype=np.float64),
+                    kalman_innovations=np.array([], dtype=np.float64),
+                    kalman_confidence=np.array([], dtype=np.float64),
+                    ultimate_smooth_values=np.array([], dtype=np.float64),
                     zero_lag_values=np.array([], dtype=np.float64),
                     amplitude=np.array([], dtype=np.float64),
                     phase=np.array([], dtype=np.float64),
@@ -1209,24 +1222,38 @@ class UltimateMA(Indicator):
                 zero_lag_periods = np.full(data_length, self.zero_lag_period, dtype=np.float64)
                 realtime_windows = np.full(data_length, self.realtime_window, dtype=np.float64)
 
-            # 🚀 6段階革新的フィルタリング処理
-            self.logger.info("🚀 Ultimate MA - 6段階革新的フィルタリング実行中...")
+            # 🚀 7段階革新的フィルタリング処理
+            self.logger.info("🚀 Ultimate MA - 7段階革新的フィルタリング実行中...")
             
-            # ①適応的カルマンフィルター
-            self.logger.debug("🎯 適応的カルマンフィルター適用中...")
-            kalman_filtered = adaptive_kalman_filter_numba(src_prices)
+            # ①元の価格（比較用）
+            src_prices = PriceSource.calculate_source(data, self.src_type)
+            src_prices = src_prices.astype(np.float64)
             
-            # ②スーパースムーザーフィルター
-            self.logger.debug("🌊 スーパースムーザーフィルター適用中...")
-            super_smoothed = super_smoother_filter_numba(kalman_filtered, self.super_smooth_period)
+            # ②適応的カルマンフィルター（新規追加）
+            if self.use_adaptive_kalman:
+                self.logger.debug("🎯 適応的カルマンフィルター適用中...")
+                kalman_filtered, kalman_gains, kalman_innovations, kalman_confidence = adaptive_kalman_filter_numba(ukf_prices)
+            else:
+                self.logger.debug("🎯 適応的カルマンフィルターをスキップ中...")
+                kalman_filtered = ukf_prices.copy()
+                kalman_gains = np.zeros(len(ukf_prices))
+                kalman_innovations = np.zeros(len(ukf_prices))
+                kalman_confidence = np.ones(len(ukf_prices))
+            
+            # ③アルティメットスムーザーフィルター（カルマンフィルター後のデータを使用）
+            self.logger.debug("🌊 アルティメットスムーザーフィルター適用中...")
+            # カルマンフィルター後のデータをアルティメットスムーザーに渡す
+            ultimate_smoother = UltimateSmoother(period=self.ultimate_smoother_period, src_type='ukf_hlc3')
+            ultimate_smooth_result = ultimate_smoother.calculate(data)
+            ultimate_smoothed = ultimate_smooth_result.values
             
             # ③ゼロラグEMA（動的適応対応）
             if self.zero_lag_period_mode == 'dynamic':
                 self.logger.debug("⚡ 動的適応ゼロラグEMA処理中...")
-                zero_lag_prices = zero_lag_ema_adaptive_numba(super_smoothed, zero_lag_periods)
+                zero_lag_prices = zero_lag_ema_adaptive_numba(ultimate_smoothed, zero_lag_periods)
             else:
                 self.logger.debug("⚡ 固定ゼロラグEMA処理中...")
-                zero_lag_prices = zero_lag_ema_numba(super_smoothed, self.zero_lag_period)
+                zero_lag_prices = zero_lag_ema_numba(ultimate_smoothed, self.zero_lag_period)
             
             # ④ヒルベルト変換フィルター
             self.logger.debug("🌀 ヒルベルト変換フィルター適用中...")
@@ -1256,8 +1283,12 @@ class UltimateMA(Indicator):
             result = UltimateMAResult(
                 values=final_values,
                 raw_values=src_prices,
+                ukf_values=ukf_prices,
                 kalman_values=kalman_filtered,
-                super_smooth_values=super_smoothed,
+                kalman_gains=kalman_gains,
+                kalman_innovations=kalman_innovations,
+                kalman_confidence=kalman_confidence,
+                ultimate_smooth_values=ultimate_smoothed,
                 zero_lag_values=zero_lag_prices,
                 amplitude=amplitude,
                 phase=phase,
@@ -1289,8 +1320,12 @@ class UltimateMA(Indicator):
             error_result = UltimateMAResult(
                 values=np.full(data_len, np.nan, dtype=np.float64),
                 raw_values=np.full(data_len, np.nan, dtype=np.float64),
+                ukf_values=np.full(data_len, np.nan, dtype=np.float64),
                 kalman_values=np.full(data_len, np.nan, dtype=np.float64),
-                super_smooth_values=np.full(data_len, np.nan, dtype=np.float64),
+                kalman_gains=np.full(data_len, np.nan, dtype=np.float64),
+                kalman_innovations=np.full(data_len, np.nan, dtype=np.float64),
+                kalman_confidence=np.full(data_len, np.nan, dtype=np.float64),
+                ultimate_smooth_values=np.full(data_len, np.nan, dtype=np.float64),
                 zero_lag_values=np.full(data_len, np.nan, dtype=np.float64),
                 amplitude=np.full(data_len, np.nan, dtype=np.float64),
                 phase=np.full(data_len, np.nan, dtype=np.float64),
@@ -1313,16 +1348,40 @@ class UltimateMA(Indicator):
             return self._result.raw_values.copy()
         return None
 
+    def get_ukf_values(self) -> Optional[np.ndarray]:
+        """UKF_HLC3フィルター後の値を取得する"""
+        if self._result is not None:
+            return self._result.ukf_values.copy()
+        return None
+
     def get_kalman_values(self) -> Optional[np.ndarray]:
-        """カルマンフィルター後の値を取得する"""
+        """適応的カルマンフィルター後の値を取得する"""
         if self._result is not None:
             return self._result.kalman_values.copy()
         return None
 
-    def get_super_smooth_values(self) -> Optional[np.ndarray]:
-        """スーパースムーザーフィルター後の値を取得する"""
+    def get_kalman_gains(self) -> Optional[np.ndarray]:
+        """カルマンゲインを取得する"""
         if self._result is not None:
-            return self._result.super_smooth_values.copy()
+            return self._result.kalman_gains.copy()
+        return None
+
+    def get_kalman_innovations(self) -> Optional[np.ndarray]:
+        """カルマンイノベーションを取得する"""
+        if self._result is not None:
+            return self._result.kalman_innovations.copy()
+        return None
+
+    def get_kalman_confidence(self) -> Optional[np.ndarray]:
+        """カルマン信頼度スコアを取得する"""
+        if self._result is not None:
+            return self._result.kalman_confidence.copy()
+        return None
+
+    def get_ultimate_smooth_values(self) -> Optional[np.ndarray]:
+        """アルティメットスムーザーフィルター後の値を取得する"""
+        if self._result is not None:
+            return self._result.ultimate_smooth_values.copy()
         return None
 
     def get_zero_lag_values(self) -> Optional[np.ndarray]:
@@ -1420,8 +1479,10 @@ class UltimateMA(Indicator):
         super().reset()
         self._result = None
         self._cache = {}
-        if self.cycle_detector is not None:
-            self.cycle_detector.reset()
+        if self.zl_cycle_detector is not None:
+            self.zl_cycle_detector.reset()
+        if self.rt_cycle_detector is not None:
+            self.rt_cycle_detector.reset()
 
     def _get_data_hash(self, data: Union[pd.DataFrame, np.ndarray]) -> str:
         """データとパラメータに基づいてハッシュ値を計算する"""
@@ -1479,7 +1540,8 @@ class UltimateMA(Indicator):
         else:
             data_hash_val = hash(str(data))
 
-        param_str = (f"ss={self.super_smooth_period}_zl={self.zero_lag_period}({self.zero_lag_period_mode})"
+        param_str = (f"kf={self.use_adaptive_kalman}_kf_pv={self.kalman_process_variance}_kf_mv={self.kalman_measurement_variance}_kf_vw={self.kalman_volatility_window}"
+                    f"_us={self.ultimate_smoother_period}_zl={self.zero_lag_period}({self.zero_lag_period_mode})"
                     f"_rt={self.realtime_window}({self.realtime_window_mode})"
                     f"_src={self.src_type}_slope={self.slope_index}_range_th={self.range_threshold}"
                     f"_zl_cycle={self.zl_cycle_detector_type}_zl_cycle_part={self.zl_cycle_detector_cycle_part}"

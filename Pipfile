@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 binance-historical-data = "*"
+pytrch = "*"
 
 [dev-packages]
 
