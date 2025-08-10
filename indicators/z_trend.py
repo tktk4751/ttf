@@ -10,7 +10,7 @@ from numba import jit, njit, prange
 from .indicator import Indicator
 from .z_atr import ZATR
 from .cycle_efficiency_ratio import CycleEfficiencyRatio
-from .ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
 
 
 @dataclass

@@ -20,7 +20,7 @@ class AlphaATRRiskSizing(PositionSizing, IPositionManager):
     
     def __init__(
         self, 
-        risk_ratio: float = 0.02,  # リスク比率（デフォルト1%）
+        risk_ratio: float = 0.01,  # リスク比率（デフォルト1%）
         unit: float = 1.0,         # 基本単位係数（デフォルト1.0）
         max_position_percent: float = 0.5,  # 最大ポジションサイズの比率（デフォルト50%）
         leverage: float = 1.0,     # レバレッジ（デフォルト1倍）

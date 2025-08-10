@@ -33,7 +33,7 @@ try:
     from data.binance_data_source import BinanceDataSource
     
     # インジケーター
-    from indicators.unscented_kalman_filter import UnscentedKalmanFilter
+    from indicators.smoother.unscented_kalman_filter import UnscentedKalmanFilter
     from indicators.price_source import PriceSource
 except ImportError as e:
     print(f"インポートエラー: {e}")

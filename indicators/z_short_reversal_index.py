@@ -12,7 +12,7 @@ from .z_adx import ZADX
 from .z_rsx import ZRSX
 from .cycle_efficiency_ratio import CycleEfficiencyRatio
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
-from .ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
 
 
 @dataclass

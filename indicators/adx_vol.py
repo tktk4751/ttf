@@ -10,7 +10,7 @@ import traceback
 try:
     from .indicator import Indicator
     from .atr import ATR
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues
     print("Warning: Could not import from relative path. Assuming base classes are available.")

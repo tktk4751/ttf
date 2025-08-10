@@ -26,7 +26,7 @@ sys.path.insert(0, str(project_root))
 # 必要なモジュールのインポート
 try:
     from visualization.adaptive_ukf_comparison_chart import AdaptiveUKFComparisonChart, create_sample_data
-    from indicators.unscented_kalman_filter import UnscentedKalmanFilter
+    from indicators.smoother.unscented_kalman_filter import UnscentedKalmanFilter
     from indicators.adaptive_ukf import AdaptiveUnscentedKalmanFilter
     from indicators.academic_adaptive_ukf import AcademicAdaptiveUnscentedKalmanFilter
     from indicators.neural_adaptive_ukf import NeuralAdaptiveUnscentedKalmanFilter

@@ -33,10 +33,10 @@ class UltimateMAStrategy(BaseStrategy):
     def __init__(
         self,
         # Ultimate MAパラメータ
-        ultimate_smoother_period: int = 8,
+        ultimate_smoother_period: int = 5,
         zero_lag_period: int = 21,
         realtime_window: int = 13,
-        src_type: str = 'ukf_hlc3',
+        src_type: str = 'hlc3',
         slope_index: int = 4,
         range_threshold: float = 0.002,
         enable_exit_signals: bool = True,
@@ -45,7 +45,7 @@ class UltimateMAStrategy(BaseStrategy):
         realtime_window_mode: str = 'dynamic',
         # ゼロラグ用サイクル検出器パラメータ
         zl_cycle_detector_type: str = 'absolute_ultimate',
-        zl_cycle_detector_cycle_part: float = 1.0,
+        zl_cycle_detector_cycle_part: float = 0.5,
         zl_cycle_detector_max_cycle: int = 120,
         zl_cycle_detector_min_cycle: int = 5,
         zl_cycle_period_multiplier: float = 1.0,

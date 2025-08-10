@@ -36,10 +36,10 @@ class UltimateChannelBreakoutStrategy(BaseStrategy):
         channel_lookback: int = 1,
         
         # アルティメットチャネルのパラメータ
-        length: float = 20.0,
-        num_strs: float = 2.0,
-        multiplier_mode: str = 'fixed',
-        src_type: str = 'ukf_hlc3',
+        length: float = 55.0,
+        num_strs: float = 3,
+        multiplier_mode: str = 'dynamic',
+        src_type: str = 'hlc3',
         # 追加のアルティメットチャネルパラメータ
         ultimate_channel_params: Dict[str, Any] = None
     ):

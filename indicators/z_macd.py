@@ -9,7 +9,7 @@ from numba import jit, njit, vectorize, prange
 
 from .indicator import Indicator
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 from .z_ma import ZMA, calculate_z_ma
 from .cycle_efficiency_ratio import CycleEfficiencyRatio
 

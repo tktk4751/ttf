@@ -13,7 +13,7 @@ try:
     from .alma import calculate_alma_numba
     from .hma import calculate_hma_numba
     from .zlema import calculate_zlema_numba
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues
     print("Warning: Could not import from relative path. Assuming base classes are available.")

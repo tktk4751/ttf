@@ -12,7 +12,7 @@ import math
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # フォールバック用
     print("Warning: 相対パスからのインポートに失敗しました。基本クラスを定義します。")

@@ -28,7 +28,7 @@ warnings.filterwarnings("ignore")
 try:
     from .indicator import Indicator
     from .atr import ATR
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     print("Warning: Could not import from relative path. Assuming base classes are available.")
     class Indicator:

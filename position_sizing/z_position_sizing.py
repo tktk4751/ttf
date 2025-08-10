@@ -226,10 +226,10 @@ class ZATRPositionSizing(PositionSizing, IPositionManager):
         fixed_risk_percent: float = 0.01,  # 固定リスク率（資金の1%）
         
         # 動的ATR乗数のパラメータ
-        max_max_multiplier: float = 4.0,  # 最大乗数の最大値
+        max_max_multiplier: float = 6.0,  # 最大乗数の最大値
         min_max_multiplier: float = 3.0,  # 最大乗数の最小値
-        max_min_multiplier: float = 2.0,  # 最小乗数の最大値
-        min_min_multiplier: float = 1.0,  # 最小乗数の最小値
+        max_min_multiplier: float = 4.0,  # 最小乗数の最大値
+        min_min_multiplier: float = 2.0,  # 最小乗数の最小値
         
         # 動的リスク比率のパラメータ
         max_risk_ratio: float = 0.03,   # 最大リスク比率（3%）

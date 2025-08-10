@@ -8,7 +8,7 @@ import pandas as pd
 from numba import njit, jit, prange, vectorize, float64, int64
 
 from .indicator import Indicator
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 from .price_source import PriceSource
 
 

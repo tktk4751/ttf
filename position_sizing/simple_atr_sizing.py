@@ -86,7 +86,7 @@ class SimpleATRPositionSizing(PositionSizing, IPositionManager):
         max_position_percent: float = 0.3,  # 最大ポジションサイズの比率（デフォルト30%）
         leverage: float = 1.0,          # レバレッジ（デフォルト1倍）
         atr_period: int = 13,           # ATR期間（デフォルト14）
-        atr_multiplier: float = 3.0,    # ATR乗数（デフォルト2.0）
+        atr_multiplier: float = 4.0,    # ATR乗数（デフォルト2.0）
         smoothing_method: str = 'hma',  # ATRスムージング方法
         fixed_risk_percent: float = 0.02,  # 固定リスク率（資金の1%）
     ):

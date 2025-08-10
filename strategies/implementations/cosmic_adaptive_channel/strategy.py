@@ -45,10 +45,10 @@ class CosmicAdaptiveChannelStrategy(BaseStrategy):
     def __init__(
         self,
         # Cosmic Adaptive Channelパラメータ
-        atr_period: int = 21,
-        base_multiplier: float = 2.0,
-        quantum_window: int = 89,
-        neural_window: int = 55,
+        atr_period: int = 34,
+        base_multiplier: float = 1.75,
+        quantum_window: int = 20,
+        neural_window: int = 100,
         volatility_window: int = 30,
         src_type: str = 'hlc3',
         

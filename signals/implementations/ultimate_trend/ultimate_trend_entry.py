@@ -185,7 +185,7 @@ class UltimateTrendEntrySignal(BaseSignal, IEntrySignal):
         uqatrd_entanglement_window: int = 34,
         uqatrd_efficiency_window: int = 21,
         uqatrd_uncertainty_window: int = 14,
-        uqatrd_src_type: str = 'ukf_hlc3',
+        uqatrd_src_type: str = 'hlc3',
         uqatrd_adaptive_mode: bool = True,
         uqatrd_sensitivity: float = 1.0,
         uqatrd_str_period: float = 20.0,

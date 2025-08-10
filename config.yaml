@@ -12,7 +12,7 @@ data:
 binance_data:
   data_dir: "data/binance"
   enabled: true
-  symbol: "PEPE"
+  symbol: "LUNA"
   market_type: "spot"  # spot or future
   timeframe: "4h"
   start: "2000-01-01"
@@ -106,6 +106,60 @@ test_configuration:
   enable_fractal_test: true
   enable_visualization: true
   generate_report: true
+
+# Ultimate Volatility State設定
+ultimate_volatility_state:
+  # 基本パラメータ
+  period: 21                     # 基本期間
+  threshold: 0.5                 # 高/低ボラティリティの閾値 (0.0-1.0)
+  zscore_period: 50              # Z-Score計算期間
+  src_type: "hlc3"               # 価格ソース
+  smoother_period: 5             # スムージング期間
+  adaptive_threshold: true       # 適応的閾値調整
+  
+  # 表示設定
+  chart_title: "Ultimate Volatility State Analysis"
+  high_vol_color: "red"          # 高ボラティリティ色
+  low_vol_color: "blue"          # 低ボラティリティ色
+  probability_color: "orange"    # 確率ライン色
+  
+  # 出力設定
+  save_chart: true
+  chart_filename: "ultimate_volatility_state_analysis"
+  show_components: true          # コンポーネント表示
+
+# Enhanced Trend State設定
+enhanced_trend_state:
+  # 基本パラメータ
+  base_period: 20                # 基本期間
+  threshold: 0.42                # トレンド判定閾値 (V2最適値)
+  src_type: "hlc3"              # 価格ソース
+  
+  # 機能設定
+  use_dynamic_period: true       # 動的期間調整
+  volatility_adjustment: true    # ボラティリティ調整
+  atr_smoothing: true           # ATRスムージング
+  
+  # 重み設定
+  er_weight: 0.55               # 効率比の重み（V2最適値）
+  chop_weight: 0.45             # チョピネス指数の重み（V2最適値）
+  
+  # サイクル検出器設定
+  detector_type: "absolute_ultimate"  # サイクル検出器タイプ
+  max_cycle: 50                 # 最大サイクル
+  min_cycle: 8                  # 最小サイクル
+  
+  # 表示設定
+  chart_title: "Enhanced Trend State Analysis"
+  trend_color: "green"          # トレンド色
+  range_color: "red"            # レンジ色
+  composite_color: "purple"     # 複合スコア色
+  confidence_color: "orange"    # 信頼度色
+  
+  # 出力設定
+  save_chart: true
+  chart_filename: "enhanced_trend_state_analysis"
+  show_components: true         # コンポーネント表示
 
 # 出力設定
 output_settings:

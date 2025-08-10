@@ -111,7 +111,7 @@ def main():
         base_dir.mkdir(parents=True, exist_ok=True)
         
         # 取得する時間足を定義
-        timeframes = ['15m', '30m', '1h', '2h','4h','6h', '8h', '12h']
+        timeframes = ['5m','15m', '30m', '1h', '2h','4h','6h', '8h', '12h']
         
         # 取得する銘柄を定義
         symbols = [

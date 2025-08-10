@@ -16,7 +16,7 @@ from .price_source import PriceSource
 from .alma import calculate_alma_numba as calculate_alma
 from .hma import calculate_hma_numba
 from .zlema import calculate_zlema_numba, calculate_ema_numba
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 
 
 @dataclass

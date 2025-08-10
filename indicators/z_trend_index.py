@@ -11,7 +11,7 @@ from .indicator import Indicator
 from .hyper_smoother import hyper_smoother
 from .cycle_efficiency_ratio import CycleEfficiencyRatio
 from .c_atr import CATR
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 
 
 @dataclass

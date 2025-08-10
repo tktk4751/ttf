@@ -179,7 +179,7 @@ class UltimateMAEntrySignal(BaseSignal, IEntrySignal):
         zl_cycle_detector_period_range: Tuple[int, int] = (5, 120),
         rt_cycle_detector_period_range: Tuple[int, int] = (5, 120),
         # UQATRDフィルター機能パラメータ
-        enable_filter: bool = True,
+        enable_filter: bool = False,
         filter_coherence_window: int = 21,
         filter_entanglement_window: int = 34,
         filter_efficiency_window: int = 21,
@@ -189,7 +189,7 @@ class UltimateMAEntrySignal(BaseSignal, IEntrySignal):
         filter_sensitivity: float = 1.5,
         filter_str_period: float = 20.0,
         filter_threshold_mode: str = 'fixed',
-        filter_fixed_threshold: float = 0.5,
+        filter_fixed_threshold: float = 0.55,
         filter_min_data_points: int = 50,
         filter_confidence_threshold: float = 0.7
     ):

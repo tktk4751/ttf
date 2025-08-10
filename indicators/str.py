@@ -11,7 +11,7 @@ import traceback
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ultimate_smoother import UltimateSmoother
+    from .smoother.ultimate_smoother import UltimateSmoother
     # EhlersUnifiedDC は関数内でインポートして循環インポートを回避
 except ImportError:
     # スタンドアロン実行時の対応
@@ -20,7 +20,7 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from indicator import Indicator
     from price_source import PriceSource
-    from ultimate_smoother import UltimateSmoother
+    from indicators.smoother.ultimate_smoother import UltimateSmoother
     # EhlersUnifiedDC は関数内でインポートして循環インポートを回避
 
 
@@ -95,7 +95,7 @@ class STR(Indicator):
     def __init__(
         self,
         period: float = 20.0,                 # STR期間
-        src_type: str = 'ukf_hlc3',               # プライスソース（True Range計算には影響しないが一貫性のため）
+        src_type: str = 'hlc3',               # プライスソース（True Range計算には影響しないが一貫性のため）
         ukf_params: Optional[Dict] = None,     # UKFパラメータ（UKFソース使用時）
         # 動的適応パラメータ
         period_mode: str = 'dynamic',            # 期間モード ('fixed' or 'dynamic')
@@ -172,27 +172,53 @@ class STR(Indicator):
         self.cycle_detector = None
         
         if self.period_mode == 'dynamic':
+            # EhlersUnifiedDCのインポート（デバッグ付き）
+            EhlersUnifiedDC = None
+            import_success = False
+            
             try:
-                # 循環インポートを回避するため、関数内でインポート
+                # 相対インポートを試行
+                from .cycle.ehlers_unified_dc import EhlersUnifiedDC
+                import_success = True
+                self.logger.debug("STR: EhlersUnifiedDC 相対インポート成功")
+            except ImportError as e1:
+                self.logger.debug(f"STR: EhlersUnifiedDC 相対インポート失敗: {e1}")
                 try:
-                    from .ehlers_unified_dc import EhlersUnifiedDC
-                except ImportError:
-                    from ehlers_unified_dc import EhlersUnifiedDC
+                    # 絶対インポートを試行（パス調整付き）
+                    import sys
+                    import os
+                    current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    if current_dir not in sys.path:
+                        sys.path.insert(0, current_dir)
                     
-                self.cycle_detector = EhlersUnifiedDC(
-                    detector_type=self.cycle_detector_type,
-                    cycle_part=self.cycle_detector_cycle_part,
-                    max_cycle=self.cycle_detector_max_cycle,
-                    min_cycle=self.cycle_detector_min_cycle,
-                    src_type=self.src_type,
-                    period_range=self.cycle_detector_period_range
-                )
-                self.logger.info(f"動的適応サイクル検出器を初期化: {self.cycle_detector_type}")
-            except Exception as e:
-                self.logger.error(f"サイクル検出器の初期化に失敗: {e}")
+                    from indicators.cycle.ehlers_unified_dc import EhlersUnifiedDC
+                    import_success = True
+                    self.logger.debug("STR: EhlersUnifiedDC 絶対インポート成功")
+                except ImportError as e2:
+                    self.logger.error(f"STR: EhlersUnifiedDC インポート失敗 - 相対: {e1}, 絶対: {e2}")
+                    import_success = False
+            
+            if import_success and EhlersUnifiedDC is not None:
+                try:
+                    self.cycle_detector = EhlersUnifiedDC(
+                        detector_type=self.cycle_detector_type,
+                        cycle_part=self.cycle_detector_cycle_part,
+                        max_cycle=self.cycle_detector_max_cycle,
+                        min_cycle=self.cycle_detector_min_cycle,
+                        src_type=self.src_type,
+                        period_range=self.cycle_detector_period_range
+                    )
+                    self.logger.info(f"STR: 動的適応サイクル検出器を初期化: {self.cycle_detector_type}")
+                except Exception as e:
+                    self.logger.error(f"STR: サイクル検出器の初期化に失敗: {e}")
+                    # フォールバックとして固定モードに変更
+                    self.period_mode = 'fixed'
+                    self.logger.warning("STR: 動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+            else:
+                self.logger.error("STR: EhlersUnifiedDCのインポートに失敗しました")
                 # フォールバックとして固定モードに変更
                 self.period_mode = 'fixed'
-                self.logger.warning("動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+                self.logger.warning("STR: EhlersUnifiedDCインポート失敗のため、固定モードにフォールバックしました。")
         
         # Ultimate Smootherの初期化（動的期間対応）
         self._ultimate_smoother = UltimateSmoother(

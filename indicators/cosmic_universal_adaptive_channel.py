@@ -693,8 +693,7 @@ class CosmicUniversalAdaptiveChannel(Indicator):
         try:
             # 価格データ抽出
             if isinstance(data, pd.DataFrame):
-                price_series = self.price_source.get_source(data, self.src_type)
-                prices = (price_series.values if hasattr(price_series, 'values') else price_series).astype(np.float64)
+                prices = self.price_source.calculate_source(data, self.src_type).astype(np.float64)
                 volume = data.get(self.volume_src, pd.Series(np.ones(len(data), dtype=np.float64))).values.astype(np.float64)
             else:
                 prices = (data[:, 3] if data.ndim > 1 else data).astype(np.float64)

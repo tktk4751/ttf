@@ -520,7 +520,7 @@ class ZBollingerBands(Indicator):
             np.ndarray: ドミナントサイクル値
         """
         # サイクル検出器とパラメータを使用してサイクル値を計算
-        from .ehlers_hody_dc import EhlersHoDyDC
+        from .cycle.ehlers_hody_dc import EhlersHoDyDC
         
         dc = EhlersHoDyDC(
             cycle_part=cycle_part,

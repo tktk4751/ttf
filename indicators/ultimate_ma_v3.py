@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
 except ImportError:
     # スタンドアロン実行時の対応
     import sys

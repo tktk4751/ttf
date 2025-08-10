@@ -11,7 +11,7 @@ from .indicator import Indicator
 from .z_trend_index import XTrendIndex
 from .cycle_efficiency_ratio import CycleEfficiencyRatio
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
-from .ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
 from .z_adx import ZADX
 
 

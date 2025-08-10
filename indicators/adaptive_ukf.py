@@ -30,14 +30,14 @@ from collections import deque
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .unscented_kalman_filter import generate_sigma_points, state_transition_function, observation_function
+    from .kalman.unscented_kalman_filter import generate_sigma_points, state_transition_function, observation_function
 except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from indicator import Indicator
     from price_source import PriceSource
-    from unscented_kalman_filter import generate_sigma_points, state_transition_function, observation_function
+    from indicators.kalman.unscented_kalman_filter import generate_sigma_points, state_transition_function, observation_function
 
 
 @dataclass

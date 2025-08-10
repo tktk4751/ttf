@@ -1,0 +1,159 @@
+# 特徴量エンジニアリング設定
+
+# コアインジケーター設定
+core_indicators:
+  # 1. ハイパーMAMA
+  hyper_mama:
+    enabled: true
+    # HyperMAMAの実際のパラメータ
+    trigger_type: "hyper_er"
+    hyper_er_period: 14
+    hyper_er_midline_period: 100
+    hyper_er_er_period: 13
+    hyper_er_src_type: "oc2"
+    fast_max: 0.5
+    fast_min: 0.1
+    slow_max: 0.05
+    slow_min: 0.01
+    er_high_threshold: 0.8
+    er_low_threshold: 0.2
+    src_type: "hlc3"
+    use_kalman_filter: false
+    normalize: true             # 終値で正規化
+    
+  # 2. ハイパーER
+  hyper_er:
+    enabled: true
+    # HyperERの実際のパラメータ
+    window: 14
+    src_type: "hlc3"
+    use_dynamic_period: True
+    slope_index: 3
+    threshold: 0.3
+    normalize: false            # 既に正規化済み（0-1範囲）
+    
+  # 3. FRAMA
+  frama:
+    enabled: true
+    # FRAMAの実際のパラメータ
+    period: 16
+    src_type: "hl2"
+    fc: 1
+    sc: 198
+    period_mode: "fixed"
+    cycle_detector_type: "hody_e"
+    normalize: true             # 終値で正規化
+    
+  # 4. フェーザートレンドフィルター
+  phasor_trend_filter:
+    enabled: true
+    # PhasorTrendFilterの実際のパラメータ
+    period: 20
+    trend_threshold: 6.0
+    src_type: "close"
+    use_kalman_filter: true
+    use_dynamic_period: true
+    detector_type: "dft_dominant"
+    cycle_part: 0.5
+    max_cycle: 89
+    min_cycle: 12
+    normalize: false            # 既に正規化済み（0-1範囲）
+    
+  # 5. ハイパートレンドインデックス
+  hyper_trend_index:
+    enabled: true
+    # HyperTrendIndexの実際のパラメータ
+    period: 14
+    midline_period: 100
+    src_type: "hlc3"
+    use_kalman_filter: true
+    kalman_filter_type: "unscented"
+    use_dynamic_period: true
+    detector_type: "dfd_dominant"
+    use_roofing_filter: true
+    use_smoothing: true
+    smoother_type: "zlema"
+    smoother_period: 5
+    normalize: false            # 既に正規化済み
+    
+  # 6. X_ATR
+  x_atr:
+    enabled: true
+    # X_ATRの実際のパラメータ
+    period: 20.0
+    tr_method: "atr"
+    smoother_type: "ultimate_smoother"
+    src_type: "close"
+    enable_kalman: false
+    period_mode: "dynamic"
+    cycle_detector_type: "absolute_ultimate"
+    midline_period: 100
+    enable_percentile_analysis: true
+    normalize: true             # 終値で正規化
+
+# 差分特徴量設定
+diff_features:
+  enabled: true
+  lag_periods: [1, 3, 5, 8, 34, 55, 89, 144]  # 差分期間
+  
+# データ前処理設定
+preprocessing:
+  handle_nan:
+    method: "fill"              # fill または drop
+    fill_method: "ffill_bfill"  # ffill_bfill, zero, mean
+    
+  outlier_detection:
+    enabled: false              # 外れ値検出を有効にするか
+    method: "iqr"               # iqr, zscore
+    threshold: 3.0              # 外れ値の閾値
+    
+  feature_scaling:
+    enabled: false              # 特徴量スケーリング（正規化済みのため通常は不要）
+    method: "standard"          # standard, minmax, robust
+
+# 特徴量選択設定
+feature_selection:
+  enabled: false                # 特徴量選択を有効にするか
+  method: "importance"          # importance, correlation, variance
+  top_k: 40                     # 選択する特徴量数
+  
+# バリデーション設定
+validation:
+  min_data_length: 1000         # 最小データ長
+  max_nan_ratio: 0.1            # 最大NaN比率
+  
+# 特徴量情報
+feature_info:
+  expected_total_features: 54   # 期待される総特徴量数
+  core_features: 6              # コア特徴量数
+  diff_features: 48             # 差分特徴量数 (6コア × 8ラグ期間)
+  
+  # 特徴量グループ
+  feature_groups:
+    price_normalized:           # 価格正規化特徴量
+      - "mama_norm"
+      - "frama_norm"
+      - "x_atr_norm"
+    
+    raw_indicators:             # 生指標特徴量
+      - "hyper_er"
+      - "phasor_values"
+      - "hyper_trend_idx"
+    
+    momentum_features:          # モメンタム系特徴量
+      - "hyper_er"
+      - "hyper_trend_idx"
+      
+    volatility_features:        # ボラティリティ系特徴量
+      - "x_atr_norm"
+      
+    adaptive_features:          # アダプティブ系特徴量
+      - "mama_norm"
+      - "frama_norm"
+      - "phasor_values"
+
+# デバッグ設定
+debug:
+  save_intermediate_features: false  # 中間特徴量の保存
+  verbose_calculation: true          # 詳細な計算ログ
+  plot_feature_distributions: false # 特徴量分布のプロット

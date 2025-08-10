@@ -6,12 +6,11 @@ import numpy as np
 import pandas as pd
 from numba import jit
 
-# 相対インポートから絶対インポートに変更
+# インポート処理
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
-    from .ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
+    from .smoother.ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
 except ImportError:
     # スタンドアロン実行時の対応
     import sys
@@ -19,15 +18,16 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from indicator import Indicator
     from price_source import PriceSource
-    from ehlers_unified_dc import EhlersUnifiedDC  # 動的適応用
-    from ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
+    from indicators.smoother.ultimate_smoother import UltimateSmoother  # アルティメットスムーザー
+
+# EhlersUnifiedDCは動的に条件付きインポート（実行時にファンクション内で処理）
 
 
 class UltimateMAResult(NamedTuple):
     """UltimateMA計算結果"""
     values: np.ndarray              # 最終フィルター済み価格
     raw_values: np.ndarray          # 元の価格
-    ukf_values: np.ndarray          # UKF_HLC3フィルター後
+    ukf_values: np.ndarray          # hlc3フィルター後
     kalman_values: np.ndarray       # 適応的カルマンフィルター後
     kalman_gains: np.ndarray        # カルマンゲイン
     kalman_innovations: np.ndarray  # カルマンイノベーション
@@ -43,7 +43,7 @@ class UltimateMAResult(NamedTuple):
 
 
 # 適応的カルマンフィルターとスーパースムーザーフィルターは削除
-# UKF_HLC3とUltimateSmoother を使用
+# hlc3とUltimateSmoother を使用
 
 
 @jit(nopython=True)
@@ -919,7 +919,7 @@ class UltimateMA(Indicator):
     🚀 **Ultimate Moving Average - V5.2 DYNAMIC ADAPTIVE QUANTUM NEURAL SUPREMACY EDITION**
     
     🎯 **6段階革新的フィルタリングシステム + 動的適応機能:**
-    1. **UKF_HLC3フィルター**: 無香料カルマンフィルター・高精度状態推定
+    1. **hlc3フィルター**: 無香料カルマンフィルター・高精度状態推定
     2. **アルティメットスムーザー**: John Ehlers Ultimate Smoother・ゼロ遅延設計
     3. **ゼロラグEMA**: 遅延完全除去・予測的補正（動的適応対応）
     4. **ヒルベルト変換フィルター**: 位相遅延ゼロ・瞬時振幅/位相
@@ -937,10 +937,10 @@ class UltimateMA(Indicator):
     """
     
     def __init__(self, 
-                 ultimate_smoother_period: float = 13.0,
+                 ultimate_smoother_period: float = 5.0,
                  zero_lag_period: int = 21,
                  realtime_window: int = 89,
-                 src_type: str = 'ukf_hlc3',
+                 src_type: str = 'hlc3',
                  slope_index: int = 1,
                  range_threshold: float = 0.005,
                  # 適応的カルマンフィルターパラメータ
@@ -1062,39 +1062,103 @@ class UltimateMA(Indicator):
         
         # ゼロラグ用サイクル検出器の初期化
         if self.zero_lag_period_mode == 'dynamic':
+            # EhlersUnifiedDCのインポート（デバッグ付き）
+            EhlersUnifiedDC = None
+            import_success = False
+            
             try:
-                self.zl_cycle_detector = EhlersUnifiedDC(
-                    detector_type=self.zl_cycle_detector_type,
-                    cycle_part=self.zl_cycle_detector_cycle_part,
-                    max_cycle=self.zl_cycle_detector_max_cycle,
-                    min_cycle=self.zl_cycle_detector_min_cycle,
-                    src_type=self.src_type,
-                    period_range=self.zl_cycle_detector_period_range
-                )
-                self.logger.info(f"ゼロラグ用動的適応サイクル検出器を初期化: {self.zl_cycle_detector_type}")
-            except Exception as e:
-                self.logger.error(f"ゼロラグ用サイクル検出器の初期化に失敗: {e}")
+                # 相対インポートを試行
+                from .cycle.ehlers_unified_dc import EhlersUnifiedDC
+                import_success = True
+                self.logger.debug("UltimateMA: EhlersUnifiedDC 相対インポート成功")
+            except ImportError as e1:
+                self.logger.debug(f"UltimateMA: EhlersUnifiedDC 相対インポート失敗: {e1}")
+                try:
+                    # 絶対インポートを試行（パス調整付き）
+                    import sys
+                    import os
+                    current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    if current_dir not in sys.path:
+                        sys.path.insert(0, current_dir)
+                    
+                    from indicators.cycle.ehlers_unified_dc import EhlersUnifiedDC
+                    import_success = True
+                    self.logger.debug("UltimateMA: EhlersUnifiedDC 絶対インポート成功")
+                except ImportError as e2:
+                    self.logger.error(f"UltimateMA: EhlersUnifiedDC インポート失敗 - 相対: {e1}, 絶対: {e2}")
+                    import_success = False
+            
+            if import_success and EhlersUnifiedDC is not None:
+                try:
+                    self.zl_cycle_detector = EhlersUnifiedDC(
+                        detector_type=self.zl_cycle_detector_type,
+                        cycle_part=self.zl_cycle_detector_cycle_part,
+                        max_cycle=self.zl_cycle_detector_max_cycle,
+                        min_cycle=self.zl_cycle_detector_min_cycle,
+                        src_type=self.src_type,
+                        period_range=self.zl_cycle_detector_period_range
+                    )
+                    self.logger.info(f"UltimateMA: ゼロラグ用動的適応サイクル検出器を初期化: {self.zl_cycle_detector_type}")
+                except Exception as e:
+                    self.logger.error(f"UltimateMA: ゼロラグ用サイクル検出器の初期化に失敗: {e}")
+                    # フォールバックとして固定モードに変更
+                    self.zero_lag_period_mode = 'fixed'
+                    self.logger.warning("UltimateMA: ゼロラグ動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+            else:
+                self.logger.error("UltimateMA: EhlersUnifiedDCのインポートに失敗しました（ゼロラグ用）")
                 # フォールバックとして固定モードに変更
                 self.zero_lag_period_mode = 'fixed'
-                self.logger.warning("ゼロラグ動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+                self.logger.warning("UltimateMA: EhlersUnifiedDCインポート失敗のため、ゼロラグ固定モードにフォールバックしました。")
         
         # リアルタイムウィンドウ用サイクル検出器の初期化
         if self.realtime_window_mode == 'dynamic':
+            # EhlersUnifiedDCのインポート（デバッグ付き）
+            EhlersUnifiedDC = None
+            import_success = False
+            
             try:
-                self.rt_cycle_detector = EhlersUnifiedDC(
-                    detector_type=self.rt_cycle_detector_type,
-                    cycle_part=self.rt_cycle_detector_cycle_part,
-                    max_cycle=self.rt_cycle_detector_max_cycle,
-                    min_cycle=self.rt_cycle_detector_min_cycle,
-                    src_type=self.src_type,
-                    period_range=self.rt_cycle_detector_period_range
-                )
-                self.logger.info(f"リアルタイム用動的適応サイクル検出器を初期化: {self.rt_cycle_detector_type}")
-            except Exception as e:
-                self.logger.error(f"リアルタイム用サイクル検出器の初期化に失敗: {e}")
+                # 相対インポートを試行
+                from .cycle.ehlers_unified_dc import EhlersUnifiedDC
+                import_success = True
+                self.logger.debug("UltimateMA: EhlersUnifiedDC 相対インポート成功（RT用）")
+            except ImportError as e1:
+                self.logger.debug(f"UltimateMA: EhlersUnifiedDC 相対インポート失敗（RT用）: {e1}")
+                try:
+                    # 絶対インポートを試行（パス調整付き）
+                    import sys
+                    import os
+                    current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    if current_dir not in sys.path:
+                        sys.path.insert(0, current_dir)
+                    
+                    from indicators.cycle.ehlers_unified_dc import EhlersUnifiedDC
+                    import_success = True
+                    self.logger.debug("UltimateMA: EhlersUnifiedDC 絶対インポート成功（RT用）")
+                except ImportError as e2:
+                    self.logger.error(f"UltimateMA: EhlersUnifiedDC インポート失敗（RT用） - 相対: {e1}, 絶対: {e2}")
+                    import_success = False
+            
+            if import_success and EhlersUnifiedDC is not None:
+                try:
+                    self.rt_cycle_detector = EhlersUnifiedDC(
+                        detector_type=self.rt_cycle_detector_type,
+                        cycle_part=self.rt_cycle_detector_cycle_part,
+                        max_cycle=self.rt_cycle_detector_max_cycle,
+                        min_cycle=self.rt_cycle_detector_min_cycle,
+                        src_type=self.src_type,
+                        period_range=self.rt_cycle_detector_period_range
+                    )
+                    self.logger.info(f"UltimateMA: リアルタイム用動的適応サイクル検出器を初期化: {self.rt_cycle_detector_type}")
+                except Exception as e:
+                    self.logger.error(f"UltimateMA: リアルタイム用サイクル検出器の初期化に失敗: {e}")
+                    # フォールバックとして固定モードに変更
+                    self.realtime_window_mode = 'fixed'
+                    self.logger.warning("UltimateMA: リアルタイム動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+            else:
+                self.logger.error("UltimateMA: EhlersUnifiedDCのインポートに失敗しました（リアルタイム用）")
                 # フォールバックとして固定モードに変更
                 self.realtime_window_mode = 'fixed'
-                self.logger.warning("リアルタイム動的適応モードの初期化に失敗したため、固定モードにフォールバックしました。")
+                self.logger.warning("UltimateMA: EhlersUnifiedDCインポート失敗のため、リアルタイム固定モードにフォールバックしました。")
         
         self._cache = {}
         self._result: Optional[UltimateMAResult] = None
@@ -1174,17 +1238,17 @@ class UltimateMA(Indicator):
             UltimateMAResult: 全段階のフィルター結果とトレンド情報を含む結果
         """
         try:
-            # データチェック - 1次元配列が直接渡された場合は使用できない（UKF_HLC3にはOHLCが必要）
+            # データチェック - 1次元配列が直接渡された場合は使用できない（hlc3にはOHLCが必要）
             if isinstance(data, np.ndarray) and data.ndim == 1:
-                raise ValueError("1次元配列は直接使用できません。UKF_HLC3にはOHLCデータが必要です。")
+                raise ValueError("1次元配列は直接使用できません。hlc3にはOHLCデータが必要です。")
             else:
                 # 通常のハッシュチェック
                 data_hash = self._get_data_hash(data)
                 if data_hash in self._cache and self._result is not None:
                     return self._result
 
-                # UKF_HLC3を使用して価格を取得
-                ukf_prices = PriceSource.calculate_source(data, 'ukf_hlc3')
+                # hlc3を使用して価格を取得
+                ukf_prices = PriceSource.calculate_source(data, 'hlc3')
                 ukf_prices = ukf_prices.astype(np.float64)  # 明示的にfloat64に変換
                 data_hash_key = data_hash
 
@@ -1243,7 +1307,7 @@ class UltimateMA(Indicator):
             # ③アルティメットスムーザーフィルター（カルマンフィルター後のデータを使用）
             self.logger.debug("🌊 アルティメットスムーザーフィルター適用中...")
             # カルマンフィルター後のデータをアルティメットスムーザーに渡す
-            ultimate_smoother = UltimateSmoother(period=self.ultimate_smoother_period, src_type='ukf_hlc3')
+            ultimate_smoother = UltimateSmoother(period=self.ultimate_smoother_period, src_type='hlc3')
             ultimate_smooth_result = ultimate_smoother.calculate(data)
             ultimate_smoothed = ultimate_smooth_result.values
             
@@ -1349,7 +1413,7 @@ class UltimateMA(Indicator):
         return None
 
     def get_ukf_values(self) -> Optional[np.ndarray]:
-        """UKF_HLC3フィルター後の値を取得する"""
+        """hlc3フィルター後の値を取得する"""
         if self._result is not None:
             return self._result.ukf_values.copy()
         return None

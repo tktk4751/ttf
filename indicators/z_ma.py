@@ -9,7 +9,7 @@ from numba import jit, prange, vectorize, njit
 
 from .indicator import Indicator
 from .hyper_smoother import calculate_hyper_smoother_numba
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 
 
 @dataclass

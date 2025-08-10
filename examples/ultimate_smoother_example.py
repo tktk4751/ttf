@@ -15,7 +15,7 @@ import os
 # プロジェクトのルートディレクトリをパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from indicators.ultimate_smoother import UltimateSmoother
+from indicators.smoother.ultimate_smoother import UltimateSmoother
 
 
 def create_test_data(length: int = 1000) -> pd.DataFrame:

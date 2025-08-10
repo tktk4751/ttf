@@ -12,7 +12,7 @@ try:
     from .indicator import Indicator
     from .price_source import PriceSource
     from .hyper_smoother import calculate_hyper_smoother_numba
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues, adjust as needed
     # This might happen if running the file directly without the package structure

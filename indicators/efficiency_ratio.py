@@ -15,7 +15,7 @@ try:
     from .alma import calculate_alma_numba
     from .hma import calculate_hma_numba
     from .zlema import calculate_zlema_numba
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues
     print("Warning: Could not import from relative path. Assuming base classes are available.")
@@ -524,12 +524,12 @@ class EfficiencyRatio(Indicator):
                 # DC値を保存（get_dynamic_periods用）
                 self._last_dc_values = period_array.copy()
                 
-                # デバッグ情報の出力
-                valid_dc = period_array[~np.isnan(period_array)]
-                if len(valid_dc) > 0:
-                    self.logger.info(f"動的期間統計 - 平均: {valid_dc.mean():.1f}, 範囲: {valid_dc.min():.0f} - {valid_dc.max():.0f}")
-                else:
-                    self.logger.warning("ドミナントサイクル値が全てNaNです。")
+                # # デバッグ情報の出力
+                # valid_dc = period_array[~np.isnan(period_array)]
+                # if len(valid_dc) > 0:
+                #     self.logger.info(f"動的期間統計 - 平均: {valid_dc.mean():.1f}, 範囲: {valid_dc.min():.0f} - {valid_dc.max():.0f}")
+                # else:
+                #     self.logger.warning("ドミナントサイクル値が全てNaNです。")
                 
                 # 最大期間の取得
                 max_period_value_float = np.nanmax(period_array)

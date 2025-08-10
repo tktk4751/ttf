@@ -18,7 +18,7 @@ class Indicator(ABC):
     """
     
     # ソースタイプの定義
-    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4']
+    SRC_TYPES = ['close', 'hlc3', 'hl2', 'ohlc4', 'oc2']
     
     def __init__(self, name: str):
         """

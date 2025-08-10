@@ -8,7 +8,7 @@ import pandas as pd
 from numba import vectorize, njit, prange
 
 from .indicator import Indicator
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 from .c_atr import CATR
 from .z_ma import ZMA
 from .cycle_efficiency_ratio import CycleEfficiencyRatio

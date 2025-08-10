@@ -37,7 +37,7 @@ except ImportError:
 
 # 4つのカルマンフィルター
 try:
-    from indicators.unscented_kalman_filter import UnscentedKalmanFilter
+    from indicators.smoother.unscented_kalman_filter import UnscentedKalmanFilter
     from indicators.adaptive_ukf import AdaptiveUnscentedKalmanFilter
     from indicators.academic_adaptive_ukf import AcademicAdaptiveUnscentedKalmanFilter
     from indicators.neural_adaptive_ukf import NeuralAdaptiveUnscentedKalmanFilter

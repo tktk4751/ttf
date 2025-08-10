@@ -101,7 +101,29 @@ from strategies.implementations.ultra_quantum_adaptive_channel.strategy import U
 from strategies.implementations.cosmic_adaptive_channel.strategy import CosmicAdaptiveChannelStrategy
 from strategies.implementations.ultimate_channel_breakout.strategy import UltimateChannelBreakoutStrategy
 from position_sizing.simple_str_sizing import SimpleSTRPositionSizing
-
+from strategies.implementations.mama.strategy import MAMAStrategy
+from strategies.implementations.x_mama.strategy import XMAMAStrategy
+from strategies.implementations.x_fama.strategy import XFAMAStrategy
+from strategies.implementations.x_mama_enhanced.strategy import XMAMAEnhancedStrategy
+from position_sizing.supreme_position_sizing import SupremePositionSizing
+from strategies.implementations.hyper_adaptive_supertrend.strategy import HyperAdaptiveSupertrendStrategy
+from strategies.implementations.x_mamacd.strategy import XMAMACDStrategy
+from strategies.implementations.hyper_mama.strategy import HyperMAMAEnhancedStrategy
+from strategies.implementations.laguerre_rsi_trend_reversal.strategy import LaguerreRSITrendReversalStrategy
+from strategies.implementations.laguerre_rsi_trend_follow.strategy import LaguerreRSITrendFollowStrategy
+from position_sizing.x_position_sizing import XATRPositionSizing
+from strategies.implementations.hyper_frama.strategy import HyperFRAMAEnhancedStrategy
+from strategies.implementations.donchian_frama.strategy import DonchianFRAMAStrategy
+from strategies.implementations.confidence_consensus_strategy import  ConfidenceConsensusStrategy
+from strategies.implementations.donchian_frama_breakout.strategy import DonchianFRAMABreakoutStrategy
+from strategies.implementations.hyper_donchian_frama.strategy import HyperDonchianFRAMAStrategy
+from strategies.implementations.hyper_donchian import HyperDonchianStrategy
+from strategies.implementations.hyper_channel.strategy import HyperChannelStrategy
+from strategies.implementations.hyper_adaptive_channel.strategy import HyperAdaptiveChannelStrategy
+from strategies.implementations.hyper_frama_channel.strategy import HyperFRAMAChannelStrategy
+from strategies.implementations.hyper_trend_follow.strategy import HyperTrendFollowStrategy
+from strategies.implementations.ehlers_instantaneous_trendline.strategy import EhlersInstantaneousTrendlineStrategy
+from strategies.implementations.hyper_frama_bollinger.strategy import HyperFRAMABollingerStrategy
 
 def run_backtest(config: dict):
     """バックテストを実行"""
@@ -128,8 +150,7 @@ def run_backtest(config: dict):
     
     # 戦略の作成
 
-
-    strategy = UltimateMAStrategy()
+    strategy = HyperDonchianStrategy()
     
     # ポジションサイジングの作成
     position_config = config.get('position_sizing', {})
@@ -139,7 +160,8 @@ def run_backtest(config: dict):
     #         max_position_percent=0.5  # 資金の50%まで
     #     )
 
-    position_sizing = SimpleSTRPositionSizing()
+
+    position_sizing = XATRPositionSizing()
     # position_sizing = AlphaVolatilitySizing()
     # position_sizing = FixedRatioSizing(
     #     ratio=position_config.get('ratio', 0.2),
@@ -179,10 +201,10 @@ def run_optimization(config: dict):
     print("\nStarting Bayesian optimization...")
 
     optimizer = BayesianOptimizer(
-        strategy_class=UltraQuantumAdaptiveChannelStrategy,
-        param_generator=UltraQuantumAdaptiveChannelStrategy.create_optimization_params,
+        strategy_class=HyperTrendFollowStrategy,
+        param_generator=HyperTrendFollowStrategy.create_optimization_params,
         config=config,
-        n_trials=300,
+        n_trials=100,
         n_jobs=-1
     )
     
@@ -254,10 +276,10 @@ def run_montecarlo(config: dict, trades: List[Trade] = None):
     # 最適化の実行
     print("\nパラメータの最適化を実行中...")
     optimizer = BayesianOptimizer(
-        strategy_class=CCBreakoutStrategy,
-        param_generator=CCBreakoutStrategy.create_optimization_params,
+        strategy_class=HyperMAMAEnhancedStrategy,
+        param_generator=HyperMAMAEnhancedStrategy.create_optimization_params,
         config=config,
-        n_trials=200,
+        n_trials=500,
         n_jobs=-1
     )
     
@@ -338,6 +360,8 @@ def main():
     # run_optimization(config)
     # run_montecarlo(config)
     run_backtest(config)
+
+
 
     
 if __name__ == '__main__':

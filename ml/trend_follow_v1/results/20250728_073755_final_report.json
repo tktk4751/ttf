@@ -1,0 +1,21 @@
+{
+  "execution_timestamp": "20250728_073755",
+  "pipeline_status": "completed",
+  "model_performance": {
+    "accuracy": 0.48781543938993,
+    "macro_f1": 0.4452174728171765,
+    "weighted_f1": 0.5067804503871751
+  },
+  "backtest_performance": {
+    "total_return": -0.49393292257314003,
+    "sharpe_ratio": -0.2142839198302142,
+    "max_drawdown": -0.4919659219707566,
+    "win_rate": 0.33726415094339623,
+    "total_trades": 424
+  },
+  "key_metrics": {
+    "features_count": 54,
+    "data_points": 277124,
+    "target_classes": 3
+  }
+}

@@ -25,7 +25,7 @@ import math
 
 from .indicator import Indicator
 from .price_source import PriceSource
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 from .kalman_filter import KalmanFilter
 
 

@@ -168,7 +168,8 @@ def calculate_rs_hurst_numba(
                 else:
                     r_squared = 0.0
                 
-                hurst_values[i] = slope
+                # ハースト指数を適切な範囲にクランプ
+                hurst_values[i] = max(0.0, min(1.0, slope))
                 confidence_scores[i] = max(0, min(1, r_squared))
     
     return hurst_values, confidence_scores
@@ -178,7 +179,7 @@ def calculate_rs_hurst_numba(
 def calculate_dfa_hurst_numba(
     prices: np.ndarray, 
     window_size: int,
-    scales: Optional[np.ndarray] = None
+    scales: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     DFA法によるハースト指数計算 (Numba最適化版)
@@ -195,9 +196,7 @@ def calculate_dfa_hurst_numba(
     hurst_values = np.full(n, np.nan)
     confidence_scores = np.full(n, np.nan)
     
-    # デフォルトスケール
-    if scales is None:
-        scales = np.array([8., 12., 16., 20., 24., 32., 40.])
+    # scales parameter is now required and passed from caller
     
     for i in range(window_size, n):
         window_start = i - window_size + 1
@@ -302,7 +301,8 @@ def calculate_dfa_hurst_numba(
                 else:
                     r_squared = 0.0
                 
-                hurst_values[i] = slope
+                # ハースト指数を適切な範囲にクランプ
+                hurst_values[i] = max(0.0, min(1.0, slope))
                 confidence_scores[i] = max(0, min(1, r_squared))
     
     return hurst_values, confidence_scores
@@ -312,7 +312,7 @@ def calculate_dfa_hurst_numba(
 def calculate_wavelet_hurst_numba(
     prices: np.ndarray, 
     window_size: int,
-    scales: Optional[np.ndarray] = None
+    scales: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Daubechiesウェーブレット法によるハースト指数計算 (Numba最適化版)
@@ -329,9 +329,7 @@ def calculate_wavelet_hurst_numba(
     hurst_values = np.full(n, np.nan)
     confidence_scores = np.full(n, np.nan)
     
-    # デフォルトスケール
-    if scales is None:
-        scales = np.array([4., 8., 16., 32., 64.])
+    # scales parameter is now required and passed from caller
     
     # Daubechies-4ウェーブレット係数
     db4_h = np.array([
@@ -417,7 +415,9 @@ def calculate_wavelet_hurst_numba(
                 
                 # ウェーブレット法では slope = 2H - 1
                 # よって H = (slope + 1) / 2
-                hurst_estimate = (slope + 1) / 2.0
+                raw_hurst = (slope + 1) / 2.0
+                # ハースト指数を適切な範囲にクランプ
+                hurst_estimate = max(0.0, min(1.0, raw_hurst))
                 
                 # R²計算
                 mean_y = sum_y / n_points
@@ -498,7 +498,9 @@ def calculate_consensus_hurst(
         # 重み付け平均
         total_weight = np.sum(weights)
         if total_weight > 0:
-            consensus_hurst[i] = np.sum(estimates * weights) / total_weight
+            raw_consensus = np.sum(estimates * weights) / total_weight
+            # ハースト指数を適切な範囲にクランプ
+            consensus_hurst[i] = max(0.0, min(1.0, raw_consensus))
             
             # 信頼度：手法間の一致度 + 個別信頼度の平均
             if len(estimates) > 1:

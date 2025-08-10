@@ -11,7 +11,7 @@ import traceback
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ultimate_smoother import UltimateSmoother
+    from .smoother.ultimate_smoother import UltimateSmoother
     from .ultimate_ma import UltimateMA
     from .str import STR
     from .ultra_quantum_adaptive_trend_range_discriminator import UltraQuantumAdaptiveTrendRangeDiscriminator
@@ -22,7 +22,7 @@ except ImportError:
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from indicator import Indicator
     from price_source import PriceSource
-    from ultimate_smoother import UltimateSmoother
+    from indicators.smoother.ultimate_smoother import UltimateSmoother
     from ultimate_ma import UltimateMA
     from str import STR
     from ultra_quantum_adaptive_trend_range_discriminator import UltraQuantumAdaptiveTrendRangeDiscriminator
@@ -108,7 +108,7 @@ class UltimateChannel(Indicator):
         str_length: float = 20.0,             # STR期間
         num_strs: float = 2.0,                # STRマルチプライヤー（固定モード時）
         src_type: str = 'ukf_hlc3',           # プライスソース
-        midband_type: str = 'ultimate_smoother', # ミッドバンドタイプ ('ultimate_smoother' or 'ultimate_ma')
+        midband_type: str = 'ultimate_ma', # ミッドバンドタイプ ('ultimate_smoother' or 'ultimate_ma')
         ukf_params: Optional[Dict] = None,    # UKFパラメータ（UKFソース使用時）
         
         # 動的乗数適応パラメータ
@@ -122,8 +122,8 @@ class UltimateChannel(Indicator):
         uqatrd_str_period: float = 20.0,      # UQATRD用STR期間
         
         # Ultimate MA用サイクル検出器パラメーター
-        cycle_detector_type: str = 'ehlers_unified_dc',
-        cycle_detector_cycle_part: float = 1.0,
+        cycle_detector_type: str = 'absolute_ultimate',
+        cycle_detector_cycle_part: float = 0.5,
         cycle_detector_max_cycle: int = 120,
         cycle_detector_min_cycle: int = 5,
         cycle_period_multiplier: float = 1.0,
@@ -223,12 +223,12 @@ class UltimateChannel(Indicator):
             # Ultimate MAをサイクル検出器パラメーターで初期化
             self._center_ma = UltimateMA(
                 src_type=self.src_type,
-                cycle_detector_type=self.cycle_detector_type,
-                cycle_detector_cycle_part=self.cycle_detector_cycle_part,
-                cycle_detector_max_cycle=self.cycle_detector_max_cycle,
-                cycle_detector_min_cycle=self.cycle_detector_min_cycle,
-                cycle_period_multiplier=self.cycle_period_multiplier,
-                cycle_detector_period_range=self.cycle_detector_period_range
+                zl_cycle_detector_type=self.cycle_detector_type,
+                zl_cycle_detector_cycle_part=self.cycle_detector_cycle_part,
+                zl_cycle_detector_max_cycle=self.cycle_detector_max_cycle,
+                zl_cycle_detector_min_cycle=self.cycle_detector_min_cycle,
+                zl_cycle_period_multiplier=self.cycle_period_multiplier,
+                zl_cycle_detector_period_range=self.cycle_detector_period_range
             )
         
         self._str_indicator = STR(

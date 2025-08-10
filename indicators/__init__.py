@@ -58,30 +58,40 @@ from .alma import calculate_alma_numba as calculate_alma
 from .dubuc_hurst_exponent import DubucHurstExponent, DubucHurstResult
 
 # エーラーズのドミナントサイクル検出クラス
-from .ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
-from .ehlers_hody_dc import EhlersHoDyDC
-from .ehlers_phac_dc import EhlersPhAcDC
-from .ehlers_dudi_dc import EhlersDuDiDC
-from .ehlers_dudi_dce import EhlersDuDiDCE
-from .ehlers_hody_dce import EhlersHoDyDCE
-from .ehlers_phac_dce import EhlersPhAcDCE
+from .cycle.ehlers_dominant_cycle import EhlersDominantCycle, DominantCycleResult
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_phac_dc import EhlersPhAcDC
+from .cycle.ehlers_dudi_dc import EhlersDuDiDC
+from .cycle.ehlers_dudi_dce import EhlersDuDiDCE
+from .cycle.ehlers_hody_dce import EhlersHoDyDCE
+from .cycle.ehlers_phac_dce import EhlersPhAcDCE
 # 新しく作成したサイクル検出器
-from .ehlers_cycle_period import EhlersCyclePeriod
-from .ehlers_cycle_period2 import EhlersCyclePeriod2
-from .ehlers_bandpass_zero_crossings import EhlersBandpassZeroCrossings
-from .ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram
-from .ehlers_dft_dominant_cycle import EhlersDFTDominantCycle
-from .ehlers_multiple_bandpass import EhlersMultipleBandpass
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_cycle_period import EhlersCyclePeriod
+from .cycle.ehlers_cycle_period2 import EhlersCyclePeriod2
+from .cycle.ehlers_bandpass_zero_crossings import EhlersBandpassZeroCrossings
+from .cycle.ehlers_autocorrelation_periodogram import EhlersAutocorrelationPeriodogram
+from .cycle.ehlers_dft_dominant_cycle import EhlersDFTDominantCycle
+from .cycle.ehlers_multiple_bandpass import EhlersMultipleBandpass
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 # 革新的な次世代サイクル検出器
-from .ehlers_adaptive_ensemble_cycle import EhlersAdaptiveEnsembleCycle
-from .ehlers_quantum_adaptive_cycle import EhlersQuantumAdaptiveCycle
-from .ehlers_ultimate_cycle import EhlersUltimateCycle
-from .ehlers_supreme_ultimate_cycle import EhlersSupremeUltimateCycle
-from .ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle
+from .cycle.ehlers_adaptive_ensemble_cycle import EhlersAdaptiveEnsembleCycle
+from .cycle.ehlers_quantum_adaptive_cycle import EhlersQuantumAdaptiveCycle
+from .cycle.ehlers_ultimate_cycle import EhlersUltimateCycle
+from .cycle.ehlers_supreme_ultimate_cycle import EhlersSupremeUltimateCycle
+from .cycle.ehlers_absolute_ultimate_cycle import EhlersAbsoluteUltimateCycle
 
 # エラーズ ヒルベルト判別機
 from .ehlers_hilbert_discriminator import EhlersHilbertDiscriminator, HilbertDiscriminatorResult
+
+# 宇宙統一チャネルインジケーター
+from .cosmic_universal_adaptive_channel import CosmicUniversalAdaptiveChannel, CUAVCResult
+from .quantum_adaptive_flow_channel import QuantumAdaptiveFlowChannel, QAFCResult
+
+# スムージング系インジケーター
+from .smoother.frama import FRAMA, FRAMAResult
+
+# DFTベース適応移動平均線
+from .hyper_dftma import HyperDFTMA, HyperDFTMAResult
 
 # エーラーズのドミナントサイクル検出アルゴリズム一覧
 __all__ = [
@@ -164,6 +174,17 @@ __all__ = [
     # エラーズ ヒルベルト判別機
     'EhlersHilbertDiscriminator',
     'HilbertDiscriminatorResult',
+    # 宇宙統一チャネルインジケーター
+    'CosmicUniversalAdaptiveChannel',
+    'CUAVCResult',
+    'QuantumAdaptiveFlowChannel',
+    'QAFCResult',
+    # スムージング系インジケーター
+    'FRAMA',
+    'FRAMAResult',
+    # DFTベース適応移動平均線
+    'HyperDFTMA',
+    'HyperDFTMAResult',
 ]
 
 # Version

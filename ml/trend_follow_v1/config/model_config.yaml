@@ -1,0 +1,88 @@
+# LightGBM ATRリスク調整トレンドフォローモデル設定
+
+# データ設定
+data:
+  config_path: "config.yaml"  # メインのTTF設定ファイル
+  train_ratio: 70             # 訓練データの割合（%）
+  val_ratio: 15               # 検証データの割合（%）
+  test_ratio: 15              # テストデータの割合（%）
+
+# 目的変数設定
+target:
+  atr_period: 5               # ATR計算期間
+  stop_atr_multiplier: 3.0    # 損切りライン（ATRの倍数）
+  target_atr_multiplier: 7.0  # 利益目標（ATRの倍数）
+  max_holding_bars: 300       # 最大保有期間（ローソク足本数）
+
+# MAMA信号設定
+mama_signal:
+  fast_limit: 0.5             # 高速制限値
+  slow_limit: 0.05            # 低速制限値
+  src_type: "hlc3"            # ソースタイプ
+
+# LightGBMモデルパラメータ
+lightgbm:
+  objective: "multiclass"     # 3クラス分類
+  num_class: 3
+  metric: "multi_logloss"
+  boosting_type: "gbdt"
+  num_leaves: 127
+  learning_rate: 0.05
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 5
+  min_child_samples: 20
+  lambda_l1: 0.1
+  lambda_l2: 0.1
+  max_depth: 8
+  num_boost_round: 1000
+  early_stopping_rounds: 100
+  random_state: 42
+  verbose: -1
+  class_weight: "balanced"
+
+# 交差検証設定
+cross_validation:
+  method: "time_series_split"
+  n_splits: 5
+  
+# ウォークフォワード分析設定
+walk_forward:
+  enabled: true
+  train_pct: 70              # 訓練期間の割合
+  step_pct: 10               # スライドステップの割合
+
+# 特徴量重要度分析設定
+feature_analysis:
+  save_importance: true
+  top_features: 20           # 保存する上位特徴量数
+  plot_importance: true
+
+# モデル保存設定
+model_save:
+  save_model: true
+  save_metadata: true
+  model_dir: "ml/trend_follow_v1/models"
+  
+# 評価設定
+evaluation:
+  generate_report: true
+  plot_confusion_matrix: true
+  plot_class_performance: true
+  save_plots: true
+  results_dir: "ml/trend_follow_v1/results"
+
+# バックテスト設定
+backtest:
+  enabled: true
+  initial_capital: 10000.0
+  commission_rate: 0.001
+  confidence_threshold: 0.6   # シグナル生成の信頼度閾値
+  risk_per_trade: 0.02        # 1トレードあたりのリスク（資金の%）
+  plot_equity_curve: true
+
+# ログ設定
+logging:
+  level: "INFO"
+  save_logs: true
+  log_file: "ml/trend_follow_v1/results/training.log"

@@ -28,7 +28,7 @@ if project_root not in sys.path:
 
 try:
     from indicators.neural_adaptive_ukf import NeuralAdaptiveUnscentedKalmanFilter
-    from indicators.unscented_kalman_filter import UnscentedKalmanFilter
+    from indicators.smoother.unscented_kalman_filter import UnscentedKalmanFilter
 except ImportError as e:
     print(f"⚠️ インポートエラー: {e}")
     sys.exit(1)

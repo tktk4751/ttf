@@ -81,13 +81,13 @@ class SimpleSTRPositionSizing(PositionSizing, IPositionManager):
     
     def __init__(
         self, 
-        base_risk_ratio: float = 0.02,  # 基本リスク比率（デフォルト2%）
+        base_risk_ratio: float = 0.01,  # 基本リスク比率（デフォルト2%）
         unit: float = 1.0,              # 基本単位係数（デフォルト1.0）
         max_position_percent: float = 0.3,  # 最大ポジションサイズの比率（デフォルト30%）
         leverage: float = 1.0,          # レバレッジ（デフォルト1倍）
         str_period: float = 20.0,       # STR期間（デフォルト20.0）
-        str_multiplier: float = 3.0,    # STR乗数（デフォルト3.0）
-        str_src_type: str = 'ukf_hlc3', # STRソースタイプ
+        str_multiplier: float = 4.0,    # STR乗数（デフォルト3.0）
+        str_src_type: str = 'hlc3', # STRソースタイプ
         str_period_mode: str = 'dynamic', # STR期間モード
         fixed_risk_percent: float = 0.02,  # 固定リスク率（資金の2%）
     ):

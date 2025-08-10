@@ -10,7 +10,7 @@ from numba import jit, njit, prange, vectorize
 from .indicator import Indicator
 from .rsx import calculate_rsx_numba
 from .efficiency_ratio import calculate_efficiency_ratio_for_period
-from .ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
 
 
 @dataclass

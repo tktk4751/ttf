@@ -8,7 +8,7 @@ from numba import njit
 from dataclasses import dataclass
 
 from .indicator import Indicator
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 from .price_source import PriceSource
 from .alma import ALMA
 

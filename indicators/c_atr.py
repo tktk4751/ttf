@@ -15,7 +15,7 @@ from .price_source import PriceSource
 from .kalman_filter import KalmanFilter
 from .alma import calculate_alma_numba as calculate_alma
 from .hyper_smoother import hyper_smoother, calculate_hyper_smoother_numba
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 
 
 @dataclass

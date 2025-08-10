@@ -8,7 +8,7 @@ import pandas as pd
 from numba import jit, prange, vectorize, njit
 
 from .indicator import Indicator
-from .ehlers_hody_dc import EhlersHoDyDC
+from .cycle.ehlers_hody_dc import EhlersHoDyDC
 
 
 @dataclass

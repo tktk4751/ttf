@@ -1,0 +1,3 @@
+--2025-07-28 08:48:37--  https://cursor.blob.core.windows.net/remote-releases/a8e95743c5268be73767c46944a71f4465d05c90/vscode-reh-linux-x64.tar.gz
+Resolving cursor.blob.core.windows.net (cursor.blob.core.windows.net)... failed: Temporary failure in name resolution.
+wget: unable to resolve host address ‘cursor.blob.core.windows.net’

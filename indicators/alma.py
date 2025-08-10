@@ -8,7 +8,13 @@ from numba import jit
 
 from .indicator import Indicator
 from .price_source import PriceSource
-from .ehlers_unified_dc import EhlersUnifiedDC
+try:
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
+except ImportError:
+    try:
+        from indicators.cycle.ehlers_unified_dc import EhlersUnifiedDC
+    except ImportError:
+        EhlersUnifiedDC = None
 
 
 class ALMAResult(NamedTuple):

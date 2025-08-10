@@ -10,7 +10,7 @@ import traceback
 from .indicator import Indicator
 from .price_source import PriceSource
 from .hma import HMA
-from .ehlers_unified_dc import EhlersUnifiedDC
+from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 
 
 class DynamicPeriodHMA(Indicator):

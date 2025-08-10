@@ -8,7 +8,7 @@ from numba import jit
 
 from .indicator import Indicator
 from .price_source import PriceSource
-from .ultimate_smoother import UltimateSmoother
+from .smoother.ultimate_smoother import UltimateSmoother
 
 
 class UltimateERResult(NamedTuple):

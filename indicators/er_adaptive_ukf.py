@@ -36,7 +36,7 @@ try:
     from .price_source import PriceSource
     from .efficiency_ratio import EfficiencyRatio
     from .kalman_filter_unified import unscented_kalman_filter_numba
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     import sys
     import os

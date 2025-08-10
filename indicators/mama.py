@@ -240,7 +240,7 @@ class MAMA(Indicator):
         self,
         fast_limit: float = 0.5,               # 高速制限値
         slow_limit: float = 0.05,              # 低速制限値
-        src_type: str = 'ukf_hlc3',            # ソースタイプ
+        src_type: str = 'hlc3',            # ソースタイプ
         ukf_params: Optional[Dict] = None      # UKFパラメータ（UKFソース使用時）
     ):
         """
@@ -367,7 +367,7 @@ class MAMA(Indicator):
                 )
             
             # 価格ソースの計算
-            price_source = PriceSource.calculate_source(data, self.src_type, self.ukf_params)
+            price_source = PriceSource.calculate_source(data, self.src_type)
             
             # NumPy配列に変換（float64型で統一）
             price_source = np.asarray(price_source, dtype=np.float64)

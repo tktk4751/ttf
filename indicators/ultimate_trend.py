@@ -10,7 +10,7 @@ from numba import njit
 from .indicator import Indicator
 from .str import STR
 from .ultimate_ma import UltimateMA
-from .ultimate_smoother import UltimateSmoother
+from .smoother.ultimate_smoother import UltimateSmoother
 
 
 @dataclass
@@ -66,7 +66,7 @@ def calculate_ultimate_trend_bands(ultimate_ma_result=None, ultimate_smoother_re
         # Ultimate MAの結果から必要な値を取得
         final_filtered = ultimate_ma_result.values          # Ultimate MAの最終結果
         raw_hlc3 = ultimate_ma_result.raw_values           # 元のHLC3
-        ukf_values = ultimate_ma_result.ukf_values         # UKF_HLC3フィルター後
+        ukf_values = ultimate_ma_result.ukf_values         # hlc3フィルター後
         ultimate_smooth_values = ultimate_ma_result.ultimate_smooth_values  # アルティメットスムーザー後
         zero_lag_values = ultimate_ma_result.zero_lag_values  # ゼロラグEMA後
         amplitude = ultimate_ma_result.amplitude           # ヒルベルト変換振幅
@@ -273,7 +273,7 @@ class UltimateTrend(Indicator):
                  zl_cycle_detector_period_range: Tuple[int, int] = (5, 120),
                  # UltimateSmootherのパラメータ
                  us_period: float = 20.0,  # UltimateSmootherの期間
-                 us_src_type: str = 'ukf_hlc3',  # UltimateSmootherのソースタイプ
+                 us_src_type: str = 'hlc3',  # UltimateSmootherのソースタイプ
                  us_period_mode: str = 'dynamic',  # UltimateSmootherの期間モード
                  us_ukf_params: Optional[Dict] = None,  # UltimateSmootherのUKFパラメータ
                  us_cycle_detector_type: str = 'absolute_ultimate',  # UltimateSmootherのサイクル検出器タイプ
@@ -375,7 +375,7 @@ class UltimateTrend(Indicator):
             self.ultimate_ma = UltimateMA(
                 ultimate_smoother_period=self.ultimate_smoother_period,
                 zero_lag_period=self.zero_lag_period,
-                src_type='ukf_hlc3',
+                src_type='hlc3',
                 # 動的適応パラメータ
                 zero_lag_period_mode=self.zero_lag_period_mode,
                 realtime_window_mode=self.realtime_window_mode,

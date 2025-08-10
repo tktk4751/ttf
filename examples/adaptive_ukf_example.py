@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from indicators.adaptive_ukf import AdaptiveUnscentedKalmanFilter
-from indicators.unscented_kalman_filter import UnscentedKalmanFilter
+from indicators.smoother.unscented_kalman_filter import UnscentedKalmanFilter
 
 def create_challenging_data(n_points: int = 1000) -> pd.DataFrame:
     """挑戦的なデータセット作成（ノイズ変化、異常値含む）"""

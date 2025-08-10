@@ -33,14 +33,14 @@ from typing import Union, Tuple, Dict, Optional, List
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ultimate_smoother import calculate_ultimate_smoother, calculate_ultimate_smoother_adaptive
+    from .smoother.ultimate_smoother import calculate_ultimate_smoother, calculate_ultimate_smoother_adaptive
 except ImportError:
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     from indicator import Indicator
     from price_source import PriceSource
-    from ultimate_smoother import calculate_ultimate_smoother, calculate_ultimate_smoother_adaptive
+    from indicators.smoother.ultimate_smoother import calculate_ultimate_smoother, calculate_ultimate_smoother_adaptive
 
 
 @dataclass

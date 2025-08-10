@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 
 try:
     from .indicator import Indicator
-    from .ehlers_unified_dc import EhlersUnifiedDC
+    from .cycle.ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     class Indicator:
         def __init__(self, name): self.name = name; self.logger = self._get_logger()

@@ -31,7 +31,7 @@ class ZASimpleStrategy(BaseStrategy):
         self,
         # 基本パラメータ
         band_lookback: int = 1,
-        src_type: str = 'ukf_hlc3',
+        src_type: str = 'hlc3',
         
         # 乗数計算方法選択
         multiplier_method: str = 'simple_adjustment',  # 'adaptive', 'simple', 'simple_adjustment'
@@ -47,16 +47,16 @@ class ZASimpleStrategy(BaseStrategy):
         # CERパラメータ
         detector_type: str = 'absolute_ultimate',     # CER用ドミナントサイクル検出器タイプ
         cycle_part: float = 0.5,           # CER用サイクル部分
-        lp_period: int = 5,               # CER用ローパスフィルター期間
-        hp_period: int = 100,              # CER用ハイパスフィルター期間
+        lp_period: int = 13,               # CER用ローパスフィルター期間
+        hp_period: int = 120,              # CER用ハイパスフィルター期間
         max_cycle: int = 120,              # CER用最大サイクル期間
-        min_cycle: int = 5,               # CER用最小サイクル期間
+        min_cycle: int = 13,               # CER用最小サイクル期間
         max_output: int = 89,             # CER用最大出力値
         min_output: int = 5,              # CER用最小出力値
         
         # ZAdaptiveMA用パラメータ
         fast_period: int = 2,             # 速い移動平均の期間（固定値）
-        slow_period: int = 144,           # 遅い移動平均の期間（固定値）
+        slow_period: int = 34,           # 遅い移動平均の期間（固定値）
         
         # Xトレンドインデックスパラメータ
         x_detector_type: str = 'absolute_ultimate',

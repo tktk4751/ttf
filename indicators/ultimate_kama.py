@@ -8,7 +8,7 @@ from numba import njit, jit
 
 from .indicator import Indicator
 from .price_source import PriceSource
-from .ultimate_smoother import UltimateSmoother
+from .smoother.ultimate_smoother import UltimateSmoother
 from .ultimate_efficiency_ratio import UltimateEfficiencyRatio
 
 class UltimateKAMAResult(NamedTuple):

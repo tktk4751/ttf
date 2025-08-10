@@ -12,7 +12,7 @@ import math
 try:
     from .indicator import Indicator
     from .price_source import PriceSource
-    from .ultimate_smoother import UltimateSmoother
+    from .smoother.ultimate_smoother import UltimateSmoother
     from .ehlers_unified_dc import EhlersUnifiedDC
 except ImportError:
     # Fallback for potential execution context issues
